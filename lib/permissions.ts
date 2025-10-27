@@ -1,0 +1,75 @@
+// Phase I Epic 1: Permission and navigation system
+import { Role, NavItem } from "@/types";
+
+// Route authorization
+export function canAccessRoute(role: Role, path: string): boolean {
+  // Learners can only access /learner
+  if (role === "LEARNER") {
+    return path === "/learner" || path.startsWith("/learner/");
+  }
+  
+  // Managers can access admin routes except settings
+  if (role === "MANAGER") {
+    if (path.startsWith("/admin/settings")) {
+      return false;
+    }
+    return path.startsWith("/admin") || path.startsWith("/learner");
+  }
+  
+  // Admins can access everything
+  if (role === "ADMIN") {
+    return true;
+  }
+  
+  return false;
+}
+
+// Navigation items filtered by role
+export function getNavigationItems(role: Role): NavItem[] {
+  const adminNav: NavItem[] = [
+    {
+      label: "Dashboard",
+      path: "/admin",
+    },
+    {
+      label: "Trainings",
+      path: "/admin/trainings",
+    },
+    {
+      label: "Compliance",
+      path: "/admin/compliance",
+    },
+    {
+      label: "Users",
+      path: "/admin/users",
+    },
+    {
+      label: "Settings",
+      path: "/admin/settings",
+      children: [
+        {
+          label: "Brand",
+          path: "/admin/settings/brand",
+        },
+        {
+          label: "Notifications",
+          path: "/admin/settings/notifications",
+        },
+      ],
+    },
+  ];
+
+  // Learners have no sidebar navigation
+  if (role === "LEARNER") {
+    return [];
+  }
+
+  // Managers see everything except Settings
+  if (role === "MANAGER") {
+    return adminNav.filter(item => item.label !== "Settings");
+  }
+
+  // Admins see everything
+  return adminNav;
+}
+

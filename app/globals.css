@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #2563eb;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+/* Dynamic brand color support */
+.btn-primary {
+  background-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.bg-primary-custom {
+  background-color: var(--primary-color) !important;
+}
+
+.text-primary-custom {
+  color: var(--primary-color) !important;
+}
+
