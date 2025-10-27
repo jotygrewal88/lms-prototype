@@ -1,30 +1,39 @@
-// Phase I Epic 2: Trainings management page
+// Phase I Epic 2 & UI Refresh v2: Trainings management with lucide icons
 // ✅ Epic 2 Acceptance: Create training with assignment criteria, auto-generates completions
 // ✅ Permissions: Admin/Manager can CRUD trainings; Learner blocked
 // ✅ Demo: Create training → see auto-generated completions in compliance table
+// ✅ Scope Filtering: Trainings filtered by selected scope
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { Paperclip } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import TrainingModal from "@/components/TrainingModal";
-import { getTrainings, getCompletionsByTrainingId, deleteTraining, subscribe } from "@/lib/store";
+import { getCompletionsByTrainingId, deleteTraining, subscribe } from "@/lib/store";
 import { Training } from "@/types";
+import { useScope } from "@/hooks/useScope";
+import { getScopedData } from "@/lib/stats";
 
 export default function TrainingsPage() {
-  const [trainings, setTrainings] = useState(getTrainings());
+  const { scope } = useScope();
+  const [trainings, setTrainings] = useState<Training[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState<Training | undefined>();
 
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setTrainings(getTrainings());
-    });
+    const updateData = () => {
+      const { trainings: scopedTrainings } = getScopedData(scope);
+      setTrainings(scopedTrainings);
+    };
+    
+    updateData();
+    const unsubscribe = subscribe(updateData);
     return unsubscribe;
-  }, []);
+  }, [scope]);
 
   const handleCreate = () => {
     setSelectedTraining(undefined);
@@ -43,7 +52,8 @@ export default function TrainingsPage() {
   };
 
   const handleModalSave = () => {
-    setTrainings(getTrainings());
+    const { trainings: scopedTrainings } = getScopedData(scope);
+    setTrainings(scopedTrainings);
   };
 
   const getAssignmentSummary = (training: Training): string => {
@@ -146,6 +156,18 @@ export default function TrainingsPage() {
                           <div className="text-sm text-gray-500">
                             <span className="font-medium">Retrain:</span> {training.retrainIntervalDays} days
                           </div>
+                        )}
+                        {training.policyUrl && (
+                          <a
+                            href={training.policyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[#2563EB] hover:underline"
+                            title="View policy document"
+                          >
+                            <Paperclip className="w-4 h-4" />
+                            <span>Policy</span>
+                          </a>
                         )}
                       </div>
 

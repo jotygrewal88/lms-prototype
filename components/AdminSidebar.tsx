@@ -1,12 +1,37 @@
-// Phase I Epic 1: Admin sidebar navigation
+// Phase I Epic 1 & UI Refresh v2: EHS-style sidebar with lucide icons
 "use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { 
+  LayoutDashboard, 
+  GraduationCap, 
+  ClipboardList, 
+  Bell, 
+  Users, 
+  FileStack, 
+  Palette, 
+  Globe, 
+  CalendarClock,
+  TestTube
+} from "lucide-react";
 import { getCurrentUser, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
 import { NavItem } from "@/types";
+
+const NAV_ICONS: Record<string, React.ElementType> = {
+  "Dashboard": LayoutDashboard,
+  "Trainings": GraduationCap,
+  "Compliance": ClipboardList,
+  "Notifications": Bell,
+  "Users": Users,
+  "Audit Snapshots": FileStack,
+  "Brand": Palette,
+  "Localization": Globe,
+  "Reminders": CalendarClock,
+  "Demo": TestTube,
+};
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -22,7 +47,6 @@ export default function AdminSidebar() {
     return unsubscribe;
   }, []);
 
-  // Don't show sidebar for learners
   if (currentUser.role === "LEARNER") {
     return null;
   }
@@ -35,43 +59,59 @@ export default function AdminSidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 min-h-screen sticky top-0 pt-4">
-      <nav className="px-3 space-y-1">
+    <aside className="w-64 bg-white border-r border-gray-200 min-h-screen sticky top-0 overflow-y-auto">
+      <nav className="py-6">
         {navItems.map((item) => (
           <div key={item.path}>
             {item.children ? (
               <div>
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 py-2">
-                  {item.label}
+                <div className="px-3 pt-6 pb-2">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-500 font-medium">
+                    {item.label}
+                  </div>
                 </div>
-                <div className="ml-2 space-y-1">
-                  {item.children.map((child) => (
-                    <Link
-                      key={child.path}
-                      href={child.path}
-                      className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive(child.path)
-                          ? "text-white"
-                          : "text-gray-700 hover:bg-gray-100"
-                      }`}
-                      style={isActive(child.path) ? { backgroundColor: 'var(--primary-color)' } : undefined}
-                    >
-                      {child.label}
-                    </Link>
-                  ))}
+                <div className="space-y-1">
+                  {item.children.map((child) => {
+                    const active = isActive(child.path);
+                    const Icon = NAV_ICONS[child.label];
+                    return (
+                      <Link
+                        key={child.path}
+                        href={child.path}
+                        className={`
+                          relative flex items-center gap-2 px-3 py-2 mx-2 rounded-md text-[14px] transition-colors
+                          ${active
+                            ? "text-[#2563EB] font-medium bg-blue-50"
+                            : "text-gray-700 hover:bg-gray-50"
+                          }
+                        `}
+                      >
+                        {active && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-[#2563EB]" />
+                        )}
+                        {Icon && <Icon className="w-[18px] h-[18px] text-gray-500" />}
+                        <span>{child.label}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
               <Link
                 href={item.path}
-                className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive(item.path)
-                    ? "text-white"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-                style={isActive(item.path) ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                className={`
+                  relative flex items-center gap-2 px-3 py-2 mx-2 rounded-md text-[14px] transition-colors
+                  ${isActive(item.path)
+                    ? "text-[#2563EB] font-medium bg-blue-50"
+                    : "text-gray-700 hover:bg-gray-50"
+                  }
+                `}
               >
-                {item.label}
+                {isActive(item.path) && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full bg-[#2563EB]" />
+                )}
+                {NAV_ICONS[item.label] && React.createElement(NAV_ICONS[item.label], { className: "w-[18px] h-[18px] text-gray-500" })}
+                <span>{item.label}</span>
               </Link>
             )}
           </div>
@@ -80,4 +120,3 @@ export default function AdminSidebar() {
     </aside>
   );
 }
-

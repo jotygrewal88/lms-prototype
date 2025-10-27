@@ -1,12 +1,14 @@
-// Phase I Epic 2: Completion logging modal
+// Phase I Epic 2 & Polish Pack: Completion logging modal with change history
 // ✅ Epic 2 Acceptance: Mark completion with proof/notes; calculates expiresAt = completedAt + retrainIntervalDays
 // ✅ Demo: Submit updates status=COMPLETED, sets completedAt, computes expiration
+// ✅ Polish Pack: Logs changes to change history
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { TrainingCompletion } from "@/types";
 import { updateCompletion } from "@/lib/store";
 import { today, addDays, formatDate } from "@/lib/utils";
+import { logChange } from "@/lib/changeLog";
 import Button from "./Button";
 
 interface CompletionModalProps {
@@ -61,6 +63,15 @@ export default function CompletionModal({ isOpen, onClose, completion, trainingR
       proofUrl: proofUrl || undefined,
       overdueDays: undefined,
     });
+
+    // Log the change
+    logChange(
+      completion.id,
+      `Marked as COMPLETED on ${formatDate(completedDate)}${proofUrl ? " with proof" : ""}`,
+      {
+        action: "completion_logged",
+      }
+    );
 
     onSave();
     onClose();

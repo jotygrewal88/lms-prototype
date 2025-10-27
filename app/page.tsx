@@ -1,26 +1,22 @@
-// Phase I Epic 1: Root page - redirect to admin
+// Phase I Epic 1 & Polish Pack: Root page - immediate redirect based on role
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/store";
 
 export default function HomePage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (user.role === "LEARNER") {
-      router.push("/learner");
-    } else {
-      router.push("/admin");
-    }
-  }, [router]);
-
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-gray-500">Loading...</p>
-    </div>
-  );
+  // Get current user synchronously from store
+  const user = getCurrentUser();
+  
+  // Immediate redirect based on role (no useEffect, no loading state)
+  if (user.role === "LEARNER") {
+    redirect("/learner");
+  } else {
+    // ADMIN or MANAGER → /admin
+    redirect("/admin");
+  }
+  
+  // This return is never reached due to redirect
+  return null;
 }
 

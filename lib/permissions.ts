@@ -1,9 +1,9 @@
-// Phase I Epic 1: Permission and navigation system
+// Phase I Epic 1 & 3: Permission and navigation system
 import { Role, NavItem } from "@/types";
 
 // Route authorization
 export function canAccessRoute(role: Role, path: string): boolean {
-  // Learners can only access /learner
+  // Learners can only access /learner and /learner/* routes
   if (role === "LEARNER") {
     return path === "/learner" || path.startsWith("/learner/");
   }
@@ -40,8 +40,22 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/compliance",
     },
     {
+      label: "Notifications",
+      path: "/admin/notifications",
+    },
+    {
       label: "Users",
       path: "/admin/users",
+    },
+    {
+      label: "Reports",
+      path: "/admin/reports",
+      children: [
+        {
+          label: "Audit Snapshots",
+          path: "/admin/reports/audits",
+        },
+      ],
     },
     {
       label: "Settings",
@@ -52,7 +66,11 @@ export function getNavigationItems(role: Role): NavItem[] {
           path: "/admin/settings/brand",
         },
         {
-          label: "Notifications",
+          label: "Localization",
+          path: "/admin/settings/localization",
+        },
+        {
+          label: "Reminders",
           path: "/admin/settings/notifications",
         },
       ],
