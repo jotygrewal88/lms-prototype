@@ -20,6 +20,7 @@ import {
   subscribe,
 } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
+import { getFullName } from "@/types";
 
 export default function AuditsListPage() {
   const router = useRouter();
@@ -132,7 +133,7 @@ export default function AuditsListPage() {
                             {formatDate(snapshot.createdAt)}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {creator?.name || "Unknown"}
+                            {creator ? getFullName(creator) : "Unknown"}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
                             {snapshot.filtersSummary}

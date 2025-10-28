@@ -1,13 +1,4 @@
-// Phase I Epic 3: Notifications page
-/**
- * ACCEPTANCE CHECKLIST (Epic 3):
- * ✓ Table displays all generated Notifications (Message, Recipient, Type, Created At)
- * ✓ Filter by type (reminder | escalation)
- * ✓ "Clear All" button resets notification list
- * ✓ Manager view shows only their team's notifications
- * ✓ Learner blocked from accessing this page
- * ✓ Colored badges for notification types (reminder=blue, escalation=red)
- */
+// Phase I AI Uplift - Unified: Notifications Archive with Sent/Received Tabs
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -16,32 +7,82 @@ import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
+import NotificationComposeModal from "@/components/NotificationComposeModal";
 import { 
   getNotifications, 
-  getUsers,
+  getSentNotifications,
+  getReceivedNotifications,
   getCurrentUser,
+  getUser,
   clearAllNotifications,
   subscribe 
 } from "@/lib/store";
-import { Notification, NotificationType } from "@/types";
+import { Notification, getFullName } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { useScope } from "@/hooks/useScope";
+import { X, Eye, RefreshCw } from "lucide-react";
 
-export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(getNotifications());
+type TabType = "sent" | "received";
+
+export default function NotificationsArchivePage() {
+  const { scope } = useScope();
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
-  const [filterType, setFilterType] = useState<NotificationType | "">("");
+  const [activeTab, setActiveTab] = useState<TabType>("sent");
+  const [filterSource, setFilterSource] = useState<"" | "Compliance" | "Coach">("");
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
+  const [resendNotification, setResendNotification] = useState<Notification | null>(null);
 
-  const users = getUsers();
+  // Load notifications
+  const [sentNotifications, setSentNotifications] = useState<Notification[]>([]);
+  const [receivedNotifications, setReceivedNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setNotifications(getNotifications());
+    const updateNotifications = () => {
       setCurrentUser(getCurrentUser());
-    });
+      const user = getCurrentUser();
+      
+      // Sent: Admin sees all with senderId, Manager sees only their sent
+      if (user.role === "ADMIN") {
+        setSentNotifications(getNotifications().filter(n => n.senderId));
+      } else {
+        setSentNotifications(getSentNotifications(user.id));
+      }
+      
+      // Received: notifications addressed to current user
+      setReceivedNotifications(getReceivedNotifications(user.id));
+    };
+
+    updateNotifications();
+    const unsubscribe = subscribe(updateNotifications);
     return unsubscribe;
   }, []);
 
-  const getUser = (userId: string) => users.find(u => u.id === userId);
+  // Filter notifications based on active tab and source filter
+  const displayedNotifications = (activeTab === "sent" ? sentNotifications : receivedNotifications)
+    .filter(n => {
+      if (!filterSource) return true;
+      return n.source === filterSource;
+    });
+
+  const handleRowClick = (notification: Notification) => {
+    setSelectedNotification(notification);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedNotification(null);
+  };
+
+  const handleResend = (notification: Notification) => {
+    setResendNotification(notification);
+    setSelectedNotification(null);
+    setIsComposeModalOpen(true);
+  };
+
+  const handleCloseCompose = () => {
+    setIsComposeModalOpen(false);
+    setResendNotification(null);
+  };
 
   const handleClearAll = () => {
     if (confirm("Are you sure you want to clear all notifications?")) {
@@ -49,207 +90,300 @@ export default function NotificationsPage() {
     }
   };
 
-  const getFilteredNotifications = (): Notification[] => {
-    let filtered = notifications;
-
-    // Manager scope: only show notifications for their team
-    if (currentUser.role === "MANAGER") {
-      filtered = filtered.filter(notif => {
-        const recipient = getUser(notif.recipientId);
-        return recipient?.siteId === currentUser.siteId;
-      });
-    }
-
-    // Type filter
-    if (filterType) {
-      filtered = filtered.filter(notif => notif.type === filterType);
-    }
-
-    return filtered.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  };
-
-  const getTypeBadge = (type: NotificationType) => {
-    switch (type) {
-      case "reminder":
-        return <Badge variant="info">Reminder</Badge>;
-      case "escalation":
-        return <Badge variant="error">Escalation</Badge>;
-      default:
-        return <Badge variant="default">{type}</Badge>;
-    }
-  };
-
-  const filteredNotifications = getFilteredNotifications();
-
-  const reminderCount = notifications.filter(n => n.type === "reminder").length;
-  const escalationCount = notifications.filter(n => n.type === "escalation").length;
+  const isAdmin = currentUser.role === "ADMIN";
 
   return (
     <RouteGuard>
       <AdminLayout>
-        <div>
+        <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Notifications</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                View generated reminders and escalations from the compliance page
+              <h1 className="text-2xl font-bold text-gray-900">Notification Archive</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                View sent and received notifications
               </p>
             </div>
-            {currentUser.role === "ADMIN" && notifications.length > 0 && (
+            {isAdmin && (
               <Button variant="secondary" onClick={handleClearAll}>
                 Clear All
               </Button>
             )}
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card>
-              <div className="text-center py-4">
-                <p className="text-3xl font-bold text-gray-900">{notifications.length}</p>
-                <p className="text-sm text-gray-600 mt-1">Total Notifications</p>
-              </div>
-            </Card>
-            <Card>
-              <div className="text-center py-4">
-                <p className="text-3xl font-bold text-blue-600">{reminderCount}</p>
-                <p className="text-sm text-gray-600 mt-1">Reminders</p>
-              </div>
-            </Card>
-            <Card>
-              <div className="text-center py-4">
-                <p className="text-3xl font-bold text-red-600">{escalationCount}</p>
-                <p className="text-sm text-gray-600 mt-1">Escalations</p>
-              </div>
-            </Card>
-          </div>
-
-          {/* Filters */}
-          <Card className="mb-6">
-            <div className="flex items-center gap-4">
-              <label htmlFor="filterType" className="text-sm font-medium text-gray-700">
-                Filter by Type:
-              </label>
-              <select
-                id="filterType"
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as NotificationType | "")}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">All Types</option>
-                <option value="reminder">Reminder</option>
-                <option value="escalation">Escalation</option>
-              </select>
-
-              {filterType && (
-                <button
-                  onClick={() => setFilterType("")}
-                  className="text-sm text-primary hover:underline"
-                >
-                  Clear filter
-                </button>
-              )}
-            </div>
-          </Card>
-
-          {/* Notifications Table */}
           <Card>
-            {filteredNotifications.length === 0 ? (
-              <div className="text-center py-12">
-                <svg
-                  className="mx-auto h-12 w-12 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button 
+                onClick={() => setActiveTab("sent")}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "sent" 
+                    ? "border-b-2 border-blue-500 text-blue-600" 
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Sent ({sentNotifications.length})
+              </button>
+              <button 
+                onClick={() => setActiveTab("received")}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "received" 
+                    ? "border-b-2 border-blue-500 text-blue-600" 
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Received ({receivedNotifications.length})
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Source
+                </label>
+                <select
+                  value={filterSource}
+                  onChange={(e) => setFilterSource(e.target.value as "" | "Compliance" | "Coach")}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                  />
-                </svg>
-                <h3 className="mt-2 text-sm font-semibold text-gray-900">No notifications yet</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Run &quot;Run Reminders Now&quot; from the Compliance page to generate notifications.
-                </p>
+                  <option value="">All Sources</option>
+                  <option value="Compliance">Compliance</option>
+                  <option value="Coach">Coach</option>
+                </select>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      {activeTab === "sent" ? "Sent At" : "Received At"}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      {activeTab === "sent" ? "To" : "From"}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Subject
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Source
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Audience
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {displayedNotifications.length === 0 ? (
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Message
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Recipient
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Created At
-                      </th>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                        No notifications found
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredNotifications.map((notification) => {
-                      const recipient = getUser(notification.recipientId);
-                      
+                  ) : (
+                    displayedNotifications.map((notification) => {
+                      const recipients = notification.recipients || [];
+                      const firstTwo = recipients.slice(0, 2);
+                      const remaining = recipients.length - 2;
+                      const sender = getUser(notification.senderId);
+
                       return (
-                        <tr key={notification.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {getTypeBadge(notification.type)}
+                        <tr
+                          key={notification.id}
+                          onClick={() => handleRowClick(notification)}
+                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {formatDate(notification.sentAt)}
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-gray-900 max-w-2xl">
-                              {notification.message}
-                            </div>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {activeTab === "sent" ? (
+                              <>
+                                {firstTwo.map((r) => r.name).join(", ")}
+                                {remaining > 0 && ` +${remaining} more`}
+                              </>
+                            ) : (
+                              sender ? getFullName(sender) : "System"
+                            )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
-                              {recipient?.name || "Unknown User"}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {recipient?.email}
-                            </div>
+                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
+                            {notification.subject}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(notification.createdAt)}
+                          <td className="px-4 py-3 text-sm">
+                            <Badge variant={notification.source === "Compliance" ? "info" : "default"}>
+                              {notification.source}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <Badge variant={
+                              notification.audience === "MANAGERS" ? "warning" : 
+                              notification.audience === "LEARNERS" ? "success" : "default"
+                            }>
+                              {notification.audience === "MANAGERS" ? "Managers" : 
+                               notification.audience === "LEARNERS" ? "Learners" : "Specific"}
+                            </Badge>
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-
-          {currentUser.role === "MANAGER" && (
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <span className="font-medium">Manager View:</span> You are seeing notifications for your site only.
-              </p>
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-
-          <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">About Notifications</h3>
-            <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-              <li><strong>Reminders:</strong> Sent to learners when trainings are upcoming or overdue</li>
-              <li><strong>Escalations:</strong> Sent to managers when overdue trainings exceed threshold</li>
-              <li>All notifications are in-memory only (no actual emails sent)</li>
-              <li>Notifications persist until manually cleared or app is restarted</li>
-            </ul>
-          </div>
+          </Card>
         </div>
+
+        {/* Detail Modal */}
+        {selectedNotification && (
+          <div className="fixed inset-0 z-50 overflow-y-auto" onClick={handleCloseDetail}>
+            <div className="flex min-h-screen items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
+              
+              <div 
+                className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-xl font-semibold text-gray-900">Notification Details</h2>
+                  </div>
+                  <button
+                    onClick={handleCloseDetail}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Header Info */}
+                  <div className="pb-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-medium text-gray-500">From:</span>
+                      <span className="text-sm text-gray-900">
+                        {getUser(selectedNotification.senderId) 
+                          ? getFullName(getUser(selectedNotification.senderId)!) 
+                          : "System"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-medium text-gray-500">Sent:</span>
+                      <span className="text-sm text-gray-900">{formatDate(selectedNotification.sentAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-medium text-gray-500">Source:</span>
+                      <Badge variant={selectedNotification.source === "Compliance" ? "info" : "default"}>
+                        {selectedNotification.source}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-gray-500">Audience:</span>
+                      <Badge variant={
+                        selectedNotification.audience === "MANAGERS" ? "warning" : 
+                        selectedNotification.audience === "LEARNERS" ? "success" : "default"
+                      }>
+                        {selectedNotification.audience === "MANAGERS" ? "Managers" : 
+                         selectedNotification.audience === "LEARNERS" ? "Learners" : "Specific Users"}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Recipients */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {activeTab === "sent" ? "To:" : "Also sent to:"}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedNotification.recipients.map((recipient) => (
+                        <div
+                          key={recipient.userId}
+                          className="inline-flex flex-col px-3 py-2 bg-blue-50 text-blue-900 rounded-lg text-xs"
+                        >
+                          <span className="font-medium">{recipient.name}</span>
+                          <span className="text-blue-700">{recipient.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Subject:</label>
+                    <div className="px-3 py-2 bg-gray-50 rounded-md text-sm text-gray-900">
+                      {selectedNotification.subject}
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Message Body:</label>
+                    <pre className="px-3 py-2 bg-gray-50 rounded-md text-sm text-gray-900 font-mono whitespace-pre-wrap leading-relaxed">
+                      {selectedNotification.body}
+                    </pre>
+                  </div>
+
+                  {/* Context Snapshot */}
+                  {selectedNotification.contextSnapshot && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Context Snapshot:</label>
+                      <div className="px-3 py-2 bg-gray-50 rounded-md text-xs text-gray-700 space-y-1">
+                        {selectedNotification.contextSnapshot.siteName && (
+                          <div><strong>Site:</strong> {selectedNotification.contextSnapshot.siteName}</div>
+                        )}
+                        {selectedNotification.contextSnapshot.departmentName && (
+                          <div><strong>Department:</strong> {selectedNotification.contextSnapshot.departmentName}</div>
+                        )}
+                        <div><strong>Overdue:</strong> {selectedNotification.contextSnapshot.countOverdue}</div>
+                        <div><strong>Due Soon:</strong> {selectedNotification.contextSnapshot.dueSoonCount}</div>
+                        {selectedNotification.contextSnapshot.topTrainingTitle && (
+                          <div><strong>Top Training:</strong> {selectedNotification.contextSnapshot.topTrainingTitle}</div>
+                        )}
+                        {selectedNotification.contextSnapshot.nearestDueDate && (
+                          <div><strong>Nearest Due Date:</strong> {selectedNotification.contextSnapshot.nearestDueDate}</div>
+                        )}
+                        {selectedNotification.contextSnapshot.onTimePct !== undefined && (
+                          <div><strong>On-Time %:</strong> {selectedNotification.contextSnapshot.onTimePct}%</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Actions */}
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+                  <Button variant="secondary" onClick={handleCloseDetail}>
+                    Close
+                  </Button>
+                  {activeTab === "sent" && (
+                    <Button variant="primary" onClick={() => handleResend(selectedNotification)}>
+                      <RefreshCw className="w-4 h-4" />
+                      Re-send...
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Compose Modal for Re-send */}
+        {isComposeModalOpen && resendNotification && (
+          <NotificationComposeModal
+            open={isComposeModalOpen}
+            onClose={handleCloseCompose}
+            initialSource={resendNotification.source}
+            prefilledData={{
+              subject: resendNotification.subject,
+              body: resendNotification.body,
+              recipients: resendNotification.recipients,
+              audience: resendNotification.audience,
+            }}
+          />
+        )}
       </AdminLayout>
     </RouteGuard>
   );
 }
-

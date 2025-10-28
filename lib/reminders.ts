@@ -53,13 +53,23 @@ export function runReminderEvaluation(
         
         if (!user || !training) continue;
 
-        // Create notification
+        // Create notification (legacy format - keeping for compatibility)
+        const message = generateMessage(rule, training, user, completion);
         const notification: Notification = {
           id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           type: rule.escalationAfterDays !== undefined ? "escalation" : "reminder",
           recipientId: user.id,
-          message: generateMessage(rule, training, user, completion),
+          message,
           createdAt: today(),
+          // Required fields for new format
+          sentAt: today(),
+          senderId: "system",
+          audience: "LEARNERS",
+          subject: "Training Reminder",
+          body: message,
+          source: "Compliance",
+          recipients: [{ userId: user.id, name: getFullName(user), email: user.email }],
+          status: "SENT",
         };
 
         result.notifications.push(notification);
@@ -82,12 +92,22 @@ export function runReminderEvaluation(
               createEscalationLog(escalation);
 
               // Also send notification to manager
+              const escalationMessage = `ESCALATION: ${getFullName(user)} is ${completion.overdueDays} days overdue for "${training.title}". Please follow up.`;
               const managerNotification: Notification = {
                 id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 type: "escalation",
                 recipientId: manager.id,
-                message: `ESCALATION: ${user.name} is ${completion.overdueDays} days overdue for "${training.title}". Please follow up.`,
+                message: escalationMessage,
                 createdAt: today(),
+                // Required fields for new format
+                sentAt: today(),
+                senderId: "system",
+                audience: "MANAGERS",
+                subject: "Training Escalation",
+                body: escalationMessage,
+                source: "Compliance",
+                recipients: [{ userId: manager.id, name: getFullName(manager), email: manager.email }],
+                status: "SENT",
               };
 
               result.notifications.push(managerNotification);

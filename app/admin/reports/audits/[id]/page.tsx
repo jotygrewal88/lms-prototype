@@ -23,7 +23,7 @@ import {
   getUser,
 } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
-import { CompletionStatus } from "@/types";
+import { CompletionStatus, getFullName } from "@/types";
 
 export default function AuditSnapshotDetailPage() {
   const params = useParams();
@@ -81,7 +81,7 @@ export default function AuditSnapshotDetailPage() {
       const site = getSite(user?.siteId);
       const dept = getDepartment(user?.departmentId);
 
-      return `"${training?.title || ""}","${user?.name || ""}","${site?.name || ""}","${dept?.name || ""}","${row.status}","${row.dueAt}","${row.completedAt || ""}","${row.overdueDays || 0}","${row.notes || ""}"`;
+      return `"${training?.title || ""}","${user ? getFullName(user) : ""}","${site?.name || ""}","${dept?.name || ""}","${row.status}","${row.dueAt}","${row.completedAt || ""}","${row.overdueDays || 0}","${row.notes || ""}"`;
     }).join("\n");
 
     const csvContent = csvHeader + csvRows;
@@ -112,7 +112,7 @@ export default function AuditSnapshotDetailPage() {
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Audit Snapshot: {snapshot.id}</h1>
             <p className="text-sm text-gray-600 mt-2">
-              Created by {creator?.name || "Unknown"} on {formatDate(snapshot.createdAt)}
+              Created by {creator ? getFullName(creator) : "Unknown"} on {formatDate(snapshot.createdAt)}
             </p>
           </div>
 
@@ -174,7 +174,7 @@ export default function AuditSnapshotDetailPage() {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
                           {training?.title || "Unknown"}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{user?.name || "Unknown"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "Unknown"}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{site?.name || "—"}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{dept?.name || "—"}</td>
                         <td className="px-4 py-3 text-sm">{getStatusBadge(row.status)}</td>

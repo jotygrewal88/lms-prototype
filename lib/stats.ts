@@ -4,7 +4,8 @@ import {
   TrainingCompletion, 
   Site, 
   Department,
-  Scope 
+  Scope,
+  getFullName
 } from "@/types";
 import { today, addDays } from "./utils";
 import { 
@@ -127,19 +128,23 @@ export function calculateDistribution(completions: TrainingCompletion[]) {
 /**
  * Calculate on-time completion percentage (last 30 days)
  */
-export function onTimePctLast30d(completions: TrainingCompletion[]): number {
+export function onTimePctLast30d(completions: TrainingCompletion[]): { pct: number; onTimeCount: number; totalCompletions: number } {
   const cutoff = addDays(today(), -30);
   const recentCompletions = completions.filter(
     (c) => c.status === "COMPLETED" && c.completedAt && c.completedAt >= cutoff
   );
 
-  if (recentCompletions.length === 0) return 100;
+  if (recentCompletions.length === 0) return { pct: 100, onTimeCount: 0, totalCompletions: 0 };
 
   const onTime = recentCompletions.filter((c) => {
     return c.completedAt && c.dueAt && c.completedAt <= c.dueAt;
   }).length;
 
-  return Math.round((onTime / recentCompletions.length) * 100);
+  return {
+    pct: Math.round((onTime / recentCompletions.length) * 100),
+    onTimeCount: onTime,
+    totalCompletions: recentCompletions.length,
+  };
 }
 
 /**
@@ -270,11 +275,363 @@ export function managerOverdueCounts(
   });
 
   return Array.from(managerStats.entries())
-    .map(([managerId, count]) => ({
-      managerId,
-      managerName: userMap.get(managerId)?.name || managerId,
-      overdueCount: count,
-    }))
+    .map(([managerId, count]) => {
+      const manager = userMap.get(managerId);
+      return {
+        managerId,
+        managerName: manager ? getFullName(manager) : managerId,
+        overdueCount: count,
+      };
+    })
     .sort((a, b) => b.overdueCount - a.overdueCount);
+}
+
+/**
+ * Get training with most overdue completions
+ */
+export function topOverdueTraining(
+  completions: TrainingCompletion[],
+  trainings: Training[]
+): { trainingId: string; title: string; overdueCount: number } | null {
+  const trainingMap = new Map(trainings.map((t) => [t.id, t]));
+  const overdueByTraining = new Map<string, number>();
+
+  completions.forEach((c) => {
+    if (c.status === "OVERDUE") {
+      overdueByTraining.set(
+        c.trainingId,
+        (overdueByTraining.get(c.trainingId) || 0) + 1
+      );
+    }
+  });
+
+  if (overdueByTraining.size === 0) return null;
+
+  const sorted = Array.from(overdueByTraining.entries()).sort(
+    (a, b) => b[1] - a[1]
+  );
+
+  const [trainingId, overdueCount] = sorted[0];
+  const training = trainingMap.get(trainingId);
+
+  return {
+    trainingId,
+    title: training?.title || trainingId,
+    overdueCount,
+  };
+}
+
+/**
+ * Count active (non-exempt) assignments
+ */
+export function activeAssignments(completions: TrainingCompletion[]): number {
+  return completions.filter((c) => 
+    c.status !== "EXEMPT" && 
+    (c.status === "ASSIGNED" || c.status === "OVERDUE")
+  ).length;
+}
+
+/**
+ * Calculate median of numbers
+ */
+export function median(numbers: number[]): number {
+  if (numbers.length === 0) return 0;
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 
+    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) 
+    : sorted[mid];
+}
+
+/**
+ * Calculate weekly on-time completion percentage over N weeks
+ */
+export function onTimePctSeries(completions: TrainingCompletion[], weeks = 8): number[] {
+  const todayStr = today();
+  const series: number[] = [];
+  
+  for (let i = weeks - 1; i >= 0; i--) {
+    const weekEnd = addDays(todayStr, -(i * 7));
+    const weekStart = addDays(weekEnd, -7);
+    
+    const weekCompletions = completions.filter((c) => 
+      c.status === "COMPLETED" && 
+      c.completedAt && 
+      c.completedAt >= weekStart && 
+      c.completedAt < weekEnd
+    );
+    
+    if (weekCompletions.length === 0) {
+      series.push(100); // Default to 100% if no data
+    } else {
+      const onTime = weekCompletions.filter((c) => 
+        c.completedAt && c.dueAt && c.completedAt <= c.dueAt
+      ).length;
+      series.push(Math.round((onTime / weekCompletions.length) * 100));
+    }
+  }
+  
+  return series;
+}
+
+/**
+ * Manager overdue detail interface
+ */
+export interface ManagerOverdueDetail {
+  managerId: string;
+  managerName: string;
+  siteId: string;
+  siteName: string;
+  deptId: string;
+  deptName: string;
+  teamUserIds: string[];
+  teamSize: number;
+  overdueCount: number;
+  dueSoonCount: number;
+  activeAssignments: number;
+  overdueRate: number;
+  dueSoonRate: number;
+  overdueAging: {
+    medianDays: number;
+    maxDays: number;
+  };
+  topProblemTraining?: {
+    trainingId: string;
+    title: string;
+    overdueCount: number;
+  };
+  onTimePctSeries: number[];
+}
+
+/**
+ * Get detailed overdue statistics by manager
+ */
+export function overdueDetailByManager(scoped: ReturnType<typeof getScopedData>): ManagerOverdueDetail[] {
+  const { completions, users, trainings } = scoped;
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  
+  // Group users by manager
+  const managerTeams = new Map<string, User[]>();
+  users.forEach((user) => {
+    if (user.managerId) {
+      if (!managerTeams.has(user.managerId)) {
+        managerTeams.set(user.managerId, []);
+      }
+      managerTeams.get(user.managerId)!.push(user);
+    }
+  });
+  
+  const results: ManagerOverdueDetail[] = [];
+  
+  for (const [managerId, teamMembers] of managerTeams.entries()) {
+    const manager = userMap.get(managerId);
+    if (!manager) continue;
+    
+    const teamUserIds = teamMembers.map((u) => u.id);
+    const teamCompletions = completions.filter((c) => teamUserIds.includes(c.userId));
+    
+    if (teamCompletions.length === 0) continue;
+    
+    const overdueCompletions = teamCompletions.filter((c) => c.status === "OVERDUE");
+    const dueSoonCompletions = teamCompletions.filter((c) => c.status === "ASSIGNED" && c.dueAt <= addDays(today(), 7));
+    const active = activeAssignments(teamCompletions);
+    
+    // Calculate aging for overdue items
+    const overdueDays = overdueCompletions.map((c) => c.overdueDays || 0).filter(d => d > 0);
+    const medianDays = median(overdueDays);
+    const maxDays = overdueDays.length > 0 ? Math.max(...overdueDays) : 0;
+    
+    // Find top problem training for this team
+    const trainingMap = new Map(trainings.map((t) => [t.id, t]));
+    const overdueByTraining = new Map<string, number>();
+    overdueCompletions.forEach((c) => {
+      overdueByTraining.set(
+        c.trainingId,
+        (overdueByTraining.get(c.trainingId) || 0) + 1
+      );
+    });
+    
+    let topProblemTraining: ManagerOverdueDetail["topProblemTraining"] = undefined;
+    if (overdueByTraining.size > 0) {
+      const sorted = Array.from(overdueByTraining.entries()).sort((a, b) => b[1] - a[1]);
+      const [trainingId, overdueCount] = sorted[0];
+      const training = trainingMap.get(trainingId);
+      if (training) {
+        topProblemTraining = {
+          trainingId,
+          title: training.title,
+          overdueCount,
+        };
+      }
+    }
+    
+    // Calculate on-time percentage series for this team
+    const series = onTimePctSeries(teamCompletions, 8);
+    
+    results.push({
+      managerId,
+      managerName: getFullName(manager),
+      siteId: manager.siteId || "unknown",
+      siteName: manager.siteId ? getSites().find(s => s.id === manager.siteId)?.name || "Unknown" : "Unknown",
+      deptId: manager.departmentId || "unknown",
+      deptName: manager.departmentId ? getDepartments().find(d => d.id === manager.departmentId)?.name || "Unknown" : "Unknown",
+      teamUserIds,
+      teamSize: teamMembers.length,
+      overdueCount: overdueCompletions.length,
+      dueSoonCount: dueSoonCompletions.length,
+      activeAssignments: active,
+      overdueRate: active > 0 ? overdueCompletions.length / active : 0,
+      dueSoonRate: active > 0 ? dueSoonCompletions.length / active : 0,
+      overdueAging: {
+        medianDays,
+        maxDays,
+      },
+      topProblemTraining,
+      onTimePctSeries: series,
+    });
+  }
+  
+  return results;
+}
+
+/**
+ * Calculate team risk score (0-100) based on compliance metrics
+ */
+export function teamRiskScore(
+  overdueCount: number,
+  teamAssignments: number,
+  medianAgingDays: number
+): number {
+  const overduePct = overdueCount / Math.max(1, teamAssignments);
+  const medianAgingScaled = Math.min(medianAgingDays / 30, 1);
+  const volumeFactor = Math.min(overdueCount / 10, 1);
+  
+  return Math.round(100 * (0.65 * overduePct + 0.25 * medianAgingScaled + 0.10 * volumeFactor));
+}
+
+/**
+ * Team row interface for compliance coach
+ */
+export interface TeamRow {
+  managerId: string;
+  managerName: string;
+  siteName: string;
+  deptName: string;
+  siteId: string;
+  deptId: string;
+  overdueCount: number;
+  teamCount: number;
+  overduePct: number;
+  agingMedianDays: number;
+  agingMaxDays: number;
+  topTrainingName?: string;
+  topTrainingCount?: number;
+  risk: number;
+}
+
+/**
+ * Coach summary interface
+ */
+export interface CoachSummary {
+  highCount: number;
+  medCount: number;
+  worstAgingDays: number;
+  topOffenderTraining?: string;
+  topOffenderSharePct: number;
+  overallCompliancePct: number;
+}
+
+/**
+ * Aggregate all coach statistics with risk tiering
+ */
+export function aggregateCoachStats(scope: Scope): {
+  high: TeamRow[];
+  med: TeamRow[];
+  low: TeamRow[];
+  summary: CoachSummary;
+} {
+  const scoped = getScopedData(scope);
+  const { completions, users, trainings } = scoped;
+  
+  // Group users by manager
+  const managerTeams = new Map<string, User[]>();
+  users.forEach(u => {
+    if (u.managerId && !managerTeams.has(u.managerId)) {
+      managerTeams.set(u.managerId, []);
+    }
+    if (u.managerId) managerTeams.get(u.managerId)!.push(u);
+  });
+  
+  const allRows: TeamRow[] = [];
+  
+  for (const [managerId, teamMembers] of managerTeams.entries()) {
+    const manager = users.find(u => u.id === managerId);
+    if (!manager) continue;
+    
+    const teamUserIds = teamMembers.map(u => u.id);
+    const teamCompletions = completions.filter(c => 
+      teamUserIds.includes(c.userId) && c.status !== "EXEMPT"
+    );
+    
+    if (teamCompletions.length === 0) continue;
+    
+    const overdueItems = teamCompletions.filter(c => c.status === "OVERDUE");
+    const overdueDays = overdueItems.map(c => c.overdueDays || 0).filter(d => d > 0);
+    
+    // Top training
+    const trainingCounts = new Map<string, number>();
+    overdueItems.forEach(c => {
+      trainingCounts.set(c.trainingId, (trainingCounts.get(c.trainingId) || 0) + 1);
+    });
+    const topEntry = Array.from(trainingCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+    
+    const row: TeamRow = {
+      managerId,
+      managerName: `${manager.firstName} ${manager.lastName}`,
+      siteName: getSites().find(s => s.id === manager.siteId)?.name || "",
+      deptName: getDepartments().find(d => d.id === manager.departmentId)?.name || "",
+      siteId: manager.siteId || "",
+      deptId: manager.departmentId || "",
+      overdueCount: overdueItems.length,
+      teamCount: teamCompletions.length,
+      overduePct: overdueItems.length / teamCompletions.length,
+      agingMedianDays: median(overdueDays),
+      agingMaxDays: overdueDays.length > 0 ? Math.max(...overdueDays) : 0,
+      topTrainingName: topEntry ? trainings.find(t => t.id === topEntry[0])?.title : undefined,
+      topTrainingCount: topEntry?.[1],
+      risk: teamRiskScore(overdueItems.length, teamCompletions.length, median(overdueDays)),
+    };
+    
+    allRows.push(row);
+  }
+  
+  // Tier teams by risk
+  const high = allRows.filter(r => r.risk >= 40).sort((a, b) => b.risk - a.risk);
+  const med = allRows.filter(r => r.risk >= 25 && r.risk < 40).sort((a, b) => b.risk - a.risk);
+  const low = allRows.filter(r => r.risk < 25).sort((a, b) => b.risk - a.risk);
+  
+  // Build summary
+  const totalCompletions = completions.filter(c => c.status !== "EXEMPT").length;
+  const completedCount = completions.filter(c => c.status === "COMPLETED").length;
+  const worstAging = Math.max(...allRows.map(r => r.agingMaxDays), 0);
+  
+  // Find top offender training across all teams
+  const globalTrainingCounts = new Map<string, number>();
+  completions.filter(c => c.status === "OVERDUE").forEach(c => {
+    globalTrainingCounts.set(c.trainingId, (globalTrainingCounts.get(c.trainingId) || 0) + 1);
+  });
+  const topGlobal = Array.from(globalTrainingCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+  const totalOverdue = completions.filter(c => c.status === "OVERDUE").length;
+  
+  const summary: CoachSummary = {
+    highCount: high.length,
+    medCount: med.length,
+    worstAgingDays: worstAging,
+    topOffenderTraining: topGlobal ? trainings.find(t => t.id === topGlobal[0])?.title : undefined,
+    topOffenderSharePct: topGlobal && totalOverdue > 0 ? Math.round((topGlobal[1] / totalOverdue) * 100) : 0,
+    overallCompliancePct: totalCompletions > 0 ? Math.round((completedCount / totalCompletions) * 100) : 0,
+  };
+  
+  return { high, med, low, summary };
 }
 

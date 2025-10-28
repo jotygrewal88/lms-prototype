@@ -6,6 +6,7 @@ import { Circle } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
+import SmartComplianceCoach from "@/components/SmartComplianceCoach";
 import { useScope } from "@/hooks/useScope";
 import { subscribe } from "@/lib/store";
 import {
@@ -31,7 +32,7 @@ export default function AdminDashboard() {
   
   // Calculate stats from scoped data
   const distribution = calculateDistribution(scoped.completions);
-  const onTimePct = onTimePctLast30d(scoped.completions);
+  const onTimeStats = onTimePctLast30d(scoped.completions);
   const avgOverdue = avgDaysOverdueLast30d(scoped.completions);
 
   const totalUsers = scoped.users.length;
@@ -42,15 +43,6 @@ export default function AdminDashboard() {
   // KPI calculations
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const completedLast30d = scoped.completions.filter(c => 
-    c.status === "COMPLETED" && 
-    c.completedAt && 
-    new Date(c.completedAt) >= thirtyDaysAgo
-  );
-  const onTimeCompletions = completedLast30d.filter(c => 
-    c.completedAt && new Date(c.completedAt) <= new Date(c.dueAt)
-  ).length;
 
   const overdueLast30d = scoped.completions.filter(c => 
     c.status === "OVERDUE" && 
@@ -88,13 +80,13 @@ export default function AdminDashboard() {
           <Card>
             <div className="text-[12px] text-gray-600 mb-2">On-Time (Last 30d)</div>
             <div className={`text-[28px] leading-none font-semibold mb-1 ${
-              onTimePct >= 80 ? "text-green-600" : "text-yellow-600"
+              onTimeStats.pct >= 80 ? "text-green-600" : "text-yellow-600"
             }`}>
-              {onTimePct}%
+              {onTimeStats.pct}%
             </div>
-            <div className="text-[12px] text-gray-500 mb-3">{onTimeCompletions} of {completedLast30d.length}</div>
+            <div className="text-[12px] text-gray-500 mb-3">{onTimeStats.onTimeCount} of {onTimeStats.totalCompletions}</div>
             <div className="h-2 rounded bg-gray-100">
-              <div className="h-2 rounded bg-green-500" style={{ width: `${onTimePct}%` }} />
+              <div className="h-2 rounded bg-green-500" style={{ width: `${onTimeStats.pct}%` }} />
             </div>
           </Card>
 
@@ -143,6 +135,9 @@ export default function AdminDashboard() {
             <div className="text-[12px] text-gray-500">All assignments</div>
           </Card>
         </div>
+
+        {/* Smart Compliance Coach */}
+        <SmartComplianceCoach />
 
         {/* Compliance Summary */}
         <Card className="col-span-full">
@@ -223,7 +218,7 @@ export default function AdminDashboard() {
                 <div className="flex items-start gap-2">
                   <Circle className="w-2 h-2 text-gray-400 mt-1.5 flex-shrink-0" />
                   <span className="text-[13px] text-gray-700">
-                    {onTimePct >= 80
+                    {onTimeStats.pct >= 80
                       ? "Strong on-time completion rate maintained"
                       : "Consider adjusting due dates for improved on-time rates"
                     }

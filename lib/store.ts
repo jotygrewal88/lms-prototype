@@ -336,6 +336,17 @@ export function getNotificationsByUserId(userId: string): Notification[] {
 
 export function createNotification(notification: Notification): void {
   notifications.push(notification);
+  
+  // Log change if this is a new-style notification with recipients
+  if (notification.recipients && notification.recipients.length > 0) {
+    const { logChange } = require('./changeLog');
+    logChange(
+      notification.id,
+      `Notification sent (mock) to ${notification.recipients.length} recipient${notification.recipients.length > 1 ? 's' : ''}`,
+      { action: 'bulk_op' }
+    );
+  }
+  
   notifyListeners();
 }
 
@@ -347,6 +358,44 @@ export function deleteNotification(id: string): void {
 export function clearAllNotifications(): void {
   notifications = [];
   notifyListeners();
+}
+
+// Get notifications filtered by scope for manager view
+export function getNotificationsByScope(scope: Scope): Notification[] {
+  if (scope.siteId === "ALL" && scope.deptId === "ALL") {
+    return notifications;
+  }
+
+  return notifications.filter(notification => {
+    // Legacy notifications without scope snapshot - show all
+    if (!notification.scopeSnapshot) return true;
+
+    const snapshot = notification.scopeSnapshot;
+    
+    // Check site match
+    if (scope.siteId !== "ALL" && snapshot.siteId !== scope.siteId) {
+      return false;
+    }
+
+    // Check department match
+    if (scope.deptId !== "ALL" && snapshot.deptId !== scope.deptId) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+// Get notifications sent by a specific user
+export function getSentNotifications(userId: string): Notification[] {
+  return notifications.filter(n => n.senderId === userId);
+}
+
+// Get notifications received by a specific user
+export function getReceivedNotifications(userId: string): Notification[] {
+  return notifications.filter(n => 
+    n.recipients && n.recipients.some(r => r.userId === userId)
+  );
 }
 
 // ChangeLog management (Polish Pack)

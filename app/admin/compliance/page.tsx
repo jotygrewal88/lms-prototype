@@ -25,6 +25,7 @@ import CSVImportModal from "@/components/CSVImportModal";
 import ExemptionModal from "@/components/ExemptionModal";
 import BulkActionModal from "@/components/BulkActionModal";
 import ChangeHistoryDrawer from "@/components/ChangeHistoryDrawer";
+import NotificationComposeButton from "@/components/NotificationComposeButton";
 import {
   getSites,
   getDepartments,
@@ -162,7 +163,7 @@ export default function CompliancePage() {
 
         return [
           training?.title || "",
-          user?.name || "",
+          user ? getFullName(user) : "",
           site?.name || "",
           dept?.name || "",
           c.status,
@@ -309,7 +310,8 @@ export default function CompliancePage() {
     
     if (status === "EXEMPT" && completion.exemptionReason && completion.exemptionAttestedBy) {
       const attestedBy = getUserById(completion.exemptionAttestedBy);
-      const tooltipText = `Exempt: ${completion.exemptionReason}. Attested by ${attestedBy?.name || "Unknown"} on ${formatDate(completion.exemptionAttestedAt || "")}`;
+      const attestedByName = attestedBy ? getFullName(attestedBy) : "Unknown";
+      const tooltipText = `Exempt: ${completion.exemptionReason}. Attested by ${attestedByName} on ${formatDate(completion.exemptionAttestedAt || "")}`;
       return (
         <Badge variant="exempt" title={tooltipText}>
           Exempt
@@ -353,10 +355,24 @@ export default function CompliancePage() {
                 Create Snapshot
               </Button>
               {currentUser.role === "ADMIN" && (
-                <Button variant="secondary" onClick={handleRunReminders}>
-                  <Bell className="w-4 h-4" />
-                  Run Reminders Now
-                </Button>
+                <>
+                  <Button variant="secondary" onClick={handleRunReminders}>
+                    <Bell className="w-4 h-4" />
+                    Run Reminders Now
+                  </Button>
+                  <NotificationComposeButton
+                    source="Compliance"
+                    filters={{
+                      site: filterSite,
+                      department: filterDepartment,
+                      training: filterTraining,
+                      status: filterStatus,
+                    }}
+                    defaultRecipientMode="learners"
+                    variant="secondary"
+                    label="Suggest Reminder"
+                  />
+                </>
               )}
               <Button variant="secondary" onClick={() => window.print()}>
                 <Printer className="w-4 h-4" />
@@ -580,7 +596,7 @@ export default function CompliancePage() {
                             {training?.title}
                             {training?.standardRef && <div className="text-xs text-gray-500">{training.standardRef}</div>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{user?.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{site?.name || "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{dept?.name || "—"}</td>
                           <td className="px-4 py-3 text-sm">{getStatusBadge(completion)}</td>

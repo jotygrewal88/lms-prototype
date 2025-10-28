@@ -118,13 +118,33 @@ export interface EscalationLog {
 }
 
 export type NotificationType = "reminder" | "escalation";
+export type NotificationSource = "Compliance" | "Coach";
+export type Audience = "MANAGERS" | "LEARNERS" | "SPECIFIC";
 
 export interface Notification {
   id: string;
-  type: NotificationType;
-  recipientId: string;
-  message: string;
-  createdAt: string;
+  type?: NotificationType; // Legacy field, optional
+  recipientId?: string; // Legacy field, optional
+  message?: string; // Legacy field, optional
+  createdAt?: string; // Legacy field, optional
+  sentAt: string;
+  senderId: string; // Who sent it
+  audience: Audience; // Target audience type
+  subject: string;
+  body: string;
+  source: NotificationSource;
+  recipients: Array<{ userId: string; name: string; email: string }>;
+  scopeSnapshot?: { siteId: string; deptId: string; siteName?: string; deptName?: string };
+  contextSnapshot?: {
+    departmentName?: string;
+    siteName?: string;
+    countOverdue: number;
+    dueSoonCount: number;
+    topTrainingTitle?: string;
+    nearestDueDate?: string;
+    onTimePct?: number;
+  };
+  status: "SENT";
 }
 
 // Phase I Polish Pack: Additional types

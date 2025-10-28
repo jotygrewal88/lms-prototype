@@ -2,19 +2,30 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookOpen } from "lucide-react";
-import { getCurrentUser, getUsers, switchRole, subscribe } from "@/lib/store";
+import Link from "next/link";
+import { BookOpen, Bell } from "lucide-react";
+import { getCurrentUser, getUsers, switchRole, subscribe, getReceivedNotifications } from "@/lib/store";
 import { User, getFullName } from "@/types";
 import ScopeSelector from "@/components/ScopeSelector";
 
 export default function Header() {
   const [currentUser, setCurrentUser] = useState<User>(getCurrentUser());
+  const [notificationCount, setNotificationCount] = useState(0);
   const users = getUsers();
 
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setCurrentUser(getCurrentUser());
-    });
+    const updateState = () => {
+      const user = getCurrentUser();
+      setCurrentUser(user);
+      
+      // Update notification count for learners
+      if (user.role === "LEARNER") {
+        setNotificationCount(getReceivedNotifications(user.id).length);
+      }
+    };
+    
+    updateState();
+    const unsubscribe = subscribe(updateState);
     return unsubscribe;
   }, []);
 
@@ -31,6 +42,21 @@ export default function Header() {
 
       <div className="flex items-center gap-4">
         <ScopeSelector />
+        
+        {/* Learner Notifications Bell */}
+        {currentUser.role === "LEARNER" && (
+          <Link 
+            href="/learner/notifications"
+            className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Bell className="w-5 h-5 text-gray-600" />
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+                {notificationCount}
+              </span>
+            )}
+          </Link>
+        )}
         
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-600 font-medium">Role:</span>

@@ -383,21 +383,23 @@ export const completions: TrainingCompletion[] = [
   { id: "cmp_pkg_005", trainingId: "tng_001", userId: "usr_lrn_a_pkg_5", status: "OVERDUE", dueAt: addDays(today(), -5), overdueDays: 5, assignedManagerId: "usr_mgr_a_pkg" },
   { id: "cmp_pkg_006", trainingId: "tng_001", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -2), overdueDays: 2, assignedManagerId: "usr_mgr_a_pkg" },
   
-  // B. PLANT B MAINTENANCE: DUE SOON SURGE (Lockout/Tagout)
-  { id: "cmp_loto_001", trainingId: "tng_003", userId: "usr_lrn_b_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 2), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_loto_002", trainingId: "tng_003", userId: "usr_lrn_b_maint_2", status: "ASSIGNED", dueAt: addDays(today(), 3), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_loto_003", trainingId: "tng_003", userId: "usr_lrn_b_maint_3", status: "ASSIGNED", dueAt: addDays(today(), 4), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_loto_004", trainingId: "tng_003", userId: "usr_lrn_b_maint_4", status: "ASSIGNED", dueAt: addDays(today(), 5), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_loto_005", trainingId: "tng_003", userId: "usr_lrn_b_maint_5", status: "ASSIGNED", dueAt: addDays(today(), 6), assignedManagerId: "usr_mgr_b_maint" },
+  // B. PLANT B MAINTENANCE: OVERDUE LOCKOUT/TAGOUT CLUSTER (Diego Alvarez)
+  { id: "cmp_loto_001", trainingId: "tng_003", userId: "usr_lrn_b_maint_1", status: "OVERDUE", dueAt: addDays(today(), -15), overdueDays: 15, assignedManagerId: "usr_mgr_b_maint" },
+  { id: "cmp_loto_002", trainingId: "tng_003", userId: "usr_lrn_b_maint_2", status: "OVERDUE", dueAt: addDays(today(), -12), overdueDays: 12, assignedManagerId: "usr_mgr_b_maint" },
+  { id: "cmp_loto_003", trainingId: "tng_003", userId: "usr_lrn_b_maint_3", status: "OVERDUE", dueAt: addDays(today(), -8), overdueDays: 8, assignedManagerId: "usr_mgr_b_maint" },
+  { id: "cmp_loto_004", trainingId: "tng_003", userId: "usr_lrn_b_maint_4", status: "OVERDUE", dueAt: addDays(today(), -5), overdueDays: 5, assignedManagerId: "usr_mgr_b_maint" },
+  { id: "cmp_loto_005", trainingId: "tng_003", userId: "usr_lrn_b_maint_5", status: "ASSIGNED", dueAt: addDays(today(), 2), assignedManagerId: "usr_mgr_b_maint" },
   { id: "cmp_loto_006", trainingId: "tng_003", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 7), assignedManagerId: "usr_mgr_a" },
   
-  // C. LAST 30 DAYS: LATE COMPLETIONS (completed after due date)
+  // C. PLANT A WAREHOUSE: OVERDUE CLUSTER (Priya Singh)
   { id: "cmp_late_001", trainingId: "tng_002", userId: "usr_lrn_a_pkg_1", status: "COMPLETED", dueAt: addDays(today(), -20), completedAt: addDays(today(), -17), expiresAt: addDays(addDays(today(), -17), 365), assignedManagerId: "usr_mgr_a_pkg" },
   { id: "cmp_late_002", trainingId: "tng_002", userId: "usr_lrn_a_pkg_2", status: "COMPLETED", dueAt: addDays(today(), -18), completedAt: addDays(today(), -14), expiresAt: addDays(addDays(today(), -14), 365), assignedManagerId: "usr_mgr_a_pkg" },
   { id: "cmp_late_003", trainingId: "tng_004", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -25), completedAt: addDays(today(), -22), expiresAt: addDays(addDays(today(), -22), 365), assignedManagerId: "usr_mgr_b" },
   { id: "cmp_late_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -22), completedAt: addDays(today(), -18), expiresAt: addDays(addDays(today(), -18), 365), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_late_005", trainingId: "tng_002", userId: "usr_lrn_a_wh_1", status: "COMPLETED", dueAt: addDays(today(), -15), completedAt: addDays(today(), -12), expiresAt: addDays(addDays(today(), -12), 365), assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_late_006", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "COMPLETED", dueAt: addDays(today(), -28), completedAt: addDays(today(), -23), expiresAt: addDays(addDays(today(), -23), 365), assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_late_005", trainingId: "tng_002", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -15), overdueDays: 15, assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_late_006", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "OVERDUE", dueAt: addDays(today(), -14), overdueDays: 14, assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_late_007", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -10), overdueDays: 10, assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_late_008", trainingId: "tng_003", userId: "usr_lrn_a_wh_2", status: "OVERDUE", dueAt: addDays(today(), -7), overdueDays: 7, assignedManagerId: "usr_mgr_a_wh" },
   
   // D. RETRAINING WAVE: EXPIRING SOON (expiresAt within next 30 days)
   { id: "cmp_expire_001", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "COMPLETED", dueAt: addDays(today(), -350), completedAt: addDays(today(), -355), expiresAt: addDays(today(), 10), proofUrl: "https://example.com/cert/001.pdf", assignedManagerId: "usr_mgr_a_wh" },
@@ -441,9 +443,11 @@ export const completions: TrainingCompletion[] = [
   { id: "cmp_fire_011", trainingId: "tng_004", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 14), assignedManagerId: "usr_mgr_a" },
   { id: "cmp_fire_012", trainingId: "tng_004", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -4), overdueDays: 4, assignedManagerId: "usr_mgr_a_pkg" },
   
-  // Forklift Safety (Packaging and Warehouse depts)
-  { id: "cmp_fork_001", trainingId: "tng_001", userId: "usr_lrn_b_wh_2", status: "ASSIGNED", dueAt: addDays(today(), 16), assignedManagerId: "usr_mgr_b" },
+  // Forklift Safety - PLANT B WAREHOUSE OVERDUE CLUSTER (Jennifer Manager)
+  { id: "cmp_fork_001", trainingId: "tng_001", userId: "usr_lrn_b_wh_1", status: "OVERDUE", dueAt: addDays(today(), -11), overdueDays: 11, assignedManagerId: "usr_mgr_b" },
   { id: "cmp_fork_002", trainingId: "tng_001", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -6), overdueDays: 6, assignedManagerId: "usr_mgr_b" },
+  { id: "cmp_fork_003", trainingId: "tng_002", userId: "usr_lrn_b_wh_2", status: "OVERDUE", dueAt: addDays(today(), -13), overdueDays: 13, assignedManagerId: "usr_mgr_b" },
+  { id: "cmp_fork_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -9), overdueDays: 9, assignedManagerId: "usr_mgr_b" },
   
   // Lockout/Tagout (Maintenance depts) - additional
   { id: "cmp_loto_007", trainingId: "tng_003", userId: "usr_lrn_a_maint_1", status: "COMPLETED", dueAt: addDays(today(), -180), completedAt: addDays(today(), -185), expiresAt: addDays(addDays(today(), -185), 730), proofUrl: "https://example.com/cert/loto7.pdf", assignedManagerId: "usr_mgr_a" },
