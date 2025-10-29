@@ -32,6 +32,10 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin",
     },
     {
+      label: "Courses",
+      path: "/admin/courses",
+    },
+    {
       label: "Trainings",
       path: "/admin/trainings",
     },

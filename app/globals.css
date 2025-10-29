@@ -118,3 +118,31 @@ h2 {
   }
 }
 
+/* Drag and Drop Styles */
+.sortable-item {
+  cursor: grab;
+}
+
+.sortable-item:active {
+  cursor: grabbing;
+}
+
+.sortable-dragging {
+  opacity: 0.5;
+  z-index: 999;
+}
+
+.sortable-over {
+  outline: 2px dashed rgba(99, 102, 241, 0.5);
+  outline-offset: 2px;
+}
+
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+

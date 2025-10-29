@@ -1,7 +1,9 @@
 // Phase I Epic 1, 2 & Polish Pack: Root layout with brand provider and accessibility
+// Phase II Epic 1: Added dev smoke test component
 import type { Metadata } from "next";
 import "./globals.css";
 import BrandProvider from "@/components/BrandProvider";
+import DevSmokeTest from "@/components/DevSmokeTest";
 
 export const metadata: Metadata = {
   title: "UpKeep LMS",
@@ -24,6 +26,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <BrandProvider>
+          <DevSmokeTest />
           <div id="main-content">
             {children}
           </div>

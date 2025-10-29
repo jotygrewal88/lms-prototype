@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   LayoutDashboard, 
+  BookOpen,
   GraduationCap, 
   ClipboardList, 
   Bell, 
@@ -22,6 +23,7 @@ import { NavItem } from "@/types";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   "Dashboard": LayoutDashboard,
+  "Courses": BookOpen,
   "Trainings": GraduationCap,
   "Compliance": ClipboardList,
   "Notifications": Bell,

@@ -1,7 +1,8 @@
 // Phase I Epic 1, 2 & 3: In-memory global state store
+// Phase II Epic 1: Extended with Course Library
 "use client";
 
-import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope } from "@/types";
+import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate } from "@/types";
 import { 
   organization as seedOrg, 
   users as seedUsers, 
@@ -12,6 +13,17 @@ import {
   reminderRules as seedReminderRules,
   notificationTemplates as seedNotificationTemplates
 } from "@/data/seed";
+import {
+  courses as seedCourses,
+  lessons as seedLessons,
+  resources as seedResources,
+  quizzes as seedQuizzes,
+  questions as seedQuestions,
+  assignments as seedAssignments,
+  progressCourses as seedProgressCourses,
+  progressLessons as seedProgressLessons,
+  certificates as seedCertificates
+} from "@/data/seedCoursesV2";
 
 // Re-export Scope type for convenience
 export type { Scope };
@@ -30,6 +42,17 @@ let notifications: Notification[] = [];
 let changeLogs: ChangeLog[] = [];
 let auditSnapshots: AuditSnapshot[] = [];
 let notificationTemplates: NotificationTemplate[] = [...seedNotificationTemplates];
+
+// Phase II Epic 1 Fix Pass: Course Library state
+let courses: Course[] = [...seedCourses];
+let lessons: Lesson[] = [...seedLessons];
+let resources: Resource[] = [...seedResources];
+let quizzes: Quiz[] = [...seedQuizzes];
+let questions: Question[] = [...seedQuestions];
+let assignments: CourseAssignment[] = [...seedAssignments];
+let progressCourses: ProgressCourse[] = [...seedProgressCourses];
+let progressLessons: ProgressLesson[] = [...seedProgressLessons];
+let certificates: Certificate[] = [...seedCertificates];
 
 // Scope state with localStorage persistence
 const SCOPE_STORAGE_KEY = "uklms_scope";
@@ -498,6 +521,18 @@ export function resetToSeed(): void {
   changeLogs = [];
   auditSnapshots = [];
   notificationTemplates = [...seedNotificationTemplates];
+  
+  // Phase II Fix Pass: Reset course data
+  courses = [...seedCourses];
+  lessons = [...seedLessons];
+  resources = [...seedResources];
+  quizzes = [...seedQuizzes];
+  questions = [...seedQuestions];
+  assignments = [...seedAssignments];
+  progressCourses = [...seedProgressCourses];
+  progressLessons = [...seedProgressLessons];
+  certificates = [...seedCertificates];
+  
   currentScope = { siteId: "ALL", deptId: "ALL" };
   if (typeof window !== "undefined") {
     localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(currentScope));
@@ -550,5 +585,791 @@ export function loadScenario(scenario: "A" | "B"): void {
     
     notifyListeners();
   });
+}
+
+// Phase II Epic 1 Fix Pass: Course Management
+
+// Timestamp helper
+function timestamp(): string {
+  return new Date().toISOString();
+}
+
+// Course CRUD operations
+export function getCourses(): Course[] {
+  return courses;
+}
+
+export function getCourseById(id: string): Course | undefined {
+  return courses.find(c => c.id === id);
+}
+
+export function createCourse(data: Omit<Course, "id" | "createdAt" | "updatedAt">): Course {
+  const now = timestamp();
+  const course: Course = {
+    ...data,
+    id: `crs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    lessonIds: data.lessonIds || [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  courses.push(course);
+  notifyListeners();
+  return course;
+}
+
+export function updateCourse(id: string, updates: Partial<Omit<Course, "id" | "createdAt" | "updatedAt">>): void {
+  const index = courses.findIndex(c => c.id === id);
+  if (index !== -1) {
+    courses[index] = { 
+      ...courses[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteCourse(id: string): void {
+  // Cascade delete: remove course and all associated data
+  const course = courses.find(c => c.id === id);
+  if (!course) return;
+
+  // Remove lessons and their resources
+  const courseLessonIds = course.lessonIds;
+  courseLessonIds.forEach(lessonId => {
+    resources = resources.filter(r => r.lessonId !== lessonId);
+  });
+  lessons = lessons.filter(l => !courseLessonIds.includes(l.id));
+
+  // Remove quiz and questions
+  const quiz = quizzes.find(q => q.courseId === id);
+  if (quiz) {
+    questions = questions.filter(q => q.quizId !== quiz.id);
+    quizzes = quizzes.filter(q => q.id !== quiz.id);
+  }
+
+  // Remove assignments and progress
+  assignments = assignments.filter(a => a.courseId !== id);
+  progressCourses = progressCourses.filter(p => p.courseId !== id);
+  progressLessons = progressLessons.filter(pl => courseLessonIds.includes(pl.lessonId));
+  certificates = certificates.filter(c => c.courseId !== id);
+
+  // Remove course
+  courses = courses.filter(c => c.id !== id);
+  notifyListeners();
+}
+
+// Lesson CRUD operations
+export function getLessons(): Lesson[] {
+  return lessons;
+}
+
+export function getLessonsByCourseId(courseId: string): Lesson[] {
+  return lessons.filter(l => l.courseId === courseId).sort((a, b) => a.order - b.order);
+}
+
+export function getLessonById(id: string): Lesson | undefined {
+  return lessons.find(l => l.id === id);
+}
+
+export function createLesson(data: Omit<Lesson, "id" | "createdAt" | "updatedAt">): Lesson {
+  const now = timestamp();
+  const lesson: Lesson = {
+    ...data,
+    id: `lsn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    resourceIds: data.resourceIds || [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  lessons.push(lesson);
+
+  // Add lesson to course's lessonIds
+  const course = courses.find(c => c.id === data.courseId);
+  if (course && !course.lessonIds.includes(lesson.id)) {
+    course.lessonIds.push(lesson.id);
+  }
+
+  notifyListeners();
+  return lesson;
+}
+
+export function updateLesson(id: string, updates: Partial<Omit<Lesson, "id" | "createdAt" | "updatedAt">>): void {
+  const index = lessons.findIndex(l => l.id === id);
+  if (index !== -1) {
+    lessons[index] = { 
+      ...lessons[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteLesson(id: string): void {
+  const lesson = lessons.find(l => l.id === id);
+  if (!lesson) return;
+
+  // Remove resources
+  resources = resources.filter(r => r.lessonId !== id);
+
+  // Remove progress
+  progressLessons = progressLessons.filter(p => p.lessonId !== id);
+
+  // Remove from course's lessonIds
+  const course = courses.find(c => c.id === lesson.courseId);
+  if (course) {
+    course.lessonIds = course.lessonIds.filter(lid => lid !== id);
+  }
+
+  // Remove lesson
+  lessons = lessons.filter(l => l.id !== id);
+  notifyListeners();
+}
+
+export function reorderLessons(courseId: string, orderedLessonIds: string[]): void {
+  orderedLessonIds.forEach((lessonId, index) => {
+    const lesson = lessons.find(l => l.id === lessonId && l.courseId === courseId);
+    if (lesson) {
+      lesson.order = index + 1;
+      lesson.updatedAt = timestamp();
+    }
+  });
+  
+  // Update course's lessonIds to match the new order
+  const course = courses.find(c => c.id === courseId);
+  if (course) {
+    course.lessonIds = orderedLessonIds;
+    course.updatedAt = timestamp();
+  }
+  
+  notifyListeners();
+}
+
+// Resource CRUD operations
+export function getResources(): Resource[] {
+  return resources;
+}
+
+export function getResourcesByLessonId(lessonId: string): Resource[] {
+  return resources.filter(r => r.lessonId === lessonId);
+}
+
+export function getResourceById(id: string): Resource | undefined {
+  return resources.find(r => r.id === id);
+}
+
+// UI helper: Get sections (resources) for a lesson
+export function getSectionsByLessonId(lessonId: string): Section[] {
+  return getResourcesByLessonId(lessonId);
+}
+
+export function createResource(data: Omit<Resource, "id" | "createdAt" | "updatedAt" | "order">): Resource {
+  const now = timestamp();
+  
+  // Get lesson to derive courseId and calculate order
+  const lesson = lessons.find(l => l.id === data.lessonId);
+  if (!lesson) {
+    throw new Error(`Lesson ${data.lessonId} not found`);
+  }
+  
+  // Calculate next order value
+  const lessonResources = resources.filter(r => r.lessonId === data.lessonId);
+  const maxOrder = lessonResources.length > 0 
+    ? Math.max(...lessonResources.map(r => r.order ?? 0))
+    : -1;
+  
+  const resource: Resource = {
+    ...data,
+    courseId: lesson.courseId,
+    order: maxOrder + 1,
+    id: `res_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  resources.push(resource);
+
+  // Add resource to lesson's resourceIds
+  if (!lesson.resourceIds.includes(resource.id)) {
+    lesson.resourceIds.push(resource.id);
+    lesson.updatedAt = timestamp();
+  }
+  
+  // Update course timestamp
+  const course = courses.find(c => c.id === lesson.courseId);
+  if (course) {
+    course.updatedAt = timestamp();
+  }
+
+  notifyListeners();
+  return resource;
+}
+
+export function updateResource(id: string, updates: Partial<Omit<Resource, "id" | "createdAt" | "updatedAt">>): void {
+  const index = resources.findIndex(r => r.id === id);
+  if (index !== -1) {
+    resources[index] = { 
+      ...resources[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export async function deleteResource(id: string): Promise<void> {
+  const resource = resources.find(r => r.id === id);
+  if (!resource) return;
+
+  // Delete file from disk if it's an uploaded file
+  if (resource.url && resource.url.startsWith('/uploads/')) {
+    try {
+      await fetch('/api/upload/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: resource.url }),
+      });
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      // Continue with resource deletion even if file delete fails
+    }
+  }
+
+  // Remove from lesson's resourceIds
+  const lesson = lessons.find(l => l.id === resource.lessonId);
+  if (lesson) {
+    lesson.resourceIds = lesson.resourceIds.filter(rid => rid !== id);
+    lesson.updatedAt = timestamp();
+  }
+
+  // Remove resource
+  resources = resources.filter(r => r.id !== id);
+  notifyListeners();
+}
+
+export function reorderResources(lessonId: string, orderedResourceIds: string[]): void {
+  const lesson = lessons.find(l => l.id === lessonId);
+  if (!lesson) return;
+
+  // Update lesson's resourceIds to match new order
+  lesson.resourceIds = orderedResourceIds;
+  lesson.updatedAt = timestamp();
+  
+  // Normalize order values to 0..n-1
+  orderedResourceIds.forEach((resourceId, index) => {
+    const resource = resources.find(r => r.id === resourceId);
+    if (resource) {
+      resource.order = index;
+      resource.updatedAt = timestamp();
+    }
+  });
+
+  // Update parent course's updatedAt
+  const course = courses.find(c => c.lessonIds.includes(lessonId));
+  if (course) {
+    course.updatedAt = timestamp();
+  }
+
+  notifyListeners();
+}
+
+// Batch create resources (for multi-upload)
+export function addResourcesBatch(
+  lessonId: string,
+  items: Array<Omit<Resource, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'courseId' | 'lessonId'>>
+): Resource[] {
+  const lesson = lessons.find(l => l.id === lessonId);
+  if (!lesson) {
+    throw new Error(`Lesson ${lessonId} not found`);
+  }
+  
+  const lessonResources = resources.filter(r => r.lessonId === lessonId);
+  let nextOrder = lessonResources.length > 0
+    ? Math.max(...lessonResources.map(r => r.order ?? 0)) + 1
+    : 0;
+  
+  const now = timestamp();
+  const createdResources: Resource[] = [];
+  
+  items.forEach(item => {
+    const resource: Resource = {
+      ...item,
+      id: `res_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      courseId: lesson.courseId,
+      lessonId,
+      order: nextOrder++,
+      createdAt: now,
+      updatedAt: now,
+    };
+    resources.push(resource);
+    lesson.resourceIds.push(resource.id);
+    createdResources.push(resource);
+  });
+  
+  lesson.updatedAt = timestamp();
+  
+  const course = courses.find(c => c.id === lesson.courseId);
+  if (course) {
+    course.updatedAt = timestamp();
+  }
+  
+  notifyListeners();
+  return createdResources;
+}
+
+// Inline editing helper
+export function updateResourceInline(
+  resourceId: string,
+  patch: Partial<Pick<Resource, 'title' | 'content'>>
+): void {
+  const resource = resources.find(r => r.id === resourceId);
+  if (!resource) return;
+  
+  Object.assign(resource, patch);
+  resource.updatedAt = timestamp();
+  
+  const lesson = lessons.find(l => l.id === resource.lessonId);
+  if (lesson) {
+    lesson.updatedAt = timestamp();
+    
+    const course = courses.find(c => c.id === lesson.courseId);
+    if (course) {
+      course.updatedAt = timestamp();
+    }
+  }
+  
+  notifyListeners();
+}
+
+// Get resource counts by type
+export function getLessonResourceCounts(lessonId: string): {
+  image: number;
+  video: number;
+  pdf: number;
+  link: number;
+  text: number;
+  total: number;
+} {
+  const lessonResources = resources.filter(r => r.lessonId === lessonId);
+  
+  return {
+    image: lessonResources.filter(r => r.type === 'image').length,
+    video: lessonResources.filter(r => r.type === 'video').length,
+    pdf: lessonResources.filter(r => r.type === 'pdf').length,
+    link: lessonResources.filter(r => r.type === 'link').length,
+    text: lessonResources.filter(r => r.type === 'text').length,
+    total: lessonResources.length,
+  };
+}
+
+// Estimate lesson duration
+export function estimateLessonDuration(lessonId: string): {
+  totalSeconds: number;
+  byType: Record<string, number>;
+} {
+  const lessonResources = resources.filter(r => r.lessonId === lessonId);
+  const byType: Record<string, number> = {};
+  let totalSeconds = 0;
+  
+  lessonResources.forEach(resource => {
+    const duration = resource.durationSec || 0;
+    totalSeconds += duration;
+    byType[resource.type] = (byType[resource.type] || 0) + duration;
+  });
+  
+  return { totalSeconds, byType };
+}
+
+// Get lesson status based on resources
+export function getLessonStatus(lessonId: string): 'empty' | 'in_progress' | 'ready' {
+  const lessonResources = resources.filter(r => r.lessonId === lessonId);
+  if (lessonResources.length === 0) return 'empty';
+  return 'in_progress'; // Future: could check for explicit ready flag
+}
+
+// Ensure course has at least one lesson (auto-create if needed)
+export function ensureFirstLesson(courseId: string): Lesson {
+  const courseLessons = lessons.filter(l => l.courseId === courseId);
+  if (courseLessons.length === 0) {
+    return createLesson({
+      courseId,
+      title: 'Lesson 1',
+      order: 0,
+      resourceIds: [],
+    });
+  }
+  return courseLessons.sort((a, b) => a.order - b.order)[0];
+}
+
+// Quiz CRUD operations
+export function getQuizzes(): Quiz[] {
+  return quizzes;
+}
+
+export function getQuizByCourseId(courseId: string): Quiz | undefined {
+  return quizzes.find(q => q.courseId === courseId);
+}
+
+export function getQuizById(id: string): Quiz | undefined {
+  return quizzes.find(q => q.id === id);
+}
+
+export function createQuiz(data: Omit<Quiz, "id" | "createdAt" | "updatedAt">): Quiz {
+  const now = timestamp();
+  const quiz: Quiz = {
+    ...data,
+    id: `qz_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    questionIds: data.questionIds || [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  quizzes.push(quiz);
+
+  // Link quiz to course
+  const course = courses.find(c => c.id === data.courseId);
+  if (course) {
+    course.quizId = quiz.id;
+    course.updatedAt = timestamp();
+  }
+
+  notifyListeners();
+  return quiz;
+}
+
+export function updateQuiz(id: string, updates: Partial<Omit<Quiz, "id" | "createdAt" | "updatedAt">>): void {
+  const index = quizzes.findIndex(q => q.id === id);
+  if (index !== -1) {
+    quizzes[index] = { 
+      ...quizzes[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteQuiz(id: string): void {
+  const quiz = quizzes.find(q => q.id === id);
+  if (!quiz) return;
+
+  // Remove questions
+  questions = questions.filter(q => q.quizId !== id);
+
+  // Remove quiz from course
+  const course = courses.find(c => c.quizId === id);
+  if (course) {
+    course.quizId = undefined;
+    course.updatedAt = timestamp();
+  }
+
+  // Remove quiz
+  quizzes = quizzes.filter(q => q.id !== id);
+  notifyListeners();
+}
+
+// Question CRUD operations
+export function getQuestions(): Question[] {
+  return questions;
+}
+
+export function getQuestionsByQuizId(quizId: string): Question[] {
+  const quiz = quizzes.find(q => q.id === quizId);
+  if (!quiz) return [];
+  return questions.filter(q => quiz.questionIds.includes(q.id));
+}
+
+export function getQuestionById(id: string): Question | undefined {
+  return questions.find(q => q.id === id);
+}
+
+export function createQuestion(data: Omit<Question, "id" | "createdAt" | "updatedAt">): Question {
+  const now = timestamp();
+  const question: Question = {
+    ...data,
+    id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  questions.push(question);
+
+  // Add question to quiz's questionIds
+  const quiz = quizzes.find(q => q.id === data.quizId);
+  if (quiz && !quiz.questionIds.includes(question.id)) {
+    quiz.questionIds.push(question.id);
+    quiz.updatedAt = timestamp();
+  }
+
+  notifyListeners();
+  return question;
+}
+
+export function updateQuestion(id: string, updates: Partial<Omit<Question, "id" | "createdAt" | "updatedAt">>): void {
+  const index = questions.findIndex(q => q.id === id);
+  if (index !== -1) {
+    questions[index] = { 
+      ...questions[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteQuestion(id: string): void {
+  const question = questions.find(q => q.id === id);
+  if (!question) return;
+
+  // Remove from quiz's questionIds
+  const quiz = quizzes.find(q => q.id === question.quizId);
+  if (quiz) {
+    quiz.questionIds = quiz.questionIds.filter(qid => qid !== id);
+    quiz.updatedAt = timestamp();
+  }
+
+  // Remove question
+  questions = questions.filter(q => q.id !== id);
+  notifyListeners();
+}
+
+// Course Assignment operations
+export function getAssignments(): CourseAssignment[] {
+  return assignments;
+}
+
+export function getAssignmentsByCourseId(courseId: string): CourseAssignment[] {
+  return assignments.filter(a => a.courseId === courseId);
+}
+
+export function createAssignment(data: Omit<CourseAssignment, "id" | "createdAt" | "updatedAt">): CourseAssignment {
+  const now = timestamp();
+  const assignment: CourseAssignment = {
+    ...data,
+    id: `asgn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  assignments.push(assignment);
+  notifyListeners();
+  return assignment;
+}
+
+export function deleteAssignment(id: string): void {
+  assignments = assignments.filter(a => a.id !== id);
+  notifyListeners();
+}
+
+// Get assigned courses for a user (resolves user/role/site/dept targeting)
+export function getAssignedCoursesForUser(userId: string): Course[] {
+  const user = users.find(u => u.id === userId);
+  if (!user) return [];
+
+  const assignedCourseIds = new Set<string>();
+
+  assignments.forEach(assignment => {
+    const { target } = assignment;
+    let isAssigned = false;
+
+    switch (target.type) {
+      case "user":
+        isAssigned = target.userId === userId;
+        break;
+      case "role":
+        isAssigned = user.role === target.role;
+        break;
+      case "site":
+        isAssigned = user.siteId === target.siteId;
+        break;
+      case "dept":
+        isAssigned = user.departmentId === target.deptId;
+        break;
+    }
+
+    if (isAssigned) {
+      assignedCourseIds.add(assignment.courseId);
+    }
+  });
+
+  return courses.filter(c => assignedCourseIds.has(c.id));
+}
+
+// Progress Course operations
+export function getProgressCourses(): ProgressCourse[] {
+  return progressCourses;
+}
+
+export function getProgressCoursesByUserId(userId: string): ProgressCourse[] {
+  return progressCourses.filter(p => p.userId === userId);
+}
+
+export function getProgressCourseByCourseAndUser(courseId: string, userId: string): ProgressCourse | undefined {
+  return progressCourses.find(p => p.courseId === courseId && p.userId === userId);
+}
+
+// Get or create progress course (lazy initialization)
+export function getOrCreateProgressCourse(userId: string, courseId: string): ProgressCourse {
+  let progress = getProgressCourseByCourseAndUser(courseId, userId);
+  
+  if (!progress) {
+    const course = courses.find(c => c.id === courseId);
+    const now = timestamp();
+    progress = {
+      id: `pc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      userId,
+      courseId,
+      status: "not_started",
+      lessonDoneCount: 0,
+      lessonTotal: course?.lessonIds.length || 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    progressCourses.push(progress);
+    notifyListeners();
+  }
+  
+  return progress;
+}
+
+export function updateProgressCourse(id: string, updates: Partial<Omit<ProgressCourse, "id" | "createdAt" | "updatedAt">>): void {
+  const index = progressCourses.findIndex(p => p.id === id);
+  if (index !== -1) {
+    progressCourses[index] = { 
+      ...progressCourses[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteProgressCourse(id: string): void {
+  progressCourses = progressCourses.filter(p => p.id !== id);
+  notifyListeners();
+}
+
+// Recompute course progress from lesson progress
+export function recomputeProgressCourse(userId: string, courseId: string): void {
+  const course = courses.find(c => c.id === courseId);
+  if (!course) return;
+
+  const progress = getOrCreateProgressCourse(userId, courseId);
+  const lessonsProgress = progressLessons.filter(
+    pl => course.lessonIds.includes(pl.lessonId) && pl.userId === userId
+  );
+
+  const completedCount = lessonsProgress.filter(pl => pl.status === "completed").length;
+  const totalLessons = course.lessonIds.length;
+
+  let status: "not_started" | "in_progress" | "completed" = "not_started";
+  if (completedCount === totalLessons && totalLessons > 0) {
+    status = "completed";
+  } else if (completedCount > 0) {
+    status = "in_progress";
+  }
+
+  updateProgressCourse(progress.id, {
+    lessonDoneCount: completedCount,
+    lessonTotal: totalLessons,
+    status,
+    completedAt: status === "completed" ? timestamp() : undefined,
+  });
+}
+
+// Progress Lesson operations
+export function getProgressLessons(): ProgressLesson[] {
+  return progressLessons;
+}
+
+export function getProgressLessonsByUserId(userId: string): ProgressLesson[] {
+  return progressLessons.filter(p => p.userId === userId);
+}
+
+export function getProgressLessonByLessonAndUser(lessonId: string, userId: string): ProgressLesson | undefined {
+  return progressLessons.find(p => p.lessonId === lessonId && p.userId === userId);
+}
+
+// Create or update progress lesson (upsert pattern)
+export function upsertProgressLesson(
+  lessonId: string,
+  userId: string,
+  updates: Partial<Omit<ProgressLesson, "id" | "lessonId" | "userId" | "createdAt" | "updatedAt">>
+): ProgressLesson {
+  const existing = getProgressLessonByLessonAndUser(lessonId, userId);
+  
+  if (existing) {
+    updateProgressLesson(existing.id, updates);
+    return progressLessons.find(p => p.id === existing.id)!;
+  } else {
+    const now = timestamp();
+    const progress: ProgressLesson = {
+      id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      lessonId,
+      userId,
+      status: "not_started",
+      ...updates,
+      createdAt: now,
+      updatedAt: now,
+    };
+    progressLessons.push(progress);
+    notifyListeners();
+    return progress;
+  }
+}
+
+export function updateProgressLesson(id: string, updates: Partial<Omit<ProgressLesson, "id" | "createdAt" | "updatedAt">>): void {
+  const index = progressLessons.findIndex(p => p.id === id);
+  if (index !== -1) {
+    progressLessons[index] = { 
+      ...progressLessons[index], 
+      ...updates,
+      updatedAt: timestamp()
+    };
+    notifyListeners();
+  }
+}
+
+export function deleteProgressLesson(id: string): void {
+  progressLessons = progressLessons.filter(p => p.id !== id);
+  notifyListeners();
+}
+
+// Certificate operations
+export function getCertificates(): Certificate[] {
+  return certificates;
+}
+
+export function getCertificatesByUserId(userId: string): Certificate[] {
+  return certificates.filter(c => c.userId === userId);
+}
+
+export function getCertificateById(id: string): Certificate | undefined {
+  return certificates.find(c => c.id === id);
+}
+
+export function issueCertificate(
+  userId: string,
+  courseId: string,
+  expiresAt?: string
+): Certificate {
+  const now = timestamp();
+  const serial = `${courseId.toUpperCase()}-${Date.now()}-${userId.substring(0, 8).toUpperCase()}`;
+  
+  const certificate: Certificate = {
+    id: `cert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    userId,
+    courseId,
+    issuedAt: now,
+    expiresAt,
+    serial,
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  certificates.push(certificate);
+  notifyListeners();
+  return certificate;
+}
+
+export function deleteCertificate(id: string): void {
+  certificates = certificates.filter(c => c.id !== id);
+  notifyListeners();
 }
 

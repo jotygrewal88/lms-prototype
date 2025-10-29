@@ -1,12 +1,20 @@
 // Phase I Epic 1: Unauthorized access component
+// Phase II Epic 1: Smart redirect based on role
 "use client";
 
 import React from "react";
 import Link from "next/link";
 import Button from "./Button";
 import Card from "./Card";
+import { getCurrentUser } from "@/lib/store";
 
 export default function Unauthorized() {
+  const currentUser = getCurrentUser();
+  
+  // Determine the correct home page based on role
+  const homePath = currentUser.role === "LEARNER" ? "/learner/courses" : "/admin/courses";
+  const homeLabel = currentUser.role === "LEARNER" ? "My Courses" : "Admin Dashboard";
+
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <Card className="max-w-md text-center">
@@ -29,11 +37,14 @@ export default function Unauthorized() {
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Access Denied
         </h2>
-        <p className="text-gray-600 mb-6">
+        <p className="text-gray-600 mb-4">
           You don&apos;t have permission to access this page.
         </p>
-        <Link href="/learner">
-          <Button variant="primary">Go to Home</Button>
+        <p className="text-sm text-gray-500 mb-6">
+          Current role: <span className="font-medium">{currentUser.role}</span>
+        </p>
+        <Link href={homePath}>
+          <Button variant="primary">Go to {homeLabel}</Button>
         </Link>
       </Card>
     </div>
