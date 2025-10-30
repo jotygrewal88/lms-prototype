@@ -2,9 +2,10 @@
 "use client";
 
 import React from "react";
-import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File } from "lucide-react";
+import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File, Sparkles } from "lucide-react";
 import { Resource } from "@/types";
 import { formatFileSize } from "@/lib/uploads";
+import { listHistory } from "@/lib/store";
 
 // Simple time ago formatter
 function timeAgo(dateString: string): string {
@@ -93,6 +94,8 @@ export default function ResourceCardSimple({
   onDelete,
   dragHandleProps,
 }: ResourceCardSimpleProps) {
+  const [isExpanded, setIsExpanded] = React.useState(true); // Start expanded by default
+  
   const metadata = [];
   if (resource.durationSec) {
     const mins = Math.floor(resource.durationSec / 60);
@@ -105,74 +108,204 @@ export default function ResourceCardSimple({
   const accentColor = getAccentColor(resource.type);
   const typeBadgeColor = getTypeBadgeColor(resource.type);
 
+  // Epic 1G.4: Check if this section was recently AI-generated (last 24 hours)
+  const { audits } = listHistory('section', resource.id);
+  const recentAIAudit = audits.find(a => {
+    const actionIsAI = typeof a.action === 'string' && a.action.startsWith('ai_');
+    const isRecent = (Date.now() - new Date(a.at).getTime()) < 24 * 60 * 60 * 1000;
+    return actionIsAI && isRecent;
+  });
+
+  // Render content preview based on type
+  const renderContent = () => {
+    if (!isExpanded) return null;
+
+    switch (resource.type) {
+      case 'text':
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+              {resource.content || <span className="text-gray-400 italic">No content</span>}
+            </div>
+          </div>
+        );
+      case 'link':
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <a
+              href={resource.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-indigo-600 hover:text-indigo-700 hover:underline break-all"
+            >
+              {resource.url}
+            </a>
+          </div>
+        );
+      case 'image':
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            {resource.url ? (
+              <img
+                src={resource.url}
+                alt={resource.title}
+                className="max-w-full h-auto rounded-lg shadow-sm"
+                style={{ maxHeight: '400px' }}
+              />
+            ) : (
+              <span className="text-gray-400 italic text-sm">No image uploaded</span>
+            )}
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            {resource.url ? (
+              <video
+                src={resource.url}
+                controls
+                className="w-full rounded-lg shadow-sm"
+                style={{ maxHeight: '400px' }}
+              >
+                Your browser does not support video playback.
+              </video>
+            ) : (
+              <span className="text-gray-400 italic text-sm">No video uploaded</span>
+            )}
+          </div>
+        );
+      case 'pdf':
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            {resource.url ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">
+                  <strong>File:</strong> {resource.fileName || 'Document.pdf'}
+                </p>
+                <a
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
+                >
+                  <Eye className="w-4 h-4" />
+                  Open PDF in new tab
+                </a>
+              </div>
+            ) : (
+              <span className="text-gray-400 italic text-sm">No PDF uploaded</span>
+            )}
+          </div>
+        );
+      default:
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <span className="text-gray-400 italic text-sm">No preview available</span>
+          </div>
+        );
+    }
+  };
+
   return (
     <div 
-      className={`group flex items-center gap-4 p-4 bg-white rounded-lg border-l-2 ${accentColor} shadow-sm hover:shadow-md transition-all duration-200 ease-in-out animate-in fade-in slide-in-from-bottom-2`}
+      className={`group flex flex-col gap-4 p-4 bg-white rounded-lg border-l-2 ${accentColor} shadow-sm hover:shadow-md transition-all duration-200 ease-in-out animate-in fade-in slide-in-from-bottom-2`}
     >
-      {/* Drag Handle - Visible on hover */}
-      {!isReadOnly && dragHandleProps && (
-        <div
-          {...dragHandleProps}
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+      {/* Header Row */}
+      <div className="flex items-center gap-4">
+        {/* Drag Handle - Visible on hover */}
+        {!isReadOnly && dragHandleProps && (
+          <div
+            {...dragHandleProps}
+            className="flex-shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+          </div>
+        )}
+
+        {/* Icon */}
+        <div className="flex-shrink-0">
+          {getResourceIcon(resource.type)}
         </div>
-      )}
 
-      {/* Icon */}
-      <div className="flex-shrink-0">
-        {getResourceIcon(resource.type)}
-      </div>
+        {/* Title & Meta */}
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="font-semibold text-gray-900 text-sm">{resource.title}</div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeBadgeColor}`}>
+              {resource.type.charAt(0).toUpperCase() + resource.type.slice(1)}
+            </span>
+            {recentAIAudit && (
+              <span 
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs font-medium rounded"
+                title={`AI ${recentAIAudit.action} ${timeAgo(recentAIAudit.at)}`}
+              >
+                <Sparkles className="w-3 h-3" />
+                AI
+              </span>
+            )}
+            {metadata.length > 0 && (
+              <span className="text-xs text-gray-400">{metadata.join(' • ')}</span>
+            )}
+          </div>
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-1">
-        <div className="font-semibold text-gray-900 text-sm truncate">{resource.title}</div>
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeBadgeColor}`}>
-            {resource.type.charAt(0).toUpperCase() + resource.type.slice(1)}
-          </span>
-          {metadata.length > 0 && (
-            <span className="text-xs text-gray-400">{metadata.join(' • ')}</span>
+        {/* Expand/Collapse Toggle */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+          aria-label={isExpanded ? "Collapse" : "Expand"}
+          title={isExpanded ? "Collapse" : "Expand"}
+        >
+          <svg
+            className={`w-4 h-4 text-gray-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Hover Actions */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button
+            onClick={onPreview}
+            className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+            aria-label="Preview section"
+            title="Preview"
+          >
+            <Eye className="w-4 h-4 text-gray-600" />
+          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                onClick={onEdit}
+                className="p-1.5 hover:bg-indigo-100 rounded-md transition-colors"
+                aria-label="Edit section"
+                title="Edit"
+              >
+                <Pencil className="w-4 h-4 text-indigo-600" />
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`Delete "${resource.title}"?`)) {
+                    onDelete();
+                  }
+                }}
+                className="p-1.5 hover:bg-red-100 rounded-md transition-colors"
+                aria-label="Delete section"
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Hover Actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <button
-          onClick={onPreview}
-          className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-          aria-label="Preview section"
-          title="Preview"
-        >
-          <Eye className="w-4 h-4 text-gray-600" />
-        </button>
-        {!isReadOnly && (
-          <>
-            <button
-              onClick={onEdit}
-              className="p-1.5 hover:bg-indigo-100 rounded-md transition-colors"
-              aria-label="Edit section"
-              title="Edit"
-            >
-              <Pencil className="w-4 h-4 text-indigo-600" />
-            </button>
-            <button
-              onClick={() => {
-                if (confirm(`Delete "${resource.title}"?`)) {
-                  onDelete();
-                }
-              }}
-              className="p-1.5 hover:bg-red-100 rounded-md transition-colors"
-              aria-label="Delete section"
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4 text-red-600" />
-            </button>
-          </>
-        )}
-      </div>
+      {/* Content Preview */}
+      {renderContent()}
     </div>
   );
 }

@@ -180,6 +180,7 @@ export default function ResourcesWorkspace({
     }
 
     createResource({
+      courseId,
       lessonId,
       type: 'link',
       title: linkForm.title,
@@ -199,6 +200,7 @@ export default function ResourcesWorkspace({
     }
 
     createResource({
+      courseId,
       lessonId,
       type: 'text',
       title: textForm.title,

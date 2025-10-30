@@ -315,7 +315,7 @@ export default function ResourceEditorDrawer({
                 </div>
               ) : (
                 <UploadDropzone
-                  onFilesAccepted={handleFileUpload}
+                  onFiles={handleFileUpload}
                   accept={getFileAccept(resourceType as 'image' | 'video' | 'pdf')}
                   disabled={isUploading}
                 />
@@ -354,12 +354,13 @@ export default function ResourceEditorDrawer({
                   </div>
                 ) : (
                   <>
-                    <UploadDropzone
-                      onFilesAccepted={handleFileUpload}
-                      accept={getFileAccept('video')}
-                      disabled={isUploading}
-                      className="mb-3"
-                    />
+                    <div className="mb-3">
+                      <UploadDropzone
+                        onFiles={handleFileUpload}
+                        accept={getFileAccept('video')}
+                        disabled={isUploading}
+                      />
+                    </div>
                     
                     <div className="text-center text-sm text-gray-500 mb-3">OR</div>
                     

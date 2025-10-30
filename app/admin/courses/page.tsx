@@ -3,13 +3,14 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus, Calendar, Clock, Trash2 } from "lucide-react";
+import { BookOpen, Plus, Calendar, Clock, Trash2, Sparkles } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
+import AIGenerateModal from "@/components/AIGenerateModal";
 import { 
   getCourses, 
   getLessonsByCourseId,
@@ -21,14 +22,18 @@ import {
   createCourse, 
   deleteCourse,
   subscribe,
-  getCurrentUser
+  getCurrentUser,
+  isAIDraftCourse
 } from "@/lib/store";
-import { Course } from "@/types";
+import { generateCourseFromPrompt, generateCourseFromFile } from "@/lib/ai/generateCourse";
+import { parseDocument } from "@/lib/ai/parseDocument";
+import { Course, AIInput, AICourseDraft } from "@/types";
 
 export default function CoursesPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newCourseDescription, setNewCourseDescription] = useState("");
   const currentUser = getCurrentUser();
@@ -65,6 +70,38 @@ export default function CoursesPage() {
     e.stopPropagation(); // Prevent card click
     if (confirm(`Are you sure you want to delete "${courseTitle}"? All lessons, sections, quizzes, and progress will be removed.`)) {
       deleteCourse(courseId);
+    }
+  };
+
+  const handleAIGenerate = async (input: AIInput, file?: File) => {
+    try {
+      let draft: AICourseDraft;
+      
+      if (file) {
+        // File-based generation
+        console.log('Generating course from file:', file.name);
+        const parsedData = await parseDocument(file);
+        draft = await generateCourseFromFile(parsedData, input.prompt);
+        
+        // Store file metadata for preview
+        sessionStorage.setItem('aiCourseSourceFile', file.name);
+      } else {
+        // Prompt-based generation
+        console.log('Generating course from prompt:', input.prompt);
+        draft = await generateCourseFromPrompt(input);
+        sessionStorage.removeItem('aiCourseSourceFile');
+      }
+      
+      // Store draft in sessionStorage for preview page
+      sessionStorage.setItem('aiCourseDraft', JSON.stringify(draft));
+      sessionStorage.setItem('aiCoursePrompt', input.prompt || 'AI Generated');
+      
+      // Close modal and navigate to preview
+      setIsAIModalOpen(false);
+      router.push('/admin/courses/ai/preview');
+    } catch (error) {
+      console.error('AI generation error:', error);
+      alert('Failed to generate course. Please try again.');
     }
   };
 
@@ -114,10 +151,16 @@ export default function CoursesPage() {
               </p>
             </div>
             {!isManager && (
-              <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Course
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setIsAIModalOpen(true)}>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Course
+                </Button>
+                <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Course
+                </Button>
+              </div>
             )}
           </div>
 
@@ -159,9 +202,17 @@ export default function CoursesPage() {
                     <div className="h-full flex flex-col">
                       {/* Header with status and delete */}
                       <div className="flex items-start justify-between mb-3">
-                        <Badge variant={course.status === "published" ? "success" : "default"}>
-                          {course.status === "published" ? "Published" : "Draft"}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={course.status === "published" ? "success" : "default"}>
+                            {course.status === "published" ? "Published" : "Draft"}
+                          </Badge>
+                          {isAIDraftCourse(course.id) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                              <Sparkles className="w-3 h-3" />
+                              AI Draft
+                            </span>
+                          )}
+                        </div>
                         {!isManager && (
                           <button
                             onClick={(e) => handleDeleteCourse(course.id, course.title, e)}
@@ -321,6 +372,15 @@ export default function CoursesPage() {
                 </div>
               </div>
             </Modal>
+          )}
+
+          {/* AI Generate Course Modal */}
+          {!isManager && (
+            <AIGenerateModal
+              isOpen={isAIModalOpen}
+              onClose={() => setIsAIModalOpen(false)}
+              onGenerate={handleAIGenerate}
+            />
           )}
         </div>
       </AdminLayout>

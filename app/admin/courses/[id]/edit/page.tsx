@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Save, Plus, Trash2, GripVertical, X, 
   FileText, Link as LinkIcon, Video, Image, FileImage,
-  Calendar, User, RotateCcw, Upload
+  Calendar, User, RotateCcw, Upload, Sparkles, Eye, Clock
 } from "lucide-react";
 import { 
   DndContext, 
@@ -66,10 +66,18 @@ import {
   subscribe,
   getCurrentUser,
   ensureFirstLesson,
-  getLessonById
+  getLessonById,
+  // Epic 1G.4: Versioning & Audit functions
+  performUndo,
+  performRedo,
+  canUndo,
+  canRedo,
+  getLastUndoSummary,
+  getLastRedoSummary
 } from "@/lib/store";
 import { getFileAccept, formatFileSize } from "@/lib/uploads";
-import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType } from "@/types";
+import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType } from "@/types";
+import HistoryDrawer from "@/components/history/HistoryDrawer";
 
 type TabType = "overview" | "lessons" | "quiz" | "settings" | "assignment";
 
@@ -85,6 +93,13 @@ export default function CourseEditPage() {
   const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Epic 1G.4: History & Versioning state
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyEntity, setHistoryEntity] = useState<{
+    type: VersionedEntityType;
+    id: string;
+  } | null>(null);
 
   // Overview form state
   const [title, setTitle] = useState("");
@@ -208,6 +223,84 @@ export default function CourseEditPage() {
     });
 
     setHasChanges(false);
+  };
+
+  // Epic 1G.4: History & Versioning handlers
+  const handleUndo = () => {
+    const entityType = activeTab === 'overview' ? 'course' : 'lesson';
+    const entityId = activeTab === 'overview' ? courseId : activeLessonId;
+    if (entityId) {
+      performUndo(entityType, entityId);
+      // Refresh data
+      const refreshedCourse = getCourseById(courseId);
+      if (refreshedCourse) {
+        setCourse(refreshedCourse);
+        setTitle(refreshedCourse.title);
+        setDescription(refreshedCourse.description || "");
+        setCategory(refreshedCourse.category || "");
+        setTags(refreshedCourse.tags || []);
+        setEstimatedMinutes(refreshedCourse.estimatedMinutes);
+        setStatus(refreshedCourse.status || "draft");
+        setStandards(refreshedCourse.standards || []);
+        setPolicy(refreshedCourse.policy || {
+          progression: "linear",
+          requireAllLessons: true,
+          requirePassingQuiz: true,
+          enableRetakes: true,
+          lockNextUntilPrevious: true,
+          showExplanations: true,
+          minVideoWatchPct: 80,
+          minTimeOnLessonSec: 60,
+          maxQuizAttempts: 3,
+          retakeCooldownMin: 60,
+        });
+      }
+      const refreshedLessons = getLessonsByCourseId(courseId);
+      setLessons(refreshedLessons);
+    }
+  };
+
+  const handleRedo = () => {
+    const entityType = activeTab === 'overview' ? 'course' : 'lesson';
+    const entityId = activeTab === 'overview' ? courseId : activeLessonId;
+    if (entityId) {
+      performRedo(entityType, entityId);
+      // Refresh data
+      const refreshedCourse = getCourseById(courseId);
+      if (refreshedCourse) {
+        setCourse(refreshedCourse);
+        setTitle(refreshedCourse.title);
+        setDescription(refreshedCourse.description || "");
+        setCategory(refreshedCourse.category || "");
+        setTags(refreshedCourse.tags || []);
+        setEstimatedMinutes(refreshedCourse.estimatedMinutes);
+        setStatus(refreshedCourse.status || "draft");
+        setStandards(refreshedCourse.standards || []);
+        setPolicy(refreshedCourse.policy || {
+          progression: "linear",
+          requireAllLessons: true,
+          requirePassingQuiz: true,
+          enableRetakes: true,
+          lockNextUntilPrevious: true,
+          showExplanations: true,
+          minVideoWatchPct: 80,
+          minTimeOnLessonSec: 60,
+          maxQuizAttempts: 3,
+          retakeCooldownMin: 60,
+        });
+      }
+      const refreshedLessons = getLessonsByCourseId(courseId);
+      setLessons(refreshedLessons);
+    }
+  };
+
+  const handleOpenHistory = () => {
+    const entityType = activeTab === 'overview' ? 'course' : 'lesson';
+    const entityId = activeTab === 'overview' ? courseId : activeLessonId;
+    if (entityId) {
+      setHistoryEntity({ type: entityType, id: entityId });
+      setIsHistoryOpen(true);
+    }
   };
 
   const handleAddTag = () => {
@@ -349,7 +442,8 @@ export default function CourseEditPage() {
       updateResource(editingResource.id, resourceData);
     } else {
       // Create new - ensure all required fields are present
-      const newResourceData: Omit<Resource, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'courseId'> = {
+      const newResourceData: Omit<Resource, 'id' | 'createdAt' | 'updatedAt' | 'order'> = {
+        courseId,
         lessonId: activeLessonId,
         type: resourceData.type!,
         title: resourceData.title!,
@@ -459,6 +553,7 @@ export default function CourseEditPage() {
           });
           
           createResource({
+            courseId,
             lessonId: selectedLessonId,
             type,
             title: titleWithoutExtension,
@@ -512,9 +607,6 @@ export default function CourseEditPage() {
             dueAt: assignmentDueDate || undefined,
           });
         });
-        break;
-      case "roles":
-        target = { type: "role", role: selectedRole };
         break;
       case "sites":
         if (!selectedSiteId) {
@@ -577,7 +669,7 @@ export default function CourseEditPage() {
     switch (target.type) {
       case "user":
         const user = getUsers().find(u => u.id === target.userId);
-        return user ? user.name : target.userId;
+        return user ? `${user.firstName} ${user.lastName}` : target.userId;
       case "role":
         return `All ${target.role}s`;
       case "site":
@@ -813,7 +905,7 @@ export default function CourseEditPage() {
                 {ownerUser && (
                   <div className="flex items-center gap-1">
                     <User className="w-4 h-4" />
-                    <span>Owner: {ownerUser.name}</span>
+                    <span>Owner: {ownerUser.firstName} {ownerUser.lastName}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-1">
@@ -826,6 +918,39 @@ export default function CourseEditPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* Epic 1G.4: Undo/Redo/History Buttons */}
+                <button
+                  onClick={handleUndo}
+                  disabled={!canUndo(historyEntity?.type || 'course', historyEntity?.id || courseId)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={getLastUndoSummary(historyEntity?.type || 'course', historyEntity?.id || courseId) || 'Undo'}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                
+                <button
+                  onClick={handleRedo}
+                  disabled={!canRedo(historyEntity?.type || 'course', historyEntity?.id || courseId)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={getLastRedoSummary(historyEntity?.type || 'course', historyEntity?.id || courseId) || 'Redo'}
+                >
+                  <RotateCcw className="w-4 h-4 transform scale-x-[-1]" />
+                </button>
+
+                <Button variant="secondary" onClick={handleOpenHistory}>
+                  <Clock className="w-4 h-4 mr-2" />
+                  History
+                </Button>
+
+                <div className="w-px h-6 bg-gray-300" />
+
+                <Button
+                  variant="secondary"
+                  onClick={() => alert('Preview as Learner feature coming soon! This will show the course from a learner\'s perspective.')}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Preview as Learner
+                </Button>
                 {!isManager && (
                   <Button
                     variant="primary"
@@ -839,6 +964,23 @@ export default function CourseEditPage() {
               </div>
             </div>
           </div>
+
+          {/* AI Draft Banner */}
+          {course.ai?.source === "AI" && course.status === "draft" && (
+            <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-purple-900">Generated by AI from prompt</p>
+                <p className="text-xs text-purple-700 mt-0.5">
+                  Review and refine this content before publishing. You can edit all sections, add resources, and customize to your needs.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="border-b border-gray-200 mb-6">
@@ -1834,6 +1976,15 @@ export default function CourseEditPage() {
           </div>
         </div>
       </AdminLayout>
+
+      {/* Epic 1G.4: History Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        entityType={historyEntity?.type || 'course'}
+        entityId={historyEntity?.id || courseId}
+        isReadOnly={isManager}
+      />
     </RouteGuard>
   );
 }

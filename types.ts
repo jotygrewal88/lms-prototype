@@ -224,6 +224,7 @@ export interface Course extends Timestamped {
   ownerUserId?: string;
   lessonIds: string[];
   quizId?: string;
+  ai?: { source: "AI"; origin: "prompt" | "file" }; // Epic 1G: AI generation metadata
 }
 
 // Lesson entity
@@ -330,5 +331,106 @@ export interface Certificate extends Timestamped {
   issuedAt: string;
   expiresAt?: string;
   serial: string;
+}
+
+// Phase II Epic 1G: AI Course Generation types
+
+export type AIInput = {
+  prompt: string;
+  audienceLevel?: "Beginner" | "Intermediate" | "Advanced";
+  tone?: "Practical" | "Concise" | "Compliance";
+  targetDurationMins?: number;
+};
+
+export type AICourseDraft = {
+  title: string;
+  description: string;
+  tags: string[];
+  estimatedMinutes?: number;
+  lessons: Array<{
+    title: string;
+    sections: Array<{
+      kind: "TEXT";
+      content: string;
+    }>;
+  }>;
+  quiz?: {
+    questions: Array<{
+      type: "MULTIPLE_CHOICE";
+      question: string;
+      options: string[];
+      correctIndex: number;
+      rationale?: string;
+    }>;
+  };
+  aiMeta: {
+    source: "AI";
+    origin: "prompt";
+    modelHint?: string;
+    confidence?: number;
+  };
+  previewInsights?: AIPreviewInsights;
+};
+
+// Epic 1G.3: Preview-only types for AI workspace
+export type PreviewSection = {
+  kind: "TEXT";
+  content: string;
+  ai?: {
+    generated: boolean;
+    lastAction?: "generate" | "regenerate" | "simplify" | "expand";
+  };
+  _history?: string[]; // Local-only for undo
+};
+
+export type AIPreviewInsights = {
+  extractedTopics: string[];
+  detectedHazards: string[];
+  confidence?: number; // 0-1
+  source: {
+    origin: "prompt" | "file";
+    filename?: string;
+    prompt?: string;
+  };
+};
+
+// Epic 1G.4: Audit & Versioning Types
+
+export type AiAction =
+  | 'ai_generate_course'
+  | 'ai_generate_from_file'
+  | 'ai_regenerate'
+  | 'ai_rewrite'
+  | 'ai_expand'
+  | 'ai_simplify'
+  | 'ai_add_quiz'
+  | 'ai_autofill_metadata';
+
+export type VersionedEntityType = 'course' | 'lesson' | 'section';
+
+// Version Snapshot - Point-in-time capture of an entity
+export interface VersionSnapshot {
+  id: string;              // vsn_<ts>_<rand>
+  entityType: VersionedEntityType;
+  entityId: string;        // id of course|lesson|section
+  parentCourseId?: string; // helpful for lesson/section
+  createdAt: string;       // ISO timestamp
+  createdBy: string;       // userId
+  cause: 'manual' | 'ai';
+  aiAction?: AiAction;     // when cause === 'ai'
+  summary: string;         // short "what changed"
+  payload: any;            // deep clone of the entity
+}
+
+// Audit Event - Log entry for actions
+export interface AuditEvent {
+  id: string;              // aud_<ts>_<rand>
+  at: string;              // ISO timestamp
+  byUserId: string;
+  entityType: VersionedEntityType;
+  entityId: string;
+  parentCourseId?: string;
+  action: AiAction | 'manual_edit' | 'undo' | 'redo' | 'assign' | 'unassign';
+  meta?: Record<string, any>; // prompt, fileName, tokens, etc.
 }
 

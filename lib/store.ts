@@ -2,7 +2,7 @@
 // Phase II Epic 1: Extended with Course Library
 "use client";
 
-import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate } from "@/types";
+import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType } from "@/types";
 import { 
   organization as seedOrg, 
   users as seedUsers, 
@@ -50,6 +50,14 @@ let resources: Resource[] = [...seedResources];
 let quizzes: Quiz[] = [...seedQuizzes];
 let questions: Question[] = [...seedQuestions];
 let assignments: CourseAssignment[] = [...seedAssignments];
+
+// Epic 1G.4: Versioning & Audit State
+let versionSnapshots: VersionSnapshot[] = [];
+let auditEvents: AuditEvent[] = [];
+
+// Undo/Redo Stacks (per entity)
+const undoStack: Record<string, string[]> = {}; // key: `${entityType}:${entityId}`
+const redoStack: Record<string, string[]> = {};
 let progressCourses: ProgressCourse[] = [...seedProgressCourses];
 let progressLessons: ProgressLesson[] = [...seedProgressLessons];
 let certificates: Certificate[] = [...seedCertificates];
@@ -532,6 +540,119 @@ export function resetToSeed(): void {
   progressCourses = [...seedProgressCourses];
   progressLessons = [...seedProgressLessons];
   certificates = [...seedCertificates];
+  
+  // Epic 1G.4: Initialize sample version snapshots and audit events
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  
+  // Get first course and lesson for demo data
+  const firstCourse = seedCourses[0];
+  const firstLesson = seedLessons.find(l => l.courseId === firstCourse?.id);
+  const firstResource = firstLesson ? seedResources.find(r => r.lessonId === firstLesson.id) : undefined;
+  
+  // Sample Version Snapshots
+  versionSnapshots = [];
+  if (firstCourse) {
+    versionSnapshots.push({
+      id: 'vsn_seed_1',
+      entityType: 'course' as const,
+      entityId: firstCourse.id,
+      createdAt: twoHoursAgo,
+      createdBy: 'usr_admin_1',
+      cause: 'ai' as const,
+      aiAction: 'ai_generate_course',
+      summary: `AI generated course: "${firstCourse.title}"`,
+      payload: { ...firstCourse },
+    });
+    
+    versionSnapshots.push({
+      id: 'vsn_seed_2',
+      entityType: 'course' as const,
+      entityId: firstCourse.id,
+      createdAt: oneDayAgo,
+      createdBy: 'usr_admin_1',
+      cause: 'manual' as const,
+      summary: `Updated course metadata and tags`,
+      payload: { ...firstCourse, title: firstCourse.title + ' (Previous Version)' },
+    });
+  }
+  
+  if (firstLesson) {
+    versionSnapshots.push({
+      id: 'vsn_seed_3',
+      entityType: 'lesson' as const,
+      entityId: firstLesson.id,
+      parentCourseId: firstCourse?.id,
+      createdAt: twoDaysAgo,
+      createdBy: 'usr_admin_1',
+      cause: 'ai' as const,
+      aiAction: 'ai_rewrite',
+      summary: `AI rewrote lesson: "${firstLesson.title}"`,
+      payload: { ...firstLesson },
+    });
+  }
+  
+  // Sample Audit Events
+  auditEvents = [];
+  if (firstCourse) {
+    auditEvents.push({
+      id: 'aud_seed_1',
+      at: twoHoursAgo,
+      byUserId: 'usr_admin_1',
+      entityType: 'course' as const,
+      entityId: firstCourse.id,
+      action: 'ai_generate_course',
+      meta: {
+        origin: 'prompt',
+        prompt: 'Create OSHA workplace safety training',
+        lessonCount: seedLessons.filter(l => l.courseId === firstCourse.id).length,
+        hasQuiz: !!firstCourse.quizId,
+      },
+    });
+    
+    auditEvents.push({
+      id: 'aud_seed_2',
+      at: oneDayAgo,
+      byUserId: 'usr_admin_1',
+      entityType: 'course' as const,
+      entityId: firstCourse.id,
+      action: 'manual_edit',
+      meta: {
+        fields: ['tags', 'estimatedMinutes'],
+      },
+    });
+  }
+  
+  if (firstLesson) {
+    auditEvents.push({
+      id: 'aud_seed_3',
+      at: twoDaysAgo,
+      byUserId: 'usr_admin_1',
+      entityType: 'lesson' as const,
+      entityId: firstLesson.id,
+      parentCourseId: firstCourse?.id,
+      action: 'ai_rewrite',
+      meta: {
+        lessonTitle: firstLesson.title,
+      },
+    });
+  }
+  
+  if (firstResource) {
+    auditEvents.push({
+      id: 'aud_seed_4',
+      at: twoHoursAgo,
+      byUserId: 'usr_admin_1',
+      entityType: 'section' as const,
+      entityId: firstResource.id,
+      parentCourseId: firstCourse?.id,
+      action: 'ai_expand',
+      meta: {
+        sectionTitle: firstResource.title,
+      },
+    });
+  }
   
   currentScope = { siteId: "ALL", deptId: "ALL" };
   if (typeof window !== "undefined") {
@@ -1371,5 +1492,397 @@ export function issueCertificate(
 export function deleteCertificate(id: string): void {
   certificates = certificates.filter(c => c.id !== id);
   notifyListeners();
+}
+
+// ===================================================================
+// Epic 1G: AI Course Generation Functions
+// ===================================================================
+
+/**
+ * Creates a complete course structure from an AI-generated draft
+ * Includes: Course, Lessons, Text Resources, Quiz with Questions
+ */
+export function createCourseFromAIDraft(
+  draft: import("@/types").AICourseDraft, 
+  ownerUserId: string
+): string {
+  const now = timestamp();
+  const courseId = `crs_ai_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
+  // 1. Create course with AI metadata
+  const course: Course = {
+    id: courseId,
+    title: draft.title,
+    description: draft.description,
+    status: "draft",
+    category: draft.tags[0] || "Training",
+    tags: draft.tags,
+    standards: [],
+    estimatedMinutes: draft.estimatedMinutes,
+    ownerUserId,
+    lessonIds: [],
+    policy: {
+      progression: "linear",
+      requireAllLessons: true,
+      requirePassingQuiz: true,
+      enableRetakes: true,
+      lockNextUntilPrevious: false,
+      showExplanations: true,
+      minVideoWatchPct: 80,
+      maxQuizAttempts: 3,
+    },
+    ai: { source: "AI", origin: "prompt" },
+    createdAt: now,
+    updatedAt: now,
+  };
+  courses.push(course);
+  
+  // 2. Create lessons with text sections
+  draft.lessons.forEach((lessonData, idx) => {
+    const lessonId = `lsn_ai_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 9)}`;
+    const lesson: Lesson = {
+      id: lessonId,
+      courseId,
+      title: lessonData.title,
+      order: idx,
+      resourceIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    lessons.push(lesson);
+    course.lessonIds.push(lessonId);
+    
+    // Create text sections for this lesson
+    lessonData.sections.forEach((section, sIdx) => {
+      const resourceId = `res_ai_${Date.now()}_${idx}_${sIdx}_${Math.random().toString(36).substring(2, 9)}`;
+      const resource: Resource = {
+        id: resourceId,
+        courseId,
+        lessonId,
+        type: "text",
+        title: `Section ${sIdx + 1}`,
+        content: section.content,
+        order: sIdx,
+        createdAt: now,
+        updatedAt: now,
+      };
+      resources.push(resource);
+      lesson.resourceIds.push(resourceId);
+    });
+  });
+  
+  // 3. Create quiz with questions if provided
+  if (draft.quiz && draft.quiz.questions.length > 0) {
+    const quizId = `qz_ai_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const quiz: Quiz = {
+      id: quizId,
+      courseId,
+      passingScorePct: 70,
+      maxAttempts: 3,
+      questionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    quizzes.push(quiz);
+    course.quizId = quizId;
+    
+    draft.quiz.questions.forEach((q, idx) => {
+      const questionId = `q_ai_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 9)}`;
+      const question: Question = {
+        id: questionId,
+        quizId,
+        type: "mcq_single",
+        prompt: q.question,
+        options: q.options.map((label, i) => ({
+          id: `opt_${i}`,
+          label,
+          isCorrect: i === q.correctIndex,
+        })),
+        explanation: q.rationale,
+        createdAt: now,
+        updatedAt: now,
+      };
+      questions.push(question);
+      quiz.questionIds.push(questionId);
+    });
+  }
+  
+  // 4. Create changelog entry (using TrainingCompletion entity type for compatibility)
+  // Note: In a full implementation, ChangeLog might be extended to support Course entities
+  // For now, we'll skip the changelog for AI course creation to avoid type mismatches
+  
+  // 5. Epic 1G.4: Add audit and version snapshot
+  const aiAction: AiAction = draft.aiMeta.origin === 'prompt' ? 'ai_generate_course' : 'ai_generate_from_file';
+  const snapshot = addVersionSnapshot({
+    entityType: 'course',
+    entityId: courseId,
+    createdBy: ownerUserId,
+    cause: 'ai',
+    aiAction,
+    summary: `AI generated course: "${draft.title}"`,
+    payload: getEntitySnapshot('course', courseId),
+  });
+  
+  pushUndo('course', courseId, snapshot.id);
+  clearRedo('course', courseId);
+  
+  addAuditEvent({
+    byUserId: ownerUserId,
+    entityType: 'course',
+    entityId: courseId,
+    action: aiAction,
+    meta: {
+      origin: draft.aiMeta.origin,
+      prompt: draft.previewInsights?.source.prompt,
+      filename: draft.previewInsights?.source.filename,
+      lessonCount: draft.lessons.length,
+      hasQuiz: !!draft.quiz,
+    },
+  });
+  
+  notifyListeners();
+  return courseId;
+}
+
+/**
+ * Checks if a course is an AI-generated draft
+ */
+export function isAIDraftCourse(courseId: string): boolean {
+  const course = getCourseById(courseId);
+  return course?.status === "draft" && course?.ai?.source === "AI";
+}
+
+// ===================================================================
+// Epic 1G.4: Versioning & Audit Functions
+// ===================================================================
+
+/**
+ * Add an audit event to the log
+ */
+export function addAuditEvent(ev: Omit<AuditEvent, 'id' | 'at'>): AuditEvent {
+  const event: AuditEvent = {
+    ...ev,
+    id: `aud_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    at: new Date().toISOString(),
+  };
+  auditEvents.push(event);
+  notifyListeners();
+  return event;
+}
+
+/**
+ * Add a version snapshot
+ */
+export function addVersionSnapshot(
+  snap: Omit<VersionSnapshot, 'id' | 'createdAt'>
+): VersionSnapshot {
+  const snapshot: VersionSnapshot = {
+    ...snap,
+    id: `vsn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: new Date().toISOString(),
+  };
+  versionSnapshots.push(snapshot);
+  notifyListeners();
+  return snapshot;
+}
+
+/**
+ * Get a deep clone snapshot of an entity
+ */
+export function getEntitySnapshot(
+  entityType: VersionedEntityType,
+  id: string
+): any {
+  let entity;
+  switch (entityType) {
+    case 'course':
+      entity = getCourseById(id);
+      break;
+    case 'lesson':
+      entity = getLessonById(id);
+      break;
+    case 'section':
+      entity = getResourceById(id);
+      break;
+  }
+  
+  if (!entity) return null;
+  
+  // Deep clone using structuredClone or JSON fallback
+  try {
+    return structuredClone(entity);
+  } catch {
+    return JSON.parse(JSON.stringify(entity));
+  }
+}
+
+/**
+ * Restore an entity to a previous version snapshot
+ */
+export function restoreVersion(snapshotId: string): {
+  entityType: VersionedEntityType;
+  entityId: string;
+} | null {
+  const snapshot = versionSnapshots.find(s => s.id === snapshotId);
+  if (!snapshot) return null;
+
+  // Capture pre-restore state for redo
+  const currentState = getEntitySnapshot(snapshot.entityType, snapshot.entityId);
+  if (currentState) {
+    const redoSnapshot = addVersionSnapshot({
+      entityType: snapshot.entityType,
+      entityId: snapshot.entityId,
+      parentCourseId: snapshot.parentCourseId,
+      createdBy: getCurrentUser().id,
+      cause: 'manual',
+      summary: `Before restore to: ${snapshot.summary}`,
+      payload: currentState,
+    });
+    pushRedo(snapshot.entityType, snapshot.entityId, redoSnapshot.id);
+  }
+
+  // Restore the entity
+  switch (snapshot.entityType) {
+    case 'course':
+      const courseIndex = courses.findIndex(c => c.id === snapshot.entityId);
+      if (courseIndex !== -1) {
+        courses[courseIndex] = snapshot.payload;
+      }
+      break;
+    case 'lesson':
+      const lessonIndex = lessons.findIndex(l => l.id === snapshot.entityId);
+      if (lessonIndex !== -1) {
+        lessons[lessonIndex] = snapshot.payload;
+      }
+      break;
+    case 'section':
+      const resourceIndex = resources.findIndex(r => r.id === snapshot.entityId);
+      if (resourceIndex !== -1) {
+        resources[resourceIndex] = snapshot.payload;
+      }
+      break;
+  }
+
+  // Log audit event
+  addAuditEvent({
+    byUserId: getCurrentUser().id,
+    entityType: snapshot.entityType,
+    entityId: snapshot.entityId,
+    parentCourseId: snapshot.parentCourseId,
+    action: 'undo',
+    meta: { snapshotId, summary: snapshot.summary },
+  });
+
+  notifyListeners();
+  return { entityType: snapshot.entityType, entityId: snapshot.entityId };
+}
+
+/**
+ * List history for an entity
+ */
+export function listHistory(
+  entityType: VersionedEntityType,
+  entityId: string,
+  limit = 50
+): { snapshots: VersionSnapshot[]; audits: AuditEvent[] } {
+  const snapshots = versionSnapshots
+    .filter(s => s.entityType === entityType && s.entityId === entityId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limit);
+
+  const audits = auditEvents
+    .filter(e => e.entityType === entityType && e.entityId === entityId)
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, limit);
+
+  return { snapshots, audits };
+}
+
+// Undo/Redo Stack Management
+
+function stackKey(t: VersionedEntityType, id: string): string {
+  return `${t}:${id}`;
+}
+
+export function pushUndo(t: VersionedEntityType, id: string, snapshotId: string) {
+  const key = stackKey(t, id);
+  if (!undoStack[key]) undoStack[key] = [];
+  undoStack[key].push(snapshotId);
+}
+
+export function popUndo(t: VersionedEntityType, id: string): string | undefined {
+  const key = stackKey(t, id);
+  return undoStack[key]?.pop();
+}
+
+export function pushRedo(t: VersionedEntityType, id: string, snapshotId: string) {
+  const key = stackKey(t, id);
+  if (!redoStack[key]) redoStack[key] = [];
+  redoStack[key].push(snapshotId);
+}
+
+export function popRedo(t: VersionedEntityType, id: string): string | undefined {
+  const key = stackKey(t, id);
+  return redoStack[key]?.pop();
+}
+
+export function clearRedo(t: VersionedEntityType, id: string) {
+  const key = stackKey(t, id);
+  if (redoStack[key]) redoStack[key] = [];
+}
+
+export function canUndo(t: VersionedEntityType, id: string): boolean {
+  const key = stackKey(t, id);
+  return (undoStack[key]?.length || 0) > 0;
+}
+
+export function canRedo(t: VersionedEntityType, id: string): boolean {
+  const key = stackKey(t, id);
+  return (redoStack[key]?.length || 0) > 0;
+}
+
+export function getLastUndoSummary(t: VersionedEntityType, id: string): string | null {
+  const key = stackKey(t, id);
+  const lastId = undoStack[key]?.[undoStack[key].length - 1];
+  if (!lastId) return null;
+  const snapshot = versionSnapshots.find(s => s.id === lastId);
+  return snapshot?.summary || null;
+}
+
+export function getLastRedoSummary(t: VersionedEntityType, id: string): string | null {
+  const key = stackKey(t, id);
+  const lastId = redoStack[key]?.[redoStack[key].length - 1];
+  if (!lastId) return null;
+  const snapshot = versionSnapshots.find(s => s.id === lastId);
+  return snapshot?.summary || null;
+}
+
+/**
+ * Perform undo operation
+ */
+export function performUndo(entityType: VersionedEntityType, entityId: string): boolean {
+  const snapshotId = popUndo(entityType, entityId);
+  if (!snapshotId) return false;
+  
+  const result = restoreVersion(snapshotId);
+  return result !== null;
+}
+
+/**
+ * Perform redo operation
+ */
+export function performRedo(entityType: VersionedEntityType, entityId: string): boolean {
+  const snapshotId = popRedo(entityType, entityId);
+  if (!snapshotId) return false;
+  
+  const result = restoreVersion(snapshotId);
+  if (result) {
+    // Log as redo instead of undo
+    const lastAudit = auditEvents[auditEvents.length - 1];
+    if (lastAudit) {
+      lastAudit.action = 'redo';
+    }
+  }
+  return result !== null;
 }
 
