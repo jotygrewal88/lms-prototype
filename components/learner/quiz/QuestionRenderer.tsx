@@ -188,7 +188,7 @@ export default function QuestionRenderer({
       } else {
         newSelected.add(optionId);
       }
-      onChange(Array.from(newSelected));
+      onChange(Array.from(newSelected) as string[]);
     };
 
     const showResult = showFeedback && isCorrect !== undefined;

@@ -434,7 +434,7 @@ export default function QuizCard({
 
           {/* Actions */}
           <div className="flex items-center justify-center gap-4 pt-4">
-            {!submittedAttempt.passed && canStart.ok && (
+            {!submittedAttempt.passed && canStart.canStart && (
               <Button
                 variant="secondary"
                 onClick={handleRetry}

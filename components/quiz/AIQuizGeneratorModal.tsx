@@ -460,7 +460,6 @@ export default function AIQuizGeneratorModal({
                 <Button
                   onClick={handleRegenerate}
                   variant="secondary"
-                  size="small"
                 >
                   <RotateCcw className="w-4 h-4 mr-1" />
                   Regenerate

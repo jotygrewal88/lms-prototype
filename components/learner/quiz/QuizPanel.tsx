@@ -33,7 +33,7 @@ export default function QuizPanel({
 }: QuizPanelProps) {
   const [activeAttempt, setActiveAttempt] = useState<QuizAttempt | null>(null);
   const [submittedAttempt, setSubmittedAttempt] = useState<QuizAttempt | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
 
   // Load active attempt on mount
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function QuizPanel({
     if (attempt) {
       setActiveAttempt(attempt);
       // Load existing answers
-      const answerMap: Record<string, string> = {};
+      const answerMap: Record<string, string | string[]> = {};
       attempt.answers.forEach(answer => {
         answerMap[answer.questionId] = answer.value;
       });
@@ -61,7 +61,7 @@ export default function QuizPanel({
     setSubmittedAttempt(null);
   };
 
-  const handleAnswerChange = (questionId: string, value: string) => {
+  const handleAnswerChange = (questionId: string, value: string | string[]) => {
     if (!activeAttempt) return;
 
     // Update local state
@@ -80,7 +80,12 @@ export default function QuizPanel({
     }
 
     try {
-      const submitted = submitQuizAttempt(activeAttempt.id);
+      // Convert answers object to array format
+      const answersArray = Object.entries(answers).map(([questionId, value]) => ({
+        questionId,
+        value,
+      }));
+      const submitted = submitQuizAttempt(activeAttempt.id, answersArray);
       setSubmittedAttempt(submitted);
       setActiveAttempt(null);
 
@@ -96,18 +101,12 @@ export default function QuizPanel({
           });
           
           // Try to complete course
-          const courseCompleted = tryCompleteCourse({ courseId, userId });
+          tryCompleteCourse({ courseId, userId });
           
           // Show toasts (using browser alert for MVP, can be replaced with toast system)
-          if (courseCompleted) {
-            setTimeout(() => {
-              alert("Lesson completed! Course completed! Certificate issued.");
-            }, 500);
-          } else {
-            setTimeout(() => {
-              alert("Lesson completed!");
-            }, 500);
-          }
+          setTimeout(() => {
+            alert("Lesson completed!");
+          }, 500);
         }
       }
     } catch (error) {
@@ -131,18 +130,26 @@ export default function QuizPanel({
   // Check if submit button should be enabled
   // Phase II 1H.2b: Check all required questions have valid answers
   const requiredQuestions = quiz.questions.filter(q => q.required !== false);
-  const answeredRequiredCount = requiredQuestions.filter(q => 
-    isValidAnswer(answers[q.id], q)
-  ).length;
+  const answeredRequiredCount = requiredQuestions.filter(q => {
+    const answer = answers[q.id];
+    return answer && isValidAnswer(
+      Array.isArray(answer) ? answer.join(',') : answer,
+      q
+    );
+  }).length;
   
   const canSubmit = activeAttempt && 
     quiz.questions.length > 0 && 
     answeredRequiredCount === requiredQuestions.length;
 
   // Count answered questions (for display)
-  const answeredCount = quiz.questions.filter(q => 
-    answers[q.id] && isValidAnswer(answers[q.id], q)
-  ).length;
+  const answeredCount = quiz.questions.filter(q => {
+    const answer = answers[q.id];
+    return answer && isValidAnswer(
+      Array.isArray(answer) ? answer.join(',') : answer,
+      q
+    );
+  }).length;
   const totalRequired = requiredQuestions.length;
 
   // Check if user can start new attempt

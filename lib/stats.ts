@@ -1135,12 +1135,13 @@ export function skillCountsByDept(scope: Scope): Array<{ deptName: string; skill
   
   scopedUsers.forEach(user => {
     if (!user.departmentId) return;
+    const deptId = user.departmentId;
     const earnedSkills = getEarnedSkillsByUser(user.id);
-    earnedSkills.forEach(({ skill }) => {
-      if (!deptSkillCounts.has(user.departmentId)) {
-        deptSkillCounts.set(user.departmentId, new Set());
+    earnedSkills.forEach(({ skill }: { skill: { id: string } }) => {
+      if (!deptSkillCounts.has(deptId)) {
+        deptSkillCounts.set(deptId, new Set());
       }
-      deptSkillCounts.get(user.departmentId)!.add(skill.id);
+      deptSkillCounts.get(deptId)!.add(skill.id);
     });
   });
   

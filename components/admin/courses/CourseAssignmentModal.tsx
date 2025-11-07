@@ -13,10 +13,8 @@ import {
   createCourseAssignment,
   updateCourseAssignment,
   getAssignmentsByCourseId,
-  CourseAssignment,
-  CourseAssignmentTarget,
 } from "@/lib/store";
-import { CourseAssignmentTarget as TargetType } from "@/types";
+import { CourseAssignment, CourseAssignmentTarget } from "@/types";
 
 interface CourseAssignmentModalProps {
   courseId: string;

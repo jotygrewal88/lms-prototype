@@ -366,7 +366,7 @@ export default function QuizTab(props: QuizTabProps) {
                       isManager={isManager}
                       onEdit={() => onEditQuestion(question)}
                       onDelete={() => onDeleteQuestion(question.id)}
-                      onDuplicate={() => onDuplicateQuestion(question)}
+                      onDuplicate={() => onDuplicateQuestion(question.id)}
                     />
                   ))}
                 </div>

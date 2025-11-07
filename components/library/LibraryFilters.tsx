@@ -69,7 +69,7 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
         {/* File Type */}
         <select
           value={filters.fileType || ""}
-          onChange={(e) => updateFilter("fileType", e.target.value as LibraryFilters["fileType"] || undefined)}
+          onChange={(e) => updateFilter("fileType", e.target.value as LibraryFiltersType["fileType"] || undefined)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All File Types</option>
@@ -86,7 +86,7 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
         {/* Source */}
         <select
           value={filters.source || ""}
-          onChange={(e) => updateFilter("source", e.target.value as LibraryFilters["source"] || undefined)}
+          onChange={(e) => updateFilter("source", e.target.value as LibraryFiltersType["source"] || undefined)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All Sources</option>

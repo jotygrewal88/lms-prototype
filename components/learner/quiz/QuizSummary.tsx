@@ -30,7 +30,7 @@ export default function QuizSummary({
   // Get full quiz to access question details
   const fullQuiz = getQuizById(quiz.id) || quiz;
 
-  const getQuestionAnswer = (questionId: string): string | undefined => {
+  const getQuestionAnswer = (questionId: string): string | string[] | undefined => {
     return attempt.answers.find(a => a.questionId === questionId)?.value;
   };
 
@@ -60,8 +60,11 @@ export default function QuizSummary({
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-1">Your selections:</p>
                   <div className="flex flex-wrap gap-2">
-                    {learnerAnswer?.split(',').map(optId => {
-                      const option = question.options?.find(o => o.id === optId.trim());
+                    {(Array.isArray(learnerAnswer) 
+                      ? learnerAnswer 
+                      : learnerAnswer?.split(',').map(id => id.trim()).filter(id => id) || []
+                    ).map(optId => {
+                      const option = question.options?.find(o => o.id === (typeof optId === 'string' ? optId.trim() : optId));
                       if (!option) return null;
                       const isCorrectOption = option.correct;
                       return (
@@ -105,10 +108,14 @@ export default function QuizSummary({
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Your order:</p>
                   <ol className="space-y-1">
-                    {learnerAnswer?.split(',').map((optId, idx) => {
-                      const option = question.options?.find(o => o.id === optId.trim());
+                    {(Array.isArray(learnerAnswer) 
+                      ? learnerAnswer 
+                      : learnerAnswer?.split(',').map(id => id.trim()).filter(id => id) || []
+                    ).map((optId, idx) => {
+                      const trimmedOptId = typeof optId === 'string' ? optId.trim() : optId;
+                      const option = question.options?.find(o => o.id === trimmedOptId);
                       if (!option) return null;
-                      const correctIndex = question.correctOrder?.indexOf(optId.trim()) ?? -1;
+                      const correctIndex = question.correctOrder?.indexOf(trimmedOptId) ?? -1;
                       const isCorrectPosition = correctIndex === idx;
                       return (
                         <li

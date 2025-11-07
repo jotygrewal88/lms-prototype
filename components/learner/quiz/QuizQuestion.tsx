@@ -7,8 +7,8 @@ import { Question } from "@/types";
 
 interface QuizQuestionProps {
   question: Question;
-  value: string | undefined;
-  onChange: (value: string) => void;
+  value: string | string[] | undefined;
+  onChange: (value: string | string[]) => void;
   disabled?: boolean;
 }
 
@@ -142,7 +142,11 @@ export default function QuizQuestion({
       return <div className="text-gray-500">No options available</div>;
     }
 
-    const selectedIds = value ? new Set(value.split(',').map(id => id.trim()).filter(id => id)) : new Set();
+    const selectedIds = value 
+      ? Array.isArray(value) 
+        ? new Set(value) 
+        : new Set(value.split(',').map(id => id.trim()).filter(id => id))
+      : new Set();
 
     const handleToggle = (optionId: string) => {
       const newSelected = new Set(selectedIds);
@@ -211,8 +215,10 @@ export default function QuizQuestion({
     }
 
     // Initialize with default order if no value
-    const orderIds = value && value.trim() 
-      ? value.split(',').map(id => id.trim()).filter(id => id)
+    const orderIds = value 
+      ? Array.isArray(value)
+        ? value
+        : value.trim() ? value.split(',').map(id => id.trim()).filter(id => id) : question.options.map(opt => opt.id)
       : question.options.map(opt => opt.id);
 
     // Ensure all options are included

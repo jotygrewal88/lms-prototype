@@ -183,7 +183,7 @@ export default function LearnerProfilePage() {
           </div>
 
           {/* Skill Passport Section - Premium Passport Style */}
-          <Card className="overflow-hidden p-0 shadow-2xl" style={{ border: 'none' }}>
+          <Card className="overflow-hidden p-0 shadow-2xl border-0">
             {/* Premium Passport Header - Navy Blue */}
             <div 
               className="relative px-6 py-5 overflow-hidden"

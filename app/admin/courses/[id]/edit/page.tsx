@@ -1022,9 +1022,9 @@ export default function CourseEditPage() {
     }
   };
 
-  const handleCreateLessonQuiz = (lessonId: string) => {
+  const handleCreateLessonQuiz = () => {
     setQuizType("lesson");
-    setSelectedLessonIdForQuiz(lessonId);
+    // Lesson ID should already be selected via onSelectLessonForQuiz
     // Quiz will be loaded in useEffect
   };
 
@@ -1080,7 +1080,7 @@ export default function CourseEditPage() {
 
   const handleDeleteQuestion = (questionId: string) => {
     if (!quiz || !confirm("Delete this question?")) return;
-    deleteQuestion(quiz.id, questionId);
+    deleteQuestion(questionId);
     // Refresh from store
     const refreshedQuiz = getQuizByCourseId(courseId);
     setQuiz(refreshedQuiz);
@@ -1088,8 +1088,10 @@ export default function CourseEditPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleDuplicateQuestion = (question: Question) => {
+  const handleDuplicateQuestion = (questionId: string) => {
     if (!quiz) return;
+    const question = quiz.questions.find(q => q.id === questionId);
+    if (!question) return;
     const duplicated = {
       ...question,
       id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,

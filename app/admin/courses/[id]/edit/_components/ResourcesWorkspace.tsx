@@ -248,8 +248,6 @@ export default function ResourcesWorkspace({
       }
       
       newResources.push({
-        courseId,
-        lessonId,
         type: resourceType,
         title: libItem.title,
         url: libItem.url,

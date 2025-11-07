@@ -63,7 +63,7 @@ export default function ResourcePDF({ resource, courseId, lessonId, userId }: Re
 
     try {
       const iframe = iframeRef.current;
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       
       if (!iframeDoc) return 0;
 
