@@ -15,7 +15,7 @@ import {
   archiveLibraryItem, 
   deleteLibraryItem, 
   createNewVersion,
-  getCurrentUser,
+  getCurrentUser,      
   subscribe,
   LibraryFilters,
   type LibraryFilters as LibraryFiltersType
