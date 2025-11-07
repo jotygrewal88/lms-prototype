@@ -59,6 +59,7 @@ interface LessonFocusedViewProps {
   onMoveDown: () => void;
   onAddResource: () => void;
   onEditResource: (resource: Resource) => void;
+  onUpdateResource: (updatedResource: Resource) => void; // For inline editing (text sections)
   onPreviewResource: (resource: Resource) => void;
   onDeleteResource: (resourceId: string) => void;
   onReorderResources: (fromIndex: number, toIndex: number) => void;
@@ -77,6 +78,7 @@ export default function LessonFocusedView({
   onMoveDown,
   onAddResource,
   onEditResource,
+  onUpdateResource,
   onPreviewResource,
   onDeleteResource,
   onReorderResources,
@@ -152,11 +154,15 @@ export default function LessonFocusedView({
   const canMoveDown = currentIndex < totalLessons - 1;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-md border-2 border-gray-100 p-8">
       {/* Manager Banner */}
       {isReadOnly && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <strong>Manager mode</strong> – read only
+        <div className="mb-6 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔒</span>
+            <strong className="text-yellow-900 font-semibold">Manager mode</strong>
+            <span className="text-yellow-700">– read only</span>
+          </div>
         </div>
       )}
 
@@ -169,10 +175,10 @@ export default function LessonFocusedView({
           onBlur={handleTitleBlur}
           disabled={isReadOnly}
           className={`
-            w-full text-3xl font-bold px-0 py-2 border-0 border-b-2 bg-transparent
+            w-full text-4xl font-bold px-0 py-3 border-0 border-b-2 bg-transparent
             ${isReadOnly 
               ? 'border-gray-200 cursor-not-allowed text-gray-600' 
-              : 'border-gray-200 focus:border-indigo-500 focus:outline-none text-gray-900 placeholder-gray-400'
+              : 'border-gray-300 focus:border-indigo-500 focus:outline-none text-gray-900 placeholder-gray-400 transition-colors'
             }
           `}
           placeholder="Untitled Lesson"
@@ -180,31 +186,37 @@ export default function LessonFocusedView({
       </div>
 
       {/* Metadata Row with Autosave Indicator */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b">
-        <div className="flex items-center gap-4 text-sm">
-          <span className="font-medium text-gray-700">#{lesson.order + 1} of {totalLessons}</span>
-          <span className="text-gray-400">•</span>
-          <span className="text-gray-600">{resources.length} section{resources.length !== 1 ? 's' : ''}</span>
-          <span className="text-gray-400">•</span>
+      <div className="flex items-center justify-between mb-8 pb-6 border-b-2 border-gray-200">
+        <div className="flex items-center gap-4 text-sm flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 rounded-lg border border-indigo-200">
+            <span className="font-bold text-indigo-700">#{lesson.order + 1}</span>
+            <span className="text-indigo-600">of {totalLessons}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-200">
+            <span className="text-purple-700 font-semibold">{resources.length}</span>
+            <span className="text-purple-600">section{resources.length !== 1 ? 's' : ''}</span>
+          </div>
           
           {/* Autosave Indicator */}
           {!isReadOnly && isSaving ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full">
-              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200 shadow-sm">
+              <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               Saving...
             </span>
           ) : !isReadOnly && lastSaved ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-full">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-200 shadow-sm">
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
               </svg>
               Saved • {timeAgo(lastSaved.toISOString())}
             </span>
           ) : (
-            <span className="text-gray-600">Updated {timeAgo(lesson.updatedAt)}</span>
+            <span className="text-gray-600 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
+              Updated {timeAgo(lesson.updatedAt)}
+            </span>
           )}
         </div>
 
@@ -214,23 +226,23 @@ export default function LessonFocusedView({
               onClick={onMoveUp}
               disabled={!canMoveUp}
               className={`
-                p-2 rounded hover:bg-gray-100 transition-colors
+                p-2.5 rounded-lg hover:bg-indigo-50 transition-colors border-2 border-gray-200 hover:border-indigo-300
                 ${!canMoveUp ? 'opacity-40 cursor-not-allowed' : ''}
               `}
               title="Move lesson up"
             >
-              <ArrowUp className="w-4 h-4" />
+              <ArrowUp className="w-4 h-4 text-gray-700" />
             </button>
             <button
               onClick={onMoveDown}
               disabled={!canMoveDown}
               className={`
-                p-2 rounded hover:bg-gray-100 transition-colors
+                p-2.5 rounded-lg hover:bg-indigo-50 transition-colors border-2 border-gray-200 hover:border-indigo-300
                 ${!canMoveDown ? 'opacity-40 cursor-not-allowed' : ''}
               `}
               title="Move lesson down"
             >
-              <ArrowDown className="w-4 h-4" />
+              <ArrowDown className="w-4 h-4 text-gray-700" />
             </button>
           </div>
         )}
@@ -238,10 +250,13 @@ export default function LessonFocusedView({
 
       {/* Sections */}
       <div className="flex-1 overflow-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Sections</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+            Sections
+          </h3>
           {!isReadOnly && (
-            <Button variant="primary" onClick={onAddResource}>
+            <Button variant="primary" onClick={onAddResource} className="shadow-md hover:shadow-lg">
               <Plus className="w-4 h-4 mr-2" />
               Add Section
             </Button>
@@ -249,15 +264,15 @@ export default function LessonFocusedView({
         </div>
 
         {resources.length === 0 ? (
-          <div className="text-center py-16 px-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-            <div className="mb-4 text-4xl">📚</div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Start your lesson below 👇</h4>
+          <div className="text-center py-20 px-6 border-2 border-dashed border-indigo-200 rounded-2xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50">
+            <div className="mb-6 text-6xl">📚</div>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Start building your lesson</h4>
             {!isReadOnly && (
               <>
-                <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                  Add a Text Section or Upload a Video to begin building your lesson content
+                <p className="text-sm text-gray-600 mb-8 max-w-md mx-auto">
+                  Add a Text Section or Upload a Video to begin building your lesson content. Drag and drop to reorder sections once you've added them.
                 </p>
-                <Button variant="primary" onClick={onAddResource}>
+                <Button variant="primary" onClick={onAddResource} className="shadow-lg hover:shadow-xl">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Your First Section
                 </Button>
@@ -275,16 +290,21 @@ export default function LessonFocusedView({
               strategy={verticalListSortingStrategy}
               disabled={isReadOnly}
             >
-              <div className="space-y-2">
-                {resources.map((resource) => (
-                  <SortableResourceCard
-                    key={resource.id}
-                    resource={resource}
-                    isReadOnly={isReadOnly}
-                    onEdit={() => onEditResource(resource)}
-                    onPreview={() => onPreviewResource(resource)}
-                    onDelete={() => onDeleteResource(resource.id)}
-                  />
+              <div className="space-y-6">
+                {resources.map((resource, index) => (
+                  <div key={resource.id} className="relative">
+                    {index > 0 && (
+                      <div className="absolute -top-3 left-8 right-8 h-0.5 bg-gray-300 border-t border-gray-200"></div>
+                    )}
+                    <SortableResourceCard
+                      resource={resource}
+                      isReadOnly={isReadOnly}
+                      onEdit={() => onEditResource(resource)}
+                      onUpdate={onUpdateResource}
+                      onPreview={() => onPreviewResource(resource)}
+                      onDelete={() => onDeleteResource(resource.id)}
+                    />
+                  </div>
                 ))}
               </div>
             </SortableContext>
@@ -319,12 +339,14 @@ function SortableResourceCard({
   resource,
   isReadOnly,
   onEdit,
+  onUpdate,
   onPreview,
   onDelete,
 }: {
   resource: Resource;
   isReadOnly: boolean;
   onEdit: () => void;
+  onUpdate: (updatedResource: Resource) => void;
   onPreview: () => void;
   onDelete: () => void;
 }) {
@@ -342,12 +364,23 @@ function SortableResourceCard({
     transition,
   };
 
+  // For text sections, use inline update; for others, open sidebar
+  const handleEdit = (updatedResource: Resource) => {
+    if (resource.type === 'text') {
+      // Text sections are inline-editable, update directly
+      onUpdate(updatedResource);
+    } else {
+      // Other types open the sidebar
+      onEdit();
+    }
+  };
+
   return (
     <div ref={setNodeRef} style={style}>
       <ResourceCardSimple
         resource={resource}
         isReadOnly={isReadOnly}
-        onEdit={onEdit}
+        onEdit={handleEdit}
         onPreview={onPreview}
         onDelete={onDelete}
         dragHandleProps={isReadOnly ? undefined : { ...attributes, ...listeners }}

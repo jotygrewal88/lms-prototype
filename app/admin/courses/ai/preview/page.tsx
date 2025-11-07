@@ -421,7 +421,7 @@ export default function AIPreviewPage() {
         {/* Fixed Bottom Toolbar */}
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
           <div className="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between">
-            <Button variant="ghost" onClick={handleDiscard}>
+            <Button variant="secondary" onClick={handleDiscard}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Discard
             </Button>

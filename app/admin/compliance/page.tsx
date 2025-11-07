@@ -593,8 +593,29 @@ export default function CompliancePage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {training?.title}
-                            {training?.standardRef && <div className="text-xs text-gray-500">{training.standardRef}</div>}
+                            <div className="flex items-center gap-2">
+                              {training?.policy === 'LMS-COURSE' || training?.courseId ? (
+                                <>
+                                  <Badge variant="info" className="text-xs">Course</Badge>
+                                  {training?.courseId ? (
+                                    <a
+                                      href={`/admin/courses/${training.courseId}/edit`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                                      title={`Open course: ${training.title}`}
+                                    >
+                                      {training.title}
+                                    </a>
+                                  ) : (
+                                    <span>{training?.title}</span>
+                                  )}
+                                </>
+                              ) : (
+                                <span>{training?.title}</span>
+                              )}
+                            </div>
+                            {training?.standardRef && <div className="text-xs text-gray-500 mt-1">{training.standardRef}</div>}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{site?.name || "—"}</td>

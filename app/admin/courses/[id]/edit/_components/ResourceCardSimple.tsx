@@ -1,11 +1,29 @@
 // Epic 1E: Simplified resource card for stepper layout
+// Epic 1G.5: Rich Text Editor + AI Inline Editing
 "use client";
 
-import React from "react";
-import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File, Sparkles, RotateCcw } from "lucide-react";
 import { Resource } from "@/types";
+import type { AiAction } from "@/types";
 import { formatFileSize } from "@/lib/uploads";
-import { listHistory } from "@/lib/store";
+import { 
+  listHistory,
+  addVersionSnapshot,
+  addAuditEvent,
+  getCurrentUser,
+  getEntitySnapshot,
+  pushUndo,
+  clearRedo,
+  performUndo,
+  performRedo,
+  canUndo,
+  canRedo,
+  getResourceById
+} from "@/lib/store";
+import RichTextEditor from "@/components/editor/RichTextEditor";
+import AIPreviewModal from "@/components/editor/AIPreviewModal";
+import { aiRewrite, aiExpand, aiSimplify } from "@/lib/ai/inlineTransforms";
 
 // Simple time ago formatter
 function timeAgo(dateString: string): string {
@@ -80,7 +98,7 @@ function getTypeBadgeColor(type: Resource['type']): string {
 interface ResourceCardSimpleProps {
   resource: Resource;
   isReadOnly: boolean;
-  onEdit: () => void;
+  onEdit: (updatedResource: Resource) => void;
   onPreview: () => void;
   onDelete: () => void;
   dragHandleProps?: any;
@@ -116,6 +134,150 @@ export default function ResourceCardSimple({
     return actionIsAI && isRecent;
   });
 
+  // Epic 1G.5: AI inline editing state
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [aiPreview, setAIPreview] = useState<{
+    isOpen: boolean;
+    action: 'rewrite' | 'expand' | 'simplify' | null;
+    originalContent: string;
+    aiContent: string;
+  } | null>(null);
+  const [showAIBadge, setShowAIBadge] = useState(false);
+  
+  // Inline title editing
+  const [editableTitle, setEditableTitle] = useState(resource.title);
+  const [isTitleFocused, setIsTitleFocused] = useState(false);
+
+  // Sync title when resource changes (e.g., after undo/redo)
+  React.useEffect(() => {
+    setEditableTitle(resource.title);
+  }, [resource.title]);
+
+  // AI action handler
+  const handleAIAction = async (
+    action: 'rewrite' | 'expand' | 'simplify',
+    selection: string
+  ) => {
+    setIsAIProcessing(true);
+    
+    // Use current content or selection
+    const contentToTransform = selection || resource.content || '';
+    
+    try {
+      let aiResult = '';
+      switch (action) {
+        case 'rewrite':
+          aiResult = await aiRewrite(contentToTransform);
+          break;
+        case 'expand':
+          aiResult = await aiExpand(contentToTransform);
+          break;
+        case 'simplify':
+          aiResult = await aiSimplify(contentToTransform);
+          break;
+      }
+      
+      setAIPreview({
+        isOpen: true,
+        action,
+        originalContent: contentToTransform,
+        aiContent: aiResult,
+      });
+    } catch (error) {
+      console.error('AI action failed:', error);
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  // Accept AI result handler
+  const handleAcceptAI = () => {
+    if (!aiPreview) return;
+    
+    const currentUser = getCurrentUser();
+    const aiActionMap: Record<string, AiAction> = {
+      rewrite: 'ai_rewrite',
+      expand: 'ai_expand',
+      simplify: 'ai_simplify',
+    };
+    
+    // 1. Create version snapshot (before change)
+    const snapshot = addVersionSnapshot({
+      entityType: 'section',
+      entityId: resource.id,
+      parentCourseId: resource.courseId,
+      createdBy: currentUser.id,
+      cause: 'ai',
+      aiAction: aiActionMap[aiPreview.action!],
+      summary: `AI ${aiPreview.action}: "${resource.title}"`,
+      payload: getEntitySnapshot('section', resource.id),
+    });
+    
+    pushUndo('section', resource.id, snapshot.id);
+    clearRedo('section', resource.id);
+    
+    // 2. Add audit event
+    addAuditEvent({
+      byUserId: currentUser.id,
+      entityType: 'section',
+      entityId: resource.id,
+      parentCourseId: resource.courseId,
+      action: aiActionMap[aiPreview.action!],
+      meta: {
+        sectionTitle: resource.title,
+        hadSelection: !!aiPreview.originalContent,
+      },
+    });
+    
+    // 3. Update content
+    onEdit({ ...resource, content: aiPreview.aiContent });
+    
+    // 4. Show badge
+    setShowAIBadge(true);
+    setTimeout(() => setShowAIBadge(false), 10000); // 10 seconds
+    
+    // 5. Close modal
+    setAIPreview(null);
+  };
+
+  // Undo/Redo handlers
+  const handleUndo = () => {
+    performUndo('section', resource.id);
+    const updated = getResourceById(resource.id);
+    if (updated) {
+      onEdit(updated);
+    }
+  };
+
+  const handleRedo = () => {
+    performRedo('section', resource.id);
+    const updated = getResourceById(resource.id);
+    if (updated) {
+      onEdit(updated);
+    }
+  };
+
+  // Title editing handlers
+  const handleTitleBlur = () => {
+    setIsTitleFocused(false);
+    if (editableTitle !== resource.title && editableTitle.trim()) {
+      onEdit({ ...resource, title: editableTitle.trim() });
+    } else if (!editableTitle.trim()) {
+      // Reset to original if empty
+      setEditableTitle(resource.title);
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === 'Escape') {
+      setEditableTitle(resource.title);
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   // Render content preview based on type
   const renderContent = () => {
     if (!isExpanded) return null;
@@ -124,9 +286,22 @@ export default function ResourceCardSimple({
       case 'text':
         return (
           <div className="mt-3 pt-3 border-t border-gray-100">
-            <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-              {resource.content || <span className="text-gray-400 italic">No content</span>}
-            </div>
+            {showAIBadge && (
+              <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded animate-pulse">
+                <Sparkles className="w-3 h-3" />
+                AI-updated
+              </div>
+            )}
+            <RichTextEditor
+              value={resource.content || ''}
+              onChange={(html) => onEdit({ ...resource, content: html })}
+              readOnly={isReadOnly}
+              showAIToolbar={!isReadOnly}
+              onAIAction={handleAIAction}
+              sectionId={resource.id}
+              lessonId={resource.lessonId}
+              courseId={resource.courseId}
+            />
           </div>
         );
       case 'link':
@@ -208,7 +383,7 @@ export default function ResourceCardSimple({
 
   return (
     <div 
-      className={`group flex flex-col gap-4 p-4 bg-white rounded-lg border-l-2 ${accentColor} shadow-sm hover:shadow-md transition-all duration-200 ease-in-out animate-in fade-in slide-in-from-bottom-2`}
+      className={`group flex flex-col gap-4 p-5 bg-white rounded-xl border-l-4 ${accentColor} border-2 border-gray-200 shadow-md hover:shadow-lg transition-all duration-200 ease-in-out animate-in fade-in slide-in-from-bottom-2`}
     >
       {/* Header Row */}
       <div className="flex items-center gap-4">
@@ -230,7 +405,23 @@ export default function ResourceCardSimple({
 
         {/* Title & Meta */}
         <div className="flex-1 min-w-0 space-y-1">
-          <div className="font-semibold text-gray-900 text-sm">{resource.title}</div>
+          {/* Inline Editable Title for Text Sections */}
+          {resource.type === 'text' && !isReadOnly ? (
+            <input
+              type="text"
+              value={editableTitle}
+              onChange={(e) => setEditableTitle(e.target.value)}
+              onFocus={() => setIsTitleFocused(true)}
+              onBlur={handleTitleBlur}
+              onKeyDown={handleTitleKeyDown}
+              className={`w-full font-semibold text-gray-900 text-sm bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 -ml-1 ${
+                isTitleFocused ? 'bg-white' : ''
+              }`}
+              placeholder="Section title..."
+            />
+          ) : (
+            <div className="font-semibold text-gray-900 text-sm">{resource.title}</div>
+          )}
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeBadgeColor}`}>
               {resource.type.charAt(0).toUpperCase() + resource.type.slice(1)}
@@ -267,6 +458,29 @@ export default function ResourceCardSimple({
           </svg>
         </button>
 
+        {/* Epic 1G.5: Undo/Redo Buttons (for text sections) */}
+        {resource.type === 'text' && !isReadOnly && (
+          <div className="flex items-center gap-1 mr-2">
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo('section', resource.id)}
+              className="p-1.5 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Undo"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            
+            <button
+              onClick={handleRedo}
+              disabled={!canRedo('section', resource.id)}
+              className="p-1.5 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Redo"
+            >
+              <RotateCcw className="w-3.5 h-3.5 transform scale-x-[-1]" />
+            </button>
+          </div>
+        )}
+
         {/* Hover Actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button
@@ -279,14 +493,17 @@ export default function ResourceCardSimple({
           </button>
           {!isReadOnly && (
             <>
-              <button
-                onClick={onEdit}
-                className="p-1.5 hover:bg-indigo-100 rounded-md transition-colors"
-                aria-label="Edit section"
-                title="Edit"
-              >
-                <Pencil className="w-4 h-4 text-indigo-600" />
-              </button>
+              {/* Edit button: Only show for non-text sections (text is inline editable) */}
+              {resource.type !== 'text' && (
+                <button
+                  onClick={() => onEdit(resource)}
+                  className="p-1.5 hover:bg-indigo-100 rounded-md transition-colors"
+                  aria-label="Edit section"
+                  title="Edit"
+                >
+                  <Pencil className="w-4 h-4 text-indigo-600" />
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (confirm(`Delete "${resource.title}"?`)) {
@@ -306,6 +523,17 @@ export default function ResourceCardSimple({
 
       {/* Content Preview */}
       {renderContent()}
+
+      {/* Epic 1G.5: AI Preview Modal */}
+      <AIPreviewModal
+        isOpen={aiPreview?.isOpen || false}
+        onClose={() => setAIPreview(null)}
+        onAccept={handleAcceptAI}
+        originalContent={aiPreview?.originalContent || ''}
+        aiContent={aiPreview?.aiContent || ''}
+        actionType={aiPreview?.action || 'rewrite'}
+        isLoading={isAIProcessing}
+      />
     </div>
   );
 }

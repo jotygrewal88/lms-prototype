@@ -1,267 +1,295 @@
-// Phase I Epic 4: Learner Dashboard (Basic)
-/**
- * ACCEPTANCE CHECKLIST (Epic 4):
- * ✓ Dashboard shows only current learner's trainings with status, due info, site/department
- * ✓ Progress ring and stat chips compute correctly
- * ✓ Filters (All/Due Soon/Overdue/Completed) work with empty states
- * ✓ "View details" links to training detail page
- * ✓ Confetti fires at 100% completion
- * ✓ Permissions: Learner cannot access admin routes
- * ✓ No Phase II features
- */
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import LearnerLayout from "@/components/layouts/LearnerLayout";
 import RouteGuard from "@/components/RouteGuard";
-import Card from "@/components/Card";
-import Badge from "@/components/Badge";
-import Button from "@/components/Button";
-import ProgressRing from "@/components/ProgressRing";
-import Confetti from "@/components/Confetti";
-import { 
-  getCurrentUser, 
-  getCompletionsByUserId, 
-  getTrainingById,
-  getUsers,
-  getSites,
-  getDepartments,
-  subscribe 
+import CourseCard from "@/components/learner/CourseCard";
+import ResumeCard from "@/components/learner/ResumeCard";
+import DueSoonPanel from "@/components/learner/DueSoonPanel";
+import OverduePanel from "@/components/learner/OverduePanel";
+import CertificatesMiniCard from "@/components/learner/CertificatesMiniCard";
+import SkillPassportPlaceholder from "@/components/learner/SkillPassportPlaceholder";
+import {
+  getCurrentUser,
+  getAssignedCoursesForUser,
+  getProgressCourseByCourseAndUser,
+  getAssignmentForUserAndCourse,
+  getDueSoonForUser,
+  getOverdueForUser,
+  getCertificatesByUserId,
+  getResumePointer,
+  getEarnedSkillsByUser,
+  subscribe,
 } from "@/lib/store";
-import { formatDate } from "@/lib/utils";
-import { 
-  calculateProgress, 
-  getStatusCounts, 
-  filterCompletions, 
-  sortByPriority,
-  FilterType 
-} from "@/lib/learnerStats";
+import { Course, ProgressCourse, CourseAssignment } from "@/types";
 
-export default function LearnerPage() {
+type TabType = "all" | "in_progress" | "completed";
+
+export default function LearnerDashboard() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
-  const [completions, setCompletions] = useState(getCompletionsByUserId(getCurrentUser().id));
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-
-  const users = getUsers();
-  const sites = getSites();
-  const departments = getDepartments();
+  const [assignedCourses, setAssignedCourses] = useState<Course[]>([]);
+  const [progressMap, setProgressMap] = useState<Record<string, ProgressCourse>>({});
+  const [assignmentsMap, setAssignmentsMap] = useState<Record<string, CourseAssignment>>({});
+  const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [resumePointer, setResumePointer] = useState<{ courseId: string; lessonId: string } | null>(null);
+  const [dueSoonCourses, setDueSoonCourses] = useState<Array<{ course: Course; assignment: CourseAssignment }>>([]);
+  const [overdueCourses, setOverdueCourses] = useState<Array<{ course: Course; assignment: CourseAssignment; daysOverdue: number }>>([]);
+  const [certificatesCount, setCertificatesCount] = useState(0);
+  const [skillCount, setSkillCount] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
+    const loadData = () => {
       const user = getCurrentUser();
       setCurrentUser(user);
-      setCompletions(getCompletionsByUserId(user.id));
+
+      // Load assigned courses (published only)
+      const courses = getAssignedCoursesForUser(user.id);
+      setAssignedCourses(courses);
+
+      // Load progress and assignments
+      const progress: Record<string, ProgressCourse> = {};
+      const assignments: Record<string, CourseAssignment> = {};
+      
+      courses.forEach((course) => {
+        const progressData = getProgressCourseByCourseAndUser(course.id, user.id);
+        if (progressData) {
+          progress[course.id] = progressData;
+        }
+        
+        const assignment = getAssignmentForUserAndCourse(user.id, course.id);
+        if (assignment) {
+          assignments[course.id] = assignment;
+        }
+      });
+
+      setProgressMap(progress);
+      setAssignmentsMap(assignments);
+
+      // Load resume pointer
+      const resume = getResumePointer(user.id);
+      setResumePointer(resume);
+
+      // Load due soon and overdue
+      const dueSoon = getDueSoonForUser(user.id, 14);
+      setDueSoonCourses(dueSoon);
+
+      const overdue = getOverdueForUser(user.id);
+      setOverdueCourses(overdue);
+
+      // Load certificates count
+      const certificates = getCertificatesByUserId(user.id);
+      setCertificatesCount(certificates.length);
+
+      // Load earned skills count
+      const earnedSkills = getEarnedSkillsByUser(user.id);
+      setSkillCount(earnedSkills.length);
+    };
+
+    loadData();
+
+    const unsubscribe = subscribe(() => {
+      loadData();
     });
+
     return unsubscribe;
   }, []);
 
-  const progress = calculateProgress(completions);
-  const statusCounts = getStatusCounts(completions);
-  const filteredList = sortByPriority(filterCompletions(completions, activeFilter));
-
-  const getUser = (userId: string) => users.find(u => u.id === userId);
-  const getSite = (siteId?: string) => siteId ? sites.find(s => s.id === siteId) : undefined;
-  const getDept = (deptId?: string) => deptId ? departments.find(d => d.id === deptId) : undefined;
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "COMPLETED":
-        return <Badge variant="success">Completed</Badge>;
-      case "ASSIGNED":
-        return <Badge variant="info">Assigned</Badge>;
-      case "OVERDUE":
-        return <Badge variant="error">Overdue</Badge>;
-      default:
-        return <Badge variant="default">{status}</Badge>;
+  // Filter courses by tab
+  const getFilteredCourses = (): Course[] => {
+    if (activeTab === "all") {
+      return assignedCourses;
     }
+
+    return assignedCourses.filter((course) => {
+      const progress = progressMap[course.id];
+      if (!progress) return false;
+
+      if (activeTab === "in_progress") {
+        return progress.status === "in_progress";
+      }
+
+      if (activeTab === "completed") {
+        return progress.status === "completed";
+      }
+
+      return false;
+    });
   };
 
-  const getEmptyStateMessage = (filter: FilterType) => {
-    switch (filter) {
-      case "due-soon":
-        return "No trainings due soon. Great job staying ahead!";
-      case "overdue":
-        return "No overdue trainings. You're all caught up!";
+  // Sort courses: due date asc, then in-progress first, then title asc
+  const getSortedCourses = (courses: Course[]): Course[] => {
+    return [...courses].sort((a, b) => {
+      const assignmentA = assignmentsMap[a.id];
+      const assignmentB = assignmentsMap[b.id];
+      const progressA = progressMap[a.id];
+      const progressB = progressMap[b.id];
+
+      // Sort by due date asc (if exists)
+      if (assignmentA?.dueAt && assignmentB?.dueAt) {
+        const dateA = new Date(assignmentA.dueAt).getTime();
+        const dateB = new Date(assignmentB.dueAt).getTime();
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+      } else if (assignmentA?.dueAt && !assignmentB?.dueAt) {
+        return -1;
+      } else if (!assignmentA?.dueAt && assignmentB?.dueAt) {
+        return 1;
+      }
+
+      // Then in-progress first
+      const isInProgressA = progressA?.status === "in_progress";
+      const isInProgressB = progressB?.status === "in_progress";
+      if (isInProgressA && !isInProgressB) return -1;
+      if (!isInProgressA && isInProgressB) return 1;
+
+      // Finally by title asc
+      return a.title.localeCompare(b.title);
+    });
+  };
+
+  const filteredCourses = getFilteredCourses();
+  const sortedCourses = getSortedCourses(filteredCourses);
+
+  const handleCourseClick = (courseId: string) => {
+    router.push(`/learner/courses/${courseId}`);
+  };
+
+  const handleResume = (courseId: string, lessonId: string) => {
+    router.push(`/learner/courses/${courseId}/lessons/${lessonId}`);
+  };
+
+  const handleViewAllCertificates = () => {
+    // Placeholder - will be implemented in future epic
+  };
+
+  const getEmptyStateMessage = (tab: TabType): string => {
+    switch (tab) {
+      case "in_progress":
+        return "No courses in progress. Start a course to begin learning!";
       case "completed":
-        return "No completed trainings yet. Keep working!";
+        return "No completed courses yet. Keep learning to earn certificates!";
       default:
-        return "No trainings assigned yet.";
+        return "No courses assigned yet. Contact your administrator for access.";
     }
   };
 
   return (
-    <RouteGuard>
+    <RouteGuard allowedRoles={["LEARNER"]}>
       <LearnerLayout>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Trainings</h1>
-          <p className="text-gray-600 mb-6">Track your progress and stay compliant</p>
-
-          {/* Hero Section with Progress */}
-          <Card className="mb-6">
-            <div className="flex flex-col md:flex-row items-center gap-8 p-4">
-              <div className="flex-shrink-0">
-                <ProgressRing progress={progress} />
-              </div>
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-500 mb-1">Assigned</p>
-                  <p className="text-2xl font-bold text-gray-900">{statusCounts.assigned}</p>
-                </div>
-                <div className="text-center p-4 bg-amber-50 rounded-lg">
-                  <p className="text-sm font-medium text-amber-700 mb-1">Due Soon</p>
-                  <p className="text-2xl font-bold text-amber-600">{statusCounts.dueSoon}</p>
-                </div>
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <p className="text-sm font-medium text-red-700 mb-1">Overdue</p>
-                  <p className="text-2xl font-bold text-red-600">{statusCounts.overdue}</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Filters */}
-          <div className="flex gap-2 mb-6 flex-wrap">
-            <button
-              onClick={() => setActiveFilter("all")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeFilter === "all"
-                  ? "text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-              }`}
-              style={activeFilter === "all" ? { backgroundColor: "var(--primary-color)" } : undefined}
-            >
-              All ({completions.length})
-            </button>
-            <button
-              onClick={() => setActiveFilter("due-soon")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeFilter === "due-soon"
-                  ? "bg-amber-500 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-              }`}
-            >
-              Due Soon ({statusCounts.dueSoon})
-            </button>
-            <button
-              onClick={() => setActiveFilter("overdue")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeFilter === "overdue"
-                  ? "bg-red-500 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-              }`}
-            >
-              Overdue ({statusCounts.overdue})
-            </button>
-            <button
-              onClick={() => setActiveFilter("completed")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeFilter === "completed"
-                  ? "bg-green-500 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-              }`}
-            >
-              Completed ({statusCounts.completed})
-            </button>
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">My Learning</h1>
+            <p className="text-gray-600">
+              Welcome back, {currentUser.firstName}. Resume where you left off.
+            </p>
           </div>
 
-          {/* Training List */}
-          {filteredList.length === 0 ? (
-            <Card>
-              <div className="text-center py-12">
-                <svg
-                  className="mx-auto h-12 w-12 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                <h3 className="mt-2 text-sm font-semibold text-gray-900">{getEmptyStateMessage(activeFilter)}</h3>
-                {activeFilter !== "all" && (
-                  <Button variant="secondary" className="mt-4" onClick={() => setActiveFilter("all")}>
-                    Back to All
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredList.map(completion => {
-                const training = getTrainingById(completion.trainingId);
-                const user = getUser(completion.userId);
-                const site = getSite(user?.siteId);
-                const dept = getDept(user?.departmentId);
-
-                return (
-                  <Card key={completion.id}>
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900">{training?.title}</h3>
-                            {training?.standardRef && (
-                              <p className="text-sm text-gray-500 mt-1">{training.standardRef}</p>
-                            )}
-                            <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                              <span>Site: {site?.name || "—"}</span>
-                              <span>•</span>
-                              <span>Dept: {dept?.name || "—"}</span>
-                            </div>
-                          </div>
-                          <div>{getStatusBadge(completion.status)}</div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-4 text-sm">
-                          {completion.status === "COMPLETED" ? (
-                            <span className="text-green-600">
-                              Completed on {formatDate(completion.completedAt!)}
-                            </span>
-                          ) : (
-                            <>
-                              <span className={completion.status === "OVERDUE" ? "text-red-600 font-medium" : "text-gray-600"}>
-                                Due: {formatDate(completion.dueAt)}
-                              </span>
-                              {completion.overdueDays && completion.overdueDays > 0 && (
-                                <span className="text-red-600 font-medium">
-                                  ({completion.overdueDays} days overdue)
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <Link href={`/learner/training/${completion.id}`}>
-                          <Button variant="secondary">View Details</Button>
-                        </Link>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+          {/* Resume Card */}
+          {resumePointer && (
+            <ResumeCard
+              courseId={resumePointer.courseId}
+              lessonId={resumePointer.lessonId}
+              onResume={() => handleCourseClick(resumePointer.courseId)}
+            />
           )}
 
-          {/* Info Note */}
-          <Card className="mt-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-              <p className="text-sm text-blue-800">
-                <span className="font-medium">Note:</span> Training completions are marked by your manager or admin.
-                If you&apos;ve completed a training, please notify your supervisor to update your status.
-              </p>
-            </div>
-          </Card>
+          {/* Main Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column: Courses Grid */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Tabs */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setActiveTab("all")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "all"
+                      ? "bg-[#2563EB] text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
+                  }`}
+                >
+                  All ({assignedCourses.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("in_progress")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "in_progress"
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
+                  }`}
+                >
+                  In Progress ({sortedCourses.filter(c => progressMap[c.id]?.status === "in_progress").length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("completed")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "completed"
+                      ? "bg-green-500 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
+                  }`}
+                >
+                  Completed ({sortedCourses.filter(c => progressMap[c.id]?.status === "completed").length})
+                </button>
+              </div>
 
-          {/* Confetti for 100% completion */}
-          <Confetti trigger={progress === 100 && completions.length > 0} />
+              {/* Courses Grid */}
+              {sortedCourses.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+                  <svg
+                    className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {getEmptyStateMessage(activeTab)}
+                  </h3>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sortedCourses.map((course) => (
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      progress={progressMap[course.id]}
+                      assignment={assignmentsMap[course.id]}
+                      onOpen={() => handleCourseClick(course.id)}
+                      onResume={(lessonId) => handleResume(course.id, lessonId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Panels */}
+            <div className="space-y-4">
+              <DueSoonPanel
+                courses={dueSoonCourses}
+                onCourseClick={handleCourseClick}
+              />
+              <OverduePanel
+                courses={overdueCourses}
+                onCourseClick={handleCourseClick}
+              />
+              <CertificatesMiniCard
+                count={certificatesCount}
+                onViewAll={handleViewAllCertificates}
+              />
+              <SkillPassportPlaceholder skillCount={skillCount} />
+            </div>
+          </div>
         </div>
       </LearnerLayout>
     </RouteGuard>
   );
 }
-

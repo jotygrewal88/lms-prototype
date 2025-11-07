@@ -32,8 +32,16 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin",
     },
     {
+      label: "Analytics",
+      path: "/admin/analytics",
+    },
+    {
       label: "Courses",
       path: "/admin/courses",
+    },
+    {
+      label: "Library",
+      path: "/admin/library",
     },
     {
       label: "Trainings",
@@ -76,6 +84,14 @@ export function getNavigationItems(role: Role): NavItem[] {
         {
           label: "Reminders",
           path: "/admin/settings/notifications",
+        },
+        {
+          label: "Style Guide",
+          path: "/admin/settings/style-guide",
+        },
+        {
+          label: "Certificates",
+          path: "/admin/settings/certificates",
         },
       ],
     },

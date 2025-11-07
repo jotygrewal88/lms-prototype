@@ -19,10 +19,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus } from "lucide-react";
+import { Plus, Library } from "lucide-react";
 import Button from "@/components/Button";
 import UploadDropzone from "@/components/UploadDropzone";
 import ResourceCard from "@/components/ResourceCard";
+import LibraryPicker from "@/components/library/LibraryPicker";
 import LessonSummary from "./LessonSummary";
 import PreviewLessonModal from "./PreviewLessonModal";
 import Toast from "@/components/Toast";
@@ -35,6 +36,8 @@ import {
   reorderResources,
   addResourcesBatch,
   subscribe,
+  getLibraryItemById,
+  getNewerVersion,
 } from "@/lib/store";
 import { Resource, ResourceType } from "@/types";
 import { getFileAccept } from "@/lib/uploads";
@@ -60,6 +63,7 @@ export default function ResourcesWorkspace({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
   
   // Link/Text form state
   const [linkForm, setLinkForm] = useState({ title: '', url: '' });
@@ -225,6 +229,45 @@ export default function ResourcesWorkspace({
     setToast({ message: 'Resource deleted', type: 'success' });
   };
 
+  // Handle Library selection
+  const handleLibrarySelect = (libraryItemIds: string[]) => {
+    const libraryItems = libraryItemIds.map(id => getLibraryItemById(id)).filter(Boolean);
+    
+    const newResources: Array<Omit<Resource, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'courseId' | 'lessonId'>> = [];
+    
+    libraryItems.forEach(libItem => {
+      if (!libItem) return;
+      
+      // Determine resource type from library item
+      let resourceType: ResourceType = 'link';
+      if (libItem.type === 'file') {
+        if (libItem.fileType === 'pdf') resourceType = 'pdf';
+        else if (libItem.fileType === 'image') resourceType = 'image';
+        else if (libItem.fileType === 'video') resourceType = 'video';
+        else resourceType = 'link';
+      }
+      
+      newResources.push({
+        courseId,
+        lessonId,
+        type: resourceType,
+        title: libItem.title,
+        url: libItem.url,
+        content: libItem.description,
+        durationSec: libItem.durationSec,
+        fileName: libItem.fileName,
+        fileSize: libItem.fileSize,
+        mimeType: libItem.mimeType,
+        libraryItemId: libItem.id,
+      });
+    });
+    
+    if (newResources.length > 0) {
+      addResourcesBatch(lessonId, newResources);
+      setToast({ message: `${newResources.length} item(s) added from Library`, type: 'success' });
+    }
+  };
+
   if (!lesson) {
     return <div className="text-center py-8 text-gray-500">Lesson not found</div>;
   }
@@ -251,6 +294,14 @@ export default function ResourcesWorkspace({
               >
                 <Plus className="w-4 h-4" />
                 Add Resource
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setIsLibraryPickerOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Library className="w-4 h-4" />
+                Add from Library
               </Button>
             </div>
 
@@ -467,6 +518,13 @@ export default function ResourcesWorkspace({
           onClose={() => setToast(null)}
         />
       )}
+      
+      {/* Library Picker Modal */}
+      <LibraryPicker
+        isOpen={isLibraryPickerOpen}
+        onClose={() => setIsLibraryPickerOpen(false)}
+        onSelect={handleLibrarySelect}
+      />
     </div>
   );
 }

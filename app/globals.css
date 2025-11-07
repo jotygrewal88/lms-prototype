@@ -40,6 +40,83 @@ h2 {
   color: var(--primary-color) !important;
 }
 
+/* Epic 1G.8: Style Lint Decorations */
+.style-lint-banned {
+  text-decoration: underline wavy red;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+
+.style-lint-preferred {
+  text-decoration: underline dashed #f59e0b;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+
+.style-lint-reading {
+  text-decoration: underline dotted #a855f7;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+
+.style-lint-tone {
+  text-decoration: underline dotted #3b82f6;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+}
+
+.style-lint-tooltip {
+  pointer-events: none;
+}
+
+.style-lint-popover {
+  pointer-events: auto;
+}
+
+/* Epic 1G.8: Glossary Styles */
+.glossary-term {
+  text-decoration: underline dotted #3b82f6;
+  text-decoration-thickness: 1px;
+  cursor: help;
+}
+
+.glossary-tooltip {
+  pointer-events: none;
+}
+
+.glossary-callout {
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  border-radius: 0.375rem;
+}
+
+.glossary-callout-header {
+  margin-bottom: 0.5rem;
+}
+
+.glossary-callout-term {
+  font-weight: 600;
+  color: #1e40af;
+  font-size: 0.875rem;
+}
+
+.glossary-callout-body {
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.glossary-callout-definition {
+  margin-bottom: 0.5rem;
+  color: #4b5563;
+  font-style: italic;
+}
+
+.glossary-callout-content {
+  margin-top: 0.5rem;
+}
+
 /* Phase I Polish Pack: Print Styles */
 @media print {
   /* Hide non-printable elements */

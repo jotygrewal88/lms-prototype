@@ -1,13 +1,15 @@
 // Epic 1D: Resource card with preview, inline editing, and actions
 "use client";
 
-import React, { useState } from "react";
-import { GripVertical, Trash2, Upload, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { GripVertical, Trash2, Upload, ChevronDown, ChevronUp, Library, AlertCircle } from "lucide-react";
 import { Resource } from "@/types";
 import ResourcePreview from "./ResourcePreview";
 import InlineEditable from "./InlineEditable";
 import Badge from "./Badge";
+import Button from "./Button";
 import { formatFileSize } from "@/lib/uploads";
+import { getNewerVersion, updateResource } from "@/lib/store";
 
 // Simple time ago formatter
 function timeAgo(dateString: string): string {
@@ -33,6 +35,7 @@ interface ResourceCardProps {
   isManager: boolean;
   isDragging?: boolean;
   dragHandleProps?: any;
+  onLibraryUpdate?: () => void;
 }
 
 export default function ResourceCard({
@@ -43,8 +46,35 @@ export default function ResourceCard({
   isManager,
   isDragging = false,
   dragHandleProps,
+  onLibraryUpdate,
 }: ResourceCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hasNewerVersion, setHasNewerVersion] = useState(false);
+  
+  useEffect(() => {
+    if (resource.libraryItemId) {
+      const newerVersion = getNewerVersion(resource.libraryItemId);
+      setHasNewerVersion(!!newerVersion);
+    } else {
+      setHasNewerVersion(false);
+    }
+  }, [resource.libraryItemId]);
+  
+  const handleUpdateToNewerVersion = () => {
+    if (!resource.libraryItemId) return;
+    
+    const newerVersion = getNewerVersion(resource.libraryItemId);
+    if (newerVersion) {
+      // Update resource to point to newer version
+      updateResource(resource.id, {
+        libraryItemId: newerVersion.id,
+        title: newerVersion.title,
+        url: newerVersion.url,
+        content: newerVersion.description,
+      });
+      onLibraryUpdate?.();
+    }
+  };
 
   const canReplace = !isManager && 
     onReplace && 
@@ -84,8 +114,31 @@ export default function ResourceCard({
                 className="font-medium text-gray-900 text-sm"
               />
             </div>
-            <Badge className="flex-shrink-0 text-xs capitalize">{resource.type}</Badge>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {resource.libraryItemId && (
+                <Badge className="text-xs bg-blue-100 text-blue-700 flex items-center gap-1">
+                  <Library className="w-3 h-3" />
+                  from Library
+                </Badge>
+              )}
+              <Badge className="text-xs capitalize">{resource.type}</Badge>
+            </div>
           </div>
+          
+          {/* Newer Version Warning */}
+          {hasNewerVersion && !isManager && (
+            <div className="flex items-center gap-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+              <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+              <span className="text-xs text-yellow-800 flex-1">Newer version available</span>
+              <Button
+                variant="secondary"
+                onClick={handleUpdateToNewerVersion}
+                className="text-xs py-1 px-2 h-auto"
+              >
+                Update
+              </Button>
+            </div>
+          )}
 
           {/* Metadata Row */}
           <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">

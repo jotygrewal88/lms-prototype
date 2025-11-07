@@ -196,3 +196,10 @@ Enhanced the Smart Compliance Coach with manager-targeted escalation insights fe
 
 Smart Coach v2.1 + Draft Manager Escalation implemented: risk/trends/what-ifs/explainable + prefilled compose. Build passing.
 
+
+
+
+
+
+
+

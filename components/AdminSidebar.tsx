@@ -15,7 +15,11 @@ import {
   Palette, 
   Globe, 
   CalendarClock,
-  TestTube
+  TestTube,
+  Paintbrush2,
+  Award,
+  BarChart3,
+  Library
 } from "lucide-react";
 import { getCurrentUser, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
@@ -23,7 +27,9 @@ import { NavItem } from "@/types";
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   "Dashboard": LayoutDashboard,
+  "Analytics": BarChart3,
   "Courses": BookOpen,
+  "Library": Library,
   "Trainings": GraduationCap,
   "Compliance": ClipboardList,
   "Notifications": Bell,
@@ -32,6 +38,8 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Brand": Palette,
   "Localization": Globe,
   "Reminders": CalendarClock,
+  "Style Guide": Paintbrush2,
+  "Certificates": Award,
   "Demo": TestTube,
 };
 

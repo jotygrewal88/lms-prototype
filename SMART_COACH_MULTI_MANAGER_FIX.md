@@ -257,3 +257,10 @@ User can now:
 5. Draft escalations to any manager directly from their insight card
 6. Switch scope to a specific site/dept to see fewer, more relevant insights
 
+
+
+
+
+
+
+

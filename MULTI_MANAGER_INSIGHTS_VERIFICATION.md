@@ -381,3 +381,10 @@ Potential future improvements:
 5. **Bulk actions**: Select multiple managers for bulk escalation
 6. **Export**: Download manager report as CSV/PDF
 
+
+
+
+
+
+
+

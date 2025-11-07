@@ -15,8 +15,15 @@ interface RouteGuardProps {
 
 export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
   const pathname = usePathname();
-  const [currentUser, setCurrentUser] = useState(getCurrentUser());
-  const [hasAccess, setHasAccess] = useState(true);
+  const initialUser = getCurrentUser();
+  
+  // Check initial access synchronously
+  const initialAccess = allowedRoles 
+    ? allowedRoles.includes(initialUser.role)
+    : canAccessRoute(initialUser.role, pathname);
+  
+  const [currentUser, setCurrentUser] = useState(initialUser);
+  const [hasAccess, setHasAccess] = useState(initialAccess);
 
   useEffect(() => {
     const user = getCurrentUser();

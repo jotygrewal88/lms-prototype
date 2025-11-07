@@ -6,7 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Save, Plus, Trash2, GripVertical, X, 
   FileText, Link as LinkIcon, Video, Image, FileImage,
-  Calendar, User, RotateCcw, Upload, Sparkles, Eye, Clock
+  Calendar, User, RotateCcw, Upload, Sparkles, Eye, Clock,
+  Copy, Edit2, History, Undo2, Redo2, ChevronDown
 } from "lucide-react";
 import { 
   DndContext, 
@@ -40,6 +41,7 @@ import PreviewSectionModal from "./_components/PreviewSectionModal";
 import ResourceEditorDrawer from "./_components/ResourceEditorDrawer";
 import LessonSummaryPanelStepper from "./_components/LessonSummaryPanelStepper";
 import LessonPreviewModalStepper from "./_components/LessonPreviewModalStepper";
+import QuizTab from "./_components/QuizTab";
 import { 
   getCourseById, 
   updateCourse, 
@@ -47,6 +49,8 @@ import {
   getResourcesByLessonId,
   getResourceById,
   getQuizByCourseId,
+  getQuizzesByCourseId,
+  getQuizzesByLessonId,
   getQuestionsByQuizId,
   getAssignmentsByCourseId,
   createLesson,
@@ -57,8 +61,11 @@ import {
   createResource,
   updateResource,
   deleteResource,
-  createAssignment,
-  deleteAssignment,
+  createCourseAssignment,
+  deleteCourseAssignment,
+  updateCourseAssignment,
+  resolveAssigneesForCourse,
+  formatAssignmentTargetSummary,
   recomputeProgressCourse,
   getUsers,
   getSites,
@@ -73,11 +80,44 @@ import {
   canUndo,
   canRedo,
   getLastUndoSummary,
-  getLastRedoSummary
+  getLastRedoSummary,
+  // Epic 1G.6: Quiz functions
+  upsertQuiz,
+  createEmptyQuizFor,
+  addQuestion,
+  updateQuestion,
+  deleteQuestion,
+  reorderQuestions,
+  updateQuiz,
+  // Epic 1G.4: Versioning functions for quiz generation
+  addVersionSnapshot,
+  addAuditEvent,
+  getEntitySnapshot,
+  pushUndo,
+  clearRedo,
+  // Epic 1G.7: Metadata & Style functions
+  applyCourseMetadata,
+  collectCourseHtml,
+  // Phase II — 1M.1: Skills functions
+  getSkills,
+  createSkill,
+  assignSkillsToCourse,
+  getSkillsByCourseId
 } from "@/lib/store";
+import { generateQuestionsFromScope, GenScope } from "@/lib/ai/quizGen";
+import EditQuestionModal from "@/components/quiz/EditQuestionModal";
+import PreviewQuizModal from "@/components/quiz/PreviewQuizModal";
+import AIQuizGeneratorModal from "@/components/quiz/AIQuizGeneratorModal"; // Phase II 1I.2: AI Quiz Generator
+import StandardsEditModal from "@/components/quiz/StandardsEditModal";
+import MetadataAIPanel from "./_components/MetadataAIPanel";
+import StyleAuditPanel from "./_components/StyleAuditPanel";
+import Toast from "@/components/Toast";
 import { getFileAccept, formatFileSize } from "@/lib/uploads";
-import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType } from "@/types";
+import { logChange } from "@/lib/changeLog"; // Phase II 1I.2: ChangeLog for AI generation
+import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType, Quiz, Question, QuestionType, CourseStandards, StyleAuditIssue } from "@/types";
 import HistoryDrawer from "@/components/history/HistoryDrawer";
+import CourseAssignmentModal from "@/components/admin/courses/CourseAssignmentModal";
+import AssignmentResolveModal from "@/components/admin/courses/AssignmentResolveModal";
 
 type TabType = "overview" | "lessons" | "quiz" | "settings" | "assignment";
 
@@ -111,6 +151,19 @@ export default function CourseEditPage() {
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [standards, setStandards] = useState<string[]>([]);
   const [standardInput, setStandardInput] = useState("");
+  // Epic 1G.7: Metadata fields
+  const [objectives, setObjectives] = useState<string[]>([]);
+  const [objectiveInput, setObjectiveInput] = useState("");
+  const [difficulty, setDifficulty] = useState<"beginner" | "intermediate" | "advanced" | undefined>();
+  const [readingLevel, setReadingLevel] = useState<"basic" | "standard" | "technical" | undefined>();
+  const [language, setLanguage] = useState<string>("en");
+
+  // Phase II — 1M.1: Skills state
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillSearchQuery, setSkillSearchQuery] = useState("");
+  const [isNewSkillModalOpen, setIsNewSkillModalOpen] = useState(false);
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillCategory, setNewSkillCategory] = useState("");
 
   // Lesson panel state (Epic 1E: Stepper-based)
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
@@ -134,12 +187,31 @@ export default function CourseEditPage() {
   const [replacingResourceId, setReplacingResourceId] = useState<string | null>(null);
 
   // Assignment tab state
-  const [assignTab, setAssignTab] = useState<"users" | "sites" | "depts">("users");
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [selectedRole, setSelectedRole] = useState<"LEARNER" | "MANAGER">("LEARNER");
-  const [selectedSiteId, setSelectedSiteId] = useState<string>("");
-  const [selectedDeptId, setSelectedDeptId] = useState<string>("");
-  const [assignmentDueDate, setAssignmentDueDate] = useState<string>("");
+  const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<CourseAssignment | null>(null);
+
+  // Epic 1G.6: Quiz tab state
+  const [quiz, setQuiz] = useState<Quiz | undefined>(undefined);
+  const [quizType, setQuizType] = useState<"course" | "lesson">("course"); // Whether we're editing course or lesson quiz
+  const [selectedLessonIdForQuiz, setSelectedLessonIdForQuiz] = useState<string | null>(null); // Selected lesson for lesson quiz
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [isEditQuestionModalOpen, setIsEditQuestionModalOpen] = useState(false);
+  const [isPreviewQuizOpen, setIsPreviewQuizOpen] = useState(false);
+  const [isAIQuizModalOpen, setIsAIQuizModalOpen] = useState(false); // Phase II 1I.2: AI Quiz Generator modal
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  
+  // Epic 1G.7: Metadata & Style state
+  const [isStandardsModalOpen, setIsStandardsModalOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genScope, setGenScope] = useState<GenScope["type"]>("course");
+  const [genScopeId, setGenScopeId] = useState<string>("");
+  const [genCount, setGenCount] = useState(6);
+  const [genTypes, setGenTypes] = useState<QuestionType[]>(["mcq", "true_false", "scenario"]);
+  const [genLanguage, setGenLanguage] = useState("en");
+  const [genDifficulties, setGenDifficulties] = useState<("easy" | "medium" | "hard")[]>(["easy", "medium", "hard"]);
+  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   // Course policy state
   const [policy, setPolicy] = useState<CoursePolicy>({
@@ -149,10 +221,15 @@ export default function CourseEditPage() {
     enableRetakes: true,
     lockNextUntilPrevious: true,
     showExplanations: true,
+    requiresManualCompletion: false,
     minVideoWatchPct: 80,
     minTimeOnLessonSec: 60,
     maxQuizAttempts: 3,
     retakeCooldownMin: 60,
+    // Phase II 1H.2d: New policy fields
+    requireQuizPassToCompleteLesson: false,
+    requireAllLessonsToCompleteCourse: true,
+    issueCertificateOnComplete: true,
   });
 
   useEffect(() => {
@@ -172,12 +249,42 @@ export default function CourseEditPage() {
         setEstimatedMinutes(loadedCourse.estimatedMinutes);
         setStatus(loadedCourse.status);
         setStandards(loadedCourse.standards || []);
+        // Epic 1G.7: Load metadata fields
+        if (loadedCourse.metadata) {
+          setObjectives(loadedCourse.metadata.objectives || []);
+          setDifficulty(loadedCourse.metadata.difficulty);
+          setReadingLevel(loadedCourse.metadata.readingLevel);
+          setLanguage(loadedCourse.metadata.language || "en");
+          // Also sync estimatedMinutes from metadata if present
+          if (loadedCourse.metadata.estimatedMinutes) {
+            setEstimatedMinutes(loadedCourse.metadata.estimatedMinutes);
+          }
+          // Sync tags from metadata if present
+          if (loadedCourse.metadata.tags && loadedCourse.metadata.tags.length > 0) {
+            setTags(loadedCourse.metadata.tags);
+          }
+        }
+        // Phase II — 1M.1: Load skills
+        setSelectedSkills(loadedCourse.skills || []);
         if (loadedCourse.policy) {
           setPolicy(loadedCourse.policy);
         }
 
         setLessons(getLessonsByCourseId(courseId));
         setAssignments(getAssignmentsByCourseId(courseId));
+        
+        // Epic 1G.6: Load quiz based on quizType (default to course quiz)
+        if (quizType === "course") {
+          const courseQuiz = getQuizByCourseId(courseId);
+          setQuiz(courseQuiz);
+          setGenScopeId(courseId);
+        } else if (selectedLessonIdForQuiz) {
+          const lessonQuizzes = getQuizzesByLessonId(selectedLessonIdForQuiz);
+          setQuiz(lessonQuizzes[0] || undefined);
+          setGenScopeId(selectedLessonIdForQuiz);
+        } else {
+          setGenScopeId(courseId);
+        }
       } catch (error) {
         console.error("Error loading course:", error);
         router.push("/admin/courses");
@@ -188,6 +295,32 @@ export default function CourseEditPage() {
     const unsubscribe = subscribe(loadData);
     return unsubscribe;
   }, [courseId, router]);
+
+  // Epic 1G.6: Update quiz when quizType or selectedLessonIdForQuiz changes
+  useEffect(() => {
+    if (quizType === "course") {
+      const courseQuiz = getQuizByCourseId(courseId);
+      setQuiz(courseQuiz);
+      setGenScopeId(courseId);
+      setGenScope("course");
+    } else if (selectedLessonIdForQuiz) {
+      const lessonQuizzes = getQuizzesByLessonId(selectedLessonIdForQuiz);
+      setQuiz(lessonQuizzes[0] || undefined);
+      setGenScopeId(selectedLessonIdForQuiz);
+      setGenScope("lesson");
+    }
+  }, [quizType, selectedLessonIdForQuiz, courseId]);
+
+  // Epic 1G.6: Update genScopeId when genScope changes
+  useEffect(() => {
+    if (genScope === "course") {
+      setGenScopeId(courseId);
+    } else if (genScope === "lesson" && activeLessonId) {
+      setGenScopeId(activeLessonId);
+    } else if (genScope === "section" && activeSectionId) {
+      setGenScopeId(activeSectionId);
+    }
+  }, [genScope, courseId, activeLessonId, activeSectionId]);
 
   // Update lesson resources when selectedLessonId changes
   useEffect(() => {
@@ -219,7 +352,18 @@ export default function CourseEditPage() {
       estimatedMinutes,
       status,
       standards,
+      skills: selectedSkills, // Phase II — 1M.1: Save skills
       policy,
+      // Epic 1G.7: Save metadata
+      metadata: {
+        objectives,
+        tags,
+        estimatedMinutes,
+        difficulty,
+        language,
+        readingLevel,
+        standards: course.metadata?.standards, // Preserve standards from metadata
+      },
     });
 
     setHasChanges(false);
@@ -249,6 +393,7 @@ export default function CourseEditPage() {
           enableRetakes: true,
           lockNextUntilPrevious: true,
           showExplanations: true,
+          requiresManualCompletion: false,
           minVideoWatchPct: 80,
           minTimeOnLessonSec: 60,
           maxQuizAttempts: 3,
@@ -283,6 +428,7 @@ export default function CourseEditPage() {
           enableRetakes: true,
           lockNextUntilPrevious: true,
           showExplanations: true,
+          requiresManualCompletion: false,
           minVideoWatchPct: 80,
           minTimeOnLessonSec: 60,
           maxQuizAttempts: 3,
@@ -326,6 +472,44 @@ export default function CourseEditPage() {
 
   const handleRemoveStandard = (standard: string) => {
     setStandards(standards.filter(s => s !== standard));
+    setHasChanges(true);
+  };
+
+  // Epic 1G.7: Objectives handlers
+  const handleAddObjective = () => {
+    if (objectiveInput.trim() && !objectives.includes(objectiveInput.trim())) {
+      setObjectives([...objectives, objectiveInput.trim()]);
+      setObjectiveInput("");
+      setHasChanges(true);
+    }
+  };
+
+  const handleRemoveObjective = (objective: string) => {
+    setObjectives(objectives.filter(o => o !== objective));
+    setHasChanges(true);
+  };
+
+  // Phase II — 1M.1: Skills handlers
+  const handleAddSkill = (skillId: string) => {
+    if (!selectedSkills.includes(skillId)) {
+      setSelectedSkills([...selectedSkills, skillId]);
+      setHasChanges(true);
+    }
+  };
+
+  const handleRemoveSkill = (skillId: string) => {
+    setSelectedSkills(selectedSkills.filter(id => id !== skillId));
+    setHasChanges(true);
+  };
+
+  const handleCreateSkill = () => {
+    if (!newSkillName.trim() || isManager) return;
+    
+    const newSkill = createSkill(newSkillName.trim(), newSkillCategory.trim() || undefined);
+    setSelectedSkills([...selectedSkills, newSkill.id]);
+    setNewSkillName("");
+    setNewSkillCategory("");
+    setIsNewSkillModalOpen(false);
     setHasChanges(true);
   };
 
@@ -421,6 +605,19 @@ export default function CourseEditPage() {
   const handleEditResource = (resource: Resource) => {
     setEditingResource(resource);
     setIsResourceDrawerOpen(true);
+  };
+
+  const handleUpdateResourceInline = (updatedResource: Resource) => {
+    // For inline editing (text sections with rich text editor)
+    updateResource(updatedResource.id, {
+      title: updatedResource.title,
+      content: updatedResource.content,
+      url: updatedResource.url,
+      durationSec: updatedResource.durationSec,
+      fileSize: updatedResource.fileSize,
+      fileName: updatedResource.fileName,
+      mimeType: updatedResource.mimeType,
+    });
   };
 
   const handlePreviewResource = (resource: Resource) => {
@@ -590,57 +787,152 @@ export default function CourseEditPage() {
 
   const handleCreateAssignment = () => {
     if (isManager) return;
+    setEditingAssignment(null);
+    setIsAssignmentModalOpen(true);
+  };
+
+  const handleEditAssignment = (assignment: CourseAssignment) => {
+    if (isManager) return;
+    setEditingAssignment(assignment);
+    setIsAssignmentModalOpen(true);
+  };
+
+  const handleAssignmentSaved = () => {
+    const updatedAssignments = getAssignmentsByCourseId(courseId);
+    setAssignments(updatedAssignments);
+  };
+
+  // Epic 1G.7: Metadata & Style handlers
+  const handleMetadataUpdated = () => {
+    const updatedCourse = getCourseById(courseId);
+    if (updatedCourse) {
+      setCourse(updatedCourse);
+      if (updatedCourse.metadata) {
+        if (updatedCourse.metadata.objectives) {
+          setObjectives(updatedCourse.metadata.objectives);
+        }
+        if (updatedCourse.metadata.tags) {
+          setTags(updatedCourse.metadata.tags);
+        }
+        if (updatedCourse.metadata.estimatedMinutes) {
+          setEstimatedMinutes(updatedCourse.metadata.estimatedMinutes);
+        }
+        if (updatedCourse.metadata.difficulty) {
+          setDifficulty(updatedCourse.metadata.difficulty);
+        }
+        if (updatedCourse.metadata.readingLevel) {
+          setReadingLevel(updatedCourse.metadata.readingLevel);
+        }
+        if (updatedCourse.metadata.language) {
+          setLanguage(updatedCourse.metadata.language);
+        }
+      }
+    }
+    setToast({ message: "Metadata updated", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleViewInContext = (lessonId: string, sectionId: string, text?: string) => {
+    setActiveTab("lessons");
+    setActiveLessonId(lessonId);
+    // TODO: Add highlighting logic when navigation enhancement is implemented
+    // For now, just navigate to the lesson
+  };
+
+  const handleQuickFix = async (issue: StyleAuditIssue) => {
+    if (!issue.suggestion || !issue.location) return;
     
-    let target: CourseAssignment["target"] | null = null;
-
-    switch (assignTab) {
-      case "users":
-        if (selectedUserIds.length === 0) {
-          alert("Please select at least one user");
-          return;
-        }
-        // Create one assignment per user
-        selectedUserIds.forEach(userId => {
-          createAssignment({
-            courseId,
-            target: { type: "user", userId },
-            dueAt: assignmentDueDate || undefined,
-          });
-        });
-        break;
-      case "sites":
-        if (!selectedSiteId) {
-          alert("Please select a site");
-          return;
-        }
-        target = { type: "site", siteId: selectedSiteId };
-        break;
-      case "depts":
-        if (!selectedDeptId) {
-          alert("Please select a department");
-          return;
-        }
-        target = { type: "dept", deptId: selectedDeptId };
-        break;
-    }
-
-    if (target) {
-      createAssignment({
-        courseId,
-        target,
-        dueAt: assignmentDueDate || undefined,
+    try {
+      const { lessonId, sectionId } = issue.location;
+      if (!lessonId || !sectionId) return;
+      
+      const resource = getResourceById(sectionId);
+      if (!resource || !resource.content) return;
+      
+      // Extract the term to replace from the issue message
+      const bannedMatch = issue.message.match(/Banned term "([^"]+)" found/);
+      const preferredMatch = issue.message.match(/Use preferred term "([^"]+)" instead of "([^"]+)"/);
+      
+      let oldText = '';
+      let newText = issue.suggestion.replace(/^Replace "([^"]+)" with (.+)$/, (_, old, newVal) => {
+        oldText = old;
+        return newVal;
       });
+      
+      if (preferredMatch) {
+        oldText = preferredMatch[2];
+        newText = preferredMatch[1];
+      } else if (bannedMatch) {
+        oldText = bannedMatch[1];
+        newText = issue.suggestion.replace(/^Replace "([^"]+)" with (.+)$/, '$2') || oldText.replace('kit', '');
+      }
+      
+      if (oldText && newText) {
+        const updatedContent = resource.content.replace(
+          new RegExp(`\\b${oldText}\\b`, 'gi'),
+          newText
+        );
+        
+        // Capture snapshot before update
+        const snapshot = addVersionSnapshot({
+          entityType: 'section',
+          entityId: sectionId,
+          parentCourseId: courseId,
+          createdBy: getCurrentUser().id,
+          cause: 'ai',
+          aiAction: 'style_fix',
+          summary: `Quick fix: ${oldText} → ${newText}`,
+          payload: getEntitySnapshot('section', sectionId),
+        });
+        
+        pushUndo('section', sectionId, snapshot.id);
+        clearRedo('section', sectionId);
+        
+        updateResource(sectionId, { content: updatedContent });
+        
+        addAuditEvent({
+          byUserId: getCurrentUser().id,
+          entityType: 'section',
+          entityId: sectionId,
+          parentCourseId: courseId,
+          action: 'style_fix',
+          meta: {
+            oldText,
+            newText,
+            issueKind: issue.kind,
+          },
+        });
+        
+        // Refresh course data
+        const updatedCourse = getCourseById(courseId);
+        if (updatedCourse) setCourse(updatedCourse);
+        
+        setToast({ message: `Replaced "${oldText}" with "${newText}"`, type: "success" });
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to apply quick fix:', error);
+      setToast({ message: "Failed to apply quick fix", type: "error" });
+      setTimeout(() => setToast(null), 3000);
     }
+  };
 
-    // Reset form
-    setSelectedUserIds([]);
-    setAssignmentDueDate("");
+  const handleSaveStandards = (standards: CourseStandards) => {
+    applyCourseMetadata(courseId, { standards });
+    const updatedCourse = getCourseById(courseId);
+    if (updatedCourse) setCourse(updatedCourse);
+    setToast({ message: "Standards updated", type: "success" });
+    setTimeout(() => setToast(null), 3000);
   };
 
   const handleDeleteAssignment = (assignmentId: string) => {
     if (isManager) return;
     if (confirm("Remove this assignment?")) {
-      deleteAssignment(assignmentId);
+      deleteCourseAssignment(assignmentId);
+      const updatedAssignments = getAssignmentsByCourseId(courseId);
+      setAssignments(updatedAssignments);
+      setToast({ message: "Assignment deleted", type: "success" });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -651,6 +943,251 @@ export default function CourseEditPage() {
       recomputeProgressCourse(user.id, courseId);
     });
     alert("Progress recomputed for all learners");
+  };
+
+  // Epic 1G.6: Quiz handlers
+  const handleGenerateQuestions = async () => {
+    if (isManager || !genScopeId) return;
+    
+    setIsGenerating(true);
+    try {
+      // Determine which quiz to use/create based on quizType
+      let currentQuiz = quiz;
+      if (!currentQuiz) {
+        if (quizType === "course") {
+          currentQuiz = createEmptyQuizFor(courseId);
+        } else if (selectedLessonIdForQuiz) {
+          currentQuiz = createEmptyQuizFor(courseId, selectedLessonIdForQuiz);
+        } else {
+          // Fallback: create course quiz
+          currentQuiz = createEmptyQuizFor(courseId);
+        }
+        setQuiz(currentQuiz);
+      }
+
+      const scope: GenScope = {
+        type: genScope,
+        id: genScopeId,
+        language: genLanguage,
+        count: genCount,
+        mix: genTypes,
+        difficulty: genDifficulties,
+      };
+
+      const generatedQuestions = await generateQuestionsFromScope(scope);
+      
+      // Add source metadata to questions
+      const questionsWithMeta = generatedQuestions.map(q => ({
+        ...q,
+        meta: {
+          ...q.meta,
+          source: { type: genScope, id: genScopeId },
+        },
+      }));
+      
+      if (replaceExisting) {
+        currentQuiz.questions = questionsWithMeta;
+      } else {
+        currentQuiz.questions = [...(currentQuiz.questions || []), ...questionsWithMeta];
+      }
+      
+      // Capture snapshot before update (for AI generation)
+      const entityType: VersionedEntityType = currentQuiz.lessonId ? 'lesson' : 'course';
+      const entityId = currentQuiz.lessonId || courseId;
+      const parentCourseId = currentQuiz.lessonId ? courseId : undefined;
+
+      // Use upsertQuiz with 'ai' cause to properly handle versioning
+      const updatedQuiz = { ...currentQuiz };
+      upsertQuiz(updatedQuiz, 'ai');
+      setQuiz(updatedQuiz);
+      
+      setToast({ message: `Generated ${questionsWithMeta.length} questions`, type: "success" });
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      console.error("Error generating questions:", error);
+      setToast({ message: "Failed to generate questions", type: "error" });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleQuizTypeChange = (newType: "course" | "lesson") => {
+    setQuizType(newType);
+    if (newType === "course") {
+      setSelectedLessonIdForQuiz(null);
+    } else if (lessons.length > 0 && !selectedLessonIdForQuiz) {
+      // Default to first lesson if none selected
+      setSelectedLessonIdForQuiz(lessons[0].id);
+    }
+  };
+
+  const handleCreateLessonQuiz = (lessonId: string) => {
+    setQuizType("lesson");
+    setSelectedLessonIdForQuiz(lessonId);
+    // Quiz will be loaded in useEffect
+  };
+
+  const handleCreateQuestion = () => {
+    // Ensure quiz exists first
+    if (!quiz) {
+      let newQuiz: Quiz;
+      if (quizType === "course") {
+        newQuiz = createEmptyQuizFor(courseId);
+      } else if (selectedLessonIdForQuiz) {
+        newQuiz = createEmptyQuizFor(courseId, selectedLessonIdForQuiz);
+      } else {
+        newQuiz = createEmptyQuizFor(courseId);
+      }
+      setQuiz(newQuiz);
+    }
+    setEditingQuestion(null); // null means creating new question
+    setIsEditQuestionModalOpen(true);
+  };
+
+  const handleEditQuestion = (question: Question) => {
+    setEditingQuestion(question);
+    setIsEditQuestionModalOpen(true);
+  };
+
+  const handleSaveQuestion = (updatedQuestion: Question) => {
+    const isNewQuestion = !quiz || !quiz.questions.find(q => q.id === updatedQuestion.id);
+    
+    if (!quiz) {
+      // Create quiz if it doesn't exist
+      const newQuiz = createEmptyQuizFor(courseId);
+      addQuestion(newQuiz.id, updatedQuestion);
+      // Refresh from store
+      const refreshedQuiz = getQuizByCourseId(courseId);
+      setQuiz(refreshedQuiz);
+    } else {
+      if (isNewQuestion) {
+        // New question
+        addQuestion(quiz.id, updatedQuestion);
+      } else {
+        // Update existing question
+        updateQuestion(quiz.id, updatedQuestion.id, updatedQuestion);
+      }
+      // Refresh from store
+      const refreshedQuiz = getQuizByCourseId(courseId);
+      setQuiz(refreshedQuiz);
+    }
+    setIsEditQuestionModalOpen(false);
+    setEditingQuestion(null);
+    setToast({ message: isNewQuestion ? "Question created" : "Question updated", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDeleteQuestion = (questionId: string) => {
+    if (!quiz || !confirm("Delete this question?")) return;
+    deleteQuestion(quiz.id, questionId);
+    // Refresh from store
+    const refreshedQuiz = getQuizByCourseId(courseId);
+    setQuiz(refreshedQuiz);
+    setToast({ message: "Question deleted", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDuplicateQuestion = (question: Question) => {
+    if (!quiz) return;
+    const duplicated = {
+      ...question,
+      id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      prompt: `${question.prompt} (Copy)`,
+    };
+    addQuestion(quiz.id, duplicated);
+    setQuiz({ ...quiz });
+    setToast({ message: "Question duplicated", type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleQuizDragEnd = (event: DragEndEvent) => {
+    if (!quiz) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = quiz.questions.findIndex(q => q.id === active.id);
+    const newIndex = quiz.questions.findIndex(q => q.id === over.id);
+    if (oldIndex !== -1 && newIndex !== -1) {
+      reorderQuestions(quiz.id, oldIndex, newIndex);
+      setQuiz({ ...quiz });
+    }
+  };
+
+  const handleUpdateQuizConfig = (updates: Partial<Quiz["config"]>) => {
+    if (!quiz) return;
+    const updatedQuiz = {
+      ...quiz,
+      config: { ...quiz.config, ...updates },
+    };
+    upsertQuiz(updatedQuiz);
+    setQuiz(updatedQuiz);
+  };
+
+  // Phase II 1I.2: Handle AI-generated questions
+  const handleAIGeneratedQuestions = (questions: Question[]) => {
+    // Ensure quiz exists first
+    let currentQuiz = quiz;
+    if (!currentQuiz) {
+      if (quizType === "course") {
+        currentQuiz = createEmptyQuizFor(courseId);
+      } else if (selectedLessonIdForQuiz) {
+        currentQuiz = createEmptyQuizFor(courseId, selectedLessonIdForQuiz);
+      } else {
+        currentQuiz = createEmptyQuizFor(courseId);
+      }
+      setQuiz(currentQuiz);
+    }
+
+    // Add each question to the quiz
+    questions.forEach((question) => {
+      addQuestion(currentQuiz!.id, question);
+    });
+
+    // Refresh from store
+    const refreshedQuiz = getQuizByCourseId(courseId);
+    if (refreshedQuiz) {
+      setQuiz(refreshedQuiz);
+    }
+
+    // Log change for AI generation
+    logChange(
+      currentQuiz.id,
+      `Generated ${questions.length} AI quiz questions`,
+      {
+        action: 'ai_quiz_generate',
+        questionCount: questions.length,
+        sourceType: questions[0]?.meta?.source === 'AI' ? 'AI' : 'Manual',
+        difficulty: questions[0]?.meta?.difficulty,
+        questionTypes: questions.map(q => q.type),
+      },
+      'QuizAttempt'
+    );
+
+    setToast({ message: `Added ${questions.length} AI-generated question(s) to quiz`, type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleQuizUndo = () => {
+    if (performUndo('course', courseId)) {
+      const refreshedCourse = getCourseById(courseId);
+      if (refreshedCourse) {
+        setCourse(refreshedCourse);
+        const refreshedQuiz = getQuizByCourseId(courseId);
+        setQuiz(refreshedQuiz);
+      }
+    }
+  };
+
+  const handleQuizRedo = () => {
+    if (performRedo('course', courseId)) {
+      const refreshedCourse = getCourseById(courseId);
+      if (refreshedCourse) {
+        setCourse(refreshedCourse);
+        const refreshedQuiz = getQuizByCourseId(courseId);
+        setQuiz(refreshedQuiz);
+      }
+    }
   };
 
   const getResourceIcon = (type: ResourceType) => {
@@ -665,20 +1202,7 @@ export default function CourseEditPage() {
   };
 
   const getAssignmentLabel = (assignment: CourseAssignment): string => {
-    const { target } = assignment;
-    switch (target.type) {
-      case "user":
-        const user = getUsers().find(u => u.id === target.userId);
-        return user ? `${user.firstName} ${user.lastName}` : target.userId;
-      case "role":
-        return `All ${target.role}s`;
-      case "site":
-        const site = getSites().find(s => s.id === target.siteId);
-        return site ? `Site: ${site.name}` : target.siteId;
-      case "dept":
-        const dept = getDepartments().find(d => d.id === target.deptId);
-        return dept ? `Dept: ${dept.name}` : target.deptId;
-    }
+    return formatAssignmentTargetSummary(assignment.target);
   };
 
   const formatDate = (dateString: string) => {
@@ -873,9 +1397,8 @@ export default function CourseEditPage() {
     );
   }
 
-  const quiz = getQuizByCourseId(courseId);
-  const questions = quiz ? getQuestionsByQuizId(quiz.id) : [];
-  const ownerUser = getUsers().find(u => u.id === course.ownerUserId);
+  // Find owner user for display
+  const ownerUser = course ? getUsers().find(u => u.id === course.ownerUserId) : undefined;
 
   return (
     <RouteGuard allowedRoles={["ADMIN", "MANAGER"]}>
@@ -1004,50 +1527,65 @@ export default function CourseEditPage() {
           {/* Tab Content */}
           <div>
             {activeTab === "overview" && (
-              <div className="space-y-6 max-w-5xl">
+              <div className="flex gap-6">
+                {/* Main Content */}
+                <div className="flex-1 space-y-6 max-w-5xl">
                 {/* Course Header Card */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                  <div className="flex items-start justify-between gap-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-4">
-                        <h2 className="text-2xl font-bold text-gray-900">{title || "Untitled Course"}</h2>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          status === "published" 
-                            ? "bg-emerald-50 text-emerald-700" 
-                            : "bg-gray-100 text-gray-600"
-                        }`}>
-                          {status === "published" ? "Published" : "Draft"}
-                        </span>
+                <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden">
+                  <div className="p-8">
+                    <div className="flex items-start justify-between gap-6">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="p-2 bg-indigo-100 rounded-lg">
+                            <FileText className="w-6 h-6 text-indigo-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h2 className="text-3xl font-bold text-gray-900 mb-2">{title || "Untitled Course"}</h2>
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                              status === "published" 
+                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
+                                : "bg-gray-100 text-gray-600 border border-gray-200"
+                            }`}>
+                              {status === "published" ? "✓ Published" : "📝 Draft"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600 mt-4">
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
+                            <User className="w-4 h-4 text-indigo-600" />
+                            <span className="font-medium">{ownerUser ? `${ownerUser.firstName} ${ownerUser.lastName}` : "Unknown"}</span>
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
+                            <Calendar className="w-4 h-4 text-indigo-600" />
+                            <span>Created {formatDate(course.createdAt)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
+                            <Calendar className="w-4 h-4 text-indigo-600" />
+                            <span>Updated {formatDate(course.updatedAt)}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1.5">
-                          <User className="w-4 h-4" />
-                          <span>Owner: {ownerUser?.name || "Unknown"}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4" />
-                          <span>Created {formatDate(course.createdAt)}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4" />
-                          <span>Updated {formatDate(course.updatedAt)}</span>
-                        </div>
+                      {/* Thumbnail placeholder */}
+                      <div className="w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center text-indigo-400 border-2 border-indigo-200 shadow-md">
+                        <FileText className="w-16 h-16" />
                       </div>
-                    </div>
-                    {/* Thumbnail placeholder */}
-                    <div className="w-32 h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
-                      <FileText className="w-12 h-12" />
                     </div>
                   </div>
                 </div>
 
                 {/* Title & Description */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Course Details</h3>
-                  <div className="space-y-6">
+                <div className="bg-white rounded-2xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+                      Course Details
+                    </h3>
+                  </div>
+                  <div className="p-6 space-y-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Course Title *
+                      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span>Course Title</span>
+                        <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1058,14 +1596,14 @@ export default function CourseEditPage() {
                         }}
                         disabled={isManager}
                         placeholder="Enter course title"
-                        className={`w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${
-                          isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                        className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-base ${
+                          isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
                         }`}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         Description
                       </label>
                       <textarea
@@ -1075,20 +1613,169 @@ export default function CourseEditPage() {
                           setHasChanges(true);
                         }}
                         disabled={isManager}
-                        rows={4}
+                        rows={5}
                         placeholder="Describe what learners will gain from this course..."
-                        className={`w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none ${
-                          isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                        className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-base ${
+                          isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
                         }`}
                       />
                     </div>
                   </div>
                 </div>
 
+                {/* Course Objectives */}
+                <div className="bg-white rounded-2xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+                      Learning Objectives
+                    </h3>
+                  </div>
+                  <div className="p-6">
+                    {!isManager && (
+                      <div className="flex gap-2 mb-4">
+                        <input
+                          type="text"
+                          value={objectiveInput}
+                          onChange={(e) => setObjectiveInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+                          placeholder="Add a learning objective..."
+                          className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300"
+                        />
+                        <Button variant="primary" onClick={handleAddObjective} disabled={!objectiveInput.trim()} className="px-6">
+                          Add
+                        </Button>
+                      </div>
+                    )}
+                    {objectives.length === 0 ? (
+                      <p className="text-sm text-gray-400 italic">No objectives yet. Add learning objectives to define what learners will achieve.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {objectives.map((objective, idx) => (
+                          <li key={idx} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <span className="text-indigo-600 font-bold mt-0.5">{idx + 1}.</span>
+                            <span className="flex-1 text-sm text-gray-700">{objective}</span>
+                            {!isManager && (
+                              <button
+                                onClick={() => handleRemoveObjective(objective)}
+                                className="text-gray-400 hover:text-red-600 transition-colors p-1"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                {/* Phase II — 1M.1: Skills Section */}
+                <div className="bg-white rounded-2xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+                      Skills
+                    </h3>
+                  </div>
+                  <div className="p-6">
+                    {!isManager && (
+                      <div className="mb-4 space-y-3">
+                        {/* Search and Select */}
+                        <div className="flex gap-2">
+                          <div className="flex-1 relative">
+                            <input
+                              type="text"
+                              value={skillSearchQuery}
+                              onChange={(e) => setSkillSearchQuery(e.target.value)}
+                              placeholder="Search skills..."
+                              className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300"
+                            />
+                            {skillSearchQuery && (
+                              <div className="absolute z-10 mt-1 w-full bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                {getSkills()
+                                  .filter(skill => 
+                                    skill.name.toLowerCase().includes(skillSearchQuery.toLowerCase()) &&
+                                    !selectedSkills.includes(skill.id)
+                                  )
+                                  .slice(0, 10)
+                                  .map(skill => (
+                                    <button
+                                      key={skill.id}
+                                      onClick={() => {
+                                        handleAddSkill(skill.id);
+                                        setSkillSearchQuery("");
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 flex items-center justify-between"
+                                    >
+                                      <span>{skill.name}</span>
+                                      {skill.category && (
+                                        <span className="text-xs text-gray-500">({skill.category})</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                {getSkills().filter(skill => 
+                                  skill.name.toLowerCase().includes(skillSearchQuery.toLowerCase()) &&
+                                  !selectedSkills.includes(skill.id)
+                                ).length === 0 && (
+                                  <div className="px-4 py-2 text-sm text-gray-500">
+                                    No matching skills found
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="primary"
+                            onClick={() => setIsNewSkillModalOpen(true)}
+                            className="px-6"
+                          >
+                            + New Skill
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Selected Skills Chips */}
+                    {selectedSkills.length === 0 ? (
+                      <p className="text-sm text-gray-400 italic">
+                        {isManager ? "No skills tagged yet." : "No skills tagged yet. Add skills to indicate what learners will earn."}
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedSkills.map(skillId => {
+                          const skill = getSkills().find(s => s.id === skillId);
+                          if (!skill) return null;
+                          return (
+                            <div
+                              key={skillId}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-medium text-indigo-700"
+                            >
+                              <span>{skill.name}</span>
+                              {skill.category && (
+                                <span className="text-xs text-indigo-500">({skill.category})</span>
+                              )}
+                              {!isManager && (
+                                <button
+                                  onClick={() => handleRemoveSkill(skillId)}
+                                  className="text-indigo-400 hover:text-indigo-600 transition-colors p-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Metadata Grid */}
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-indigo-400 rounded-full"></span>
                       Category
                     </label>
                     <input
@@ -1100,34 +1787,39 @@ export default function CourseEditPage() {
                       }}
                       disabled={isManager}
                       placeholder="e.g., Safety, Equipment"
-                      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                      className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
                       }`}
                     />
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-                      Duration (minutes)
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-purple-400 rounded-full"></span>
+                      Duration
                     </label>
-                    <input
-                      type="number"
-                      value={estimatedMinutes || ""}
-                      onChange={(e) => {
-                        setEstimatedMinutes(e.target.value ? parseInt(e.target.value) : undefined);
-                        setHasChanges(true);
-                      }}
-                      disabled={isManager}
-                      min="0"
-                      placeholder="e.g., 30"
-                      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                      }`}
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={estimatedMinutes || ""}
+                        onChange={(e) => {
+                          setEstimatedMinutes(e.target.value ? parseInt(e.target.value) : undefined);
+                          setHasChanges(true);
+                        }}
+                        disabled={isManager}
+                        min="0"
+                        placeholder="e.g., 30"
+                        className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                          isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
+                        }`}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-medium">min</span>
+                    </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
                       Status
                     </label>
                     <select
@@ -1137,81 +1829,162 @@ export default function CourseEditPage() {
                         setHasChanges(true);
                       }}
                       disabled={isManager}
-                      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                      className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
                       }`}
                     >
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
+                      <option value="draft">📝 Draft</option>
+                      <option value="published">✓ Published</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Additional Metadata Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-orange-400 rounded-full"></span>
+                      Difficulty
+                    </label>
+                    <select
+                      value={difficulty || ""}
+                      onChange={(e) => {
+                        setDifficulty(e.target.value ? e.target.value as "beginner" | "intermediate" | "advanced" : undefined);
+                        setHasChanges(true);
+                      }}
+                      disabled={isManager}
+                      className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select difficulty...</option>
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-blue-400 rounded-full"></span>
+                      Reading Level
+                    </label>
+                    <select
+                      value={readingLevel || ""}
+                      onChange={(e) => {
+                        setReadingLevel(e.target.value ? e.target.value as "basic" | "standard" | "technical" : undefined);
+                        setHasChanges(true);
+                      }}
+                      disabled={isManager}
+                      className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select reading level...</option>
+                      <option value="basic">Basic</option>
+                      <option value="standard">Standard</option>
+                      <option value="technical">Technical</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 p-5 hover:shadow-lg transition-shadow">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="w-1 h-4 bg-cyan-400 rounded-full"></span>
+                      Language
+                    </label>
+                    <select
+                      value={language}
+                      onChange={(e) => {
+                        setLanguage(e.target.value);
+                        setHasChanges(true);
+                      }}
+                      disabled={isManager}
+                      className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      <option value="en">English</option>
+                      <option value="es">Spanish</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Tags & Standards */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Tags</h3>
-                    {!isManager && (
-                      <div className="flex gap-2 mb-4">
-                        <input
-                          type="text"
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
-                          placeholder="Add a tag..."
-                          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
-                        />
-                        <Button variant="secondary" onClick={handleAddTag} disabled={!tagInput.trim()}>
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {tags.length === 0 ? (
-                        <p className="text-sm text-gray-400">No tags yet</p>
-                      ) : (
-                        tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-indigo-50 text-indigo-700 font-medium"
-                          >
-                            {tag}
-                            {!isManager && (
-                              <button onClick={() => handleRemoveTag(tag)} className="hover:text-indigo-900 transition-colors">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </span>
-                        ))
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <span className="text-indigo-600">🏷️</span>
+                        Tags
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      {!isManager && (
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            type="text"
+                            value={tagInput}
+                            onChange={(e) => setTagInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
+                            placeholder="Add a tag..."
+                            className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300"
+                          />
+                          <Button variant="primary" onClick={handleAddTag} disabled={!tagInput.trim()} className="px-6">
+                            Add
+                          </Button>
+                        </div>
                       )}
+                      <div className="flex flex-wrap gap-2">
+                        {tags.length === 0 ? (
+                          <p className="text-sm text-gray-400 italic">No tags yet. Add tags to help organize and find your course.</p>
+                        ) : (
+                          tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-700 font-semibold border border-indigo-200 hover:bg-indigo-200 transition-colors"
+                            >
+                              {tag}
+                              {!isManager && (
+                                <button onClick={() => handleRemoveTag(tag)} className="hover:text-indigo-900 transition-colors">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </span>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Compliance Standards</h3>
-                    {!isManager && (
-                      <div className="flex gap-2 mb-4">
-                        <input
-                          type="text"
-                          value={standardInput}
-                          onChange={(e) => setStandardInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddStandard())}
-                          placeholder="e.g., OSHA 1910.1200"
-                          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
-                        />
-                        <Button variant="secondary" onClick={handleAddStandard} disabled={!standardInput.trim()}>
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {standards.length === 0 ? (
-                        <p className="text-sm text-gray-400">No standards yet</p>
-                      ) : (
-                        standards.map((standard) => (
+                  <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <span className="text-emerald-600">📋</span>
+                        Compliance Standards
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      {!isManager && (
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            type="text"
+                            value={standardInput}
+                            onChange={(e) => setStandardInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddStandard())}
+                            placeholder="e.g., OSHA 1910.1200"
+                            className="flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-sm font-medium hover:border-gray-300"
+                          />
+                          <Button variant="primary" onClick={handleAddStandard} disabled={!standardInput.trim()} className="px-6 bg-emerald-600 hover:bg-emerald-700">
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {/* Legacy standards (simple string array) */}
+                        {standards.map((standard) => (
                           <span
                             key={standard}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-emerald-50 text-emerald-700 font-medium"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-emerald-100 text-emerald-700 font-semibold border border-emerald-200 hover:bg-emerald-200 transition-colors"
                           >
                             {standard}
                             {!isManager && (
@@ -1220,18 +1993,107 @@ export default function CourseEditPage() {
                               </button>
                             )}
                           </span>
-                        ))
+                        ))}
+                        {/* New metadata standards */}
+                        {course?.metadata?.standards && (
+                          <>
+                            {course.metadata.standards.osha?.map((code) => (
+                              <button
+                                key={`osha-${code}`}
+                                onClick={() => !isManager && setIsStandardsModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-red-100 text-red-700 font-semibold border border-red-200 hover:bg-red-200 transition-colors cursor-pointer"
+                              >
+                                OSHA {code}
+                              </button>
+                            ))}
+                            {course.metadata.standards.msha?.map((code) => (
+                              <button
+                                key={`msha-${code}`}
+                                onClick={() => !isManager && setIsStandardsModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-yellow-100 text-yellow-700 font-semibold border border-yellow-200 hover:bg-yellow-200 transition-colors cursor-pointer"
+                              >
+                                MSHA {code}
+                              </button>
+                            ))}
+                            {course.metadata.standards.epa?.map((code) => (
+                              <button
+                                key={`epa-${code}`}
+                                onClick={() => !isManager && setIsStandardsModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700 font-semibold border border-green-200 hover:bg-green-200 transition-colors cursor-pointer"
+                              >
+                                EPA {code}
+                              </button>
+                            ))}
+                            {course.metadata.standards.other?.flatMap(standard => 
+                              standard.codes.map(code => (
+                                <button
+                                  key={`other-${standard.label}-${code}`}
+                                  onClick={() => !isManager && setIsStandardsModalOpen(true)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 font-semibold border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer"
+                                >
+                                  {standard.label} {code}
+                                </button>
+                              ))
+                            )}
+                          </>
+                        )}
+                        {standards.length === 0 && !course?.metadata?.standards && (
+                          <p className="text-sm text-gray-400 italic">No standards yet. Add compliance standards this course covers.</p>
+                        )}
+                      </div>
+                      {!isManager && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => setIsStandardsModalOpen(true)}
+                          className="w-full mt-2"
+                        >
+                          <Edit2 className="w-4 h-4 mr-2" />
+                          Manage Standards
+                        </Button>
                       )}
                     </div>
+                  </div>
+                </div>
+                </div>
+
+                {/* Right Sidebar */}
+                <div className="w-80 flex-shrink-0">
+                  <div className="sticky top-6 space-y-6">
+                    <MetadataAIPanel
+                      courseId={courseId}
+                      currentMetadata={course?.metadata}
+                      isManager={isManager}
+                      onMetadataUpdated={handleMetadataUpdated}
+                    />
+                    <StyleAuditPanel
+                      courseId={courseId}
+                      isManager={isManager}
+                      onViewInContext={handleViewInContext}
+                      onQuickFix={handleQuickFix}
+                    />
                   </div>
                 </div>
               </div>
             )}
 
             {activeTab === "lessons" && (
-              <div className="flex flex-col min-h-screen">
+              <div className="flex flex-col min-h-screen bg-gray-50">
+                {/* Epic 1G.5: Manager Read-Only Banner */}
+                {isManager && (
+                  <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border-b-2 border-amber-200">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 rounded-lg">
+                        <span className="text-xl">📖</span>
+                      </div>
+                      <p className="text-sm text-amber-900 font-semibold">
+                        View-only (Manager) — You can view lesson content but cannot edit or use AI tools.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Stepper - Sticky Top */}
-                <div className="sticky top-0 z-10 bg-white border-b">
+                <div className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 shadow-sm">
                   <LessonStepper
                     courseId={courseId}
                     lessons={lessons}
@@ -1258,6 +2120,7 @@ export default function CourseEditPage() {
                         onMoveDown={handleMoveLessonDown}
                         onAddResource={handleAddResource}
                         onEditResource={handleEditResource}
+                        onUpdateResource={handleUpdateResourceInline}
                         onPreviewResource={handlePreviewResource}
                         onDeleteResource={handleDeleteResource}
                         onReorderResources={handleReorderResources}
@@ -1276,8 +2139,16 @@ export default function CourseEditPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-96 text-gray-500">
-                    No lessons yet. Click "Add Lesson" to get started.
+                  <div className="flex flex-col items-center justify-center h-96 text-gray-500 bg-white rounded-2xl mx-6 my-6 border-2 border-dashed border-gray-200">
+                    <div className="text-6xl mb-4">📚</div>
+                    <h3 className="text-xl font-bold text-gray-700 mb-2">No lesson selected</h3>
+                    <p className="text-sm text-gray-500 mb-6">Select a lesson from above or create a new one to get started</p>
+                    {!isManager && (
+                      <Button variant="primary" onClick={handleAddLesson} className="mt-2">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Your First Lesson
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -1312,442 +2183,452 @@ export default function CourseEditPage() {
             )}
 
             {activeTab === "quiz" && (
-              <div>
-                {quiz ? (
-                  <div className="flex gap-6">
-                    {/* Main Questions Area */}
-                    <div className="flex-1">
-                      <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Quiz Questions</h2>
-                        <p className="text-sm text-gray-600">Review and manage questions for this course quiz</p>
-                      </div>
-
-                      {questions.length === 0 ? (
-                        <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-12 text-center">
-                          <div className="mb-4 text-gray-400">
-                            <FileText className="w-16 h-16 mx-auto mb-3" />
-                          </div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-2">No questions yet</h3>
-                          <p className="text-sm text-gray-500 mb-6">
-                            Questions will be managed in a future epic
-                          </p>
-                          {!isManager && (
-                            <Button variant="primary" disabled>
-                              <Plus className="w-4 h-4 mr-2" />
-                              Add Question (Coming Soon)
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {questions.map((question, index) => {
-                            // Get type chip styling
-                            const getTypeChip = (type: string) => {
-                              switch (type) {
-                                case 'multiple_choice':
-                                  return { bg: 'bg-indigo-50', text: 'text-indigo-700', label: 'Multiple Choice', icon: '⊙' };
-                                case 'true_false':
-                                  return { bg: 'bg-purple-50', text: 'text-purple-700', label: 'True/False', icon: '✓✗' };
-                                case 'short_answer':
-                                  return { bg: 'bg-sky-50', text: 'text-sky-700', label: 'Short Answer', icon: '✎' };
-                                default:
-                                  return { bg: 'bg-gray-50', text: 'text-gray-700', label: type, icon: '?' };
-                              }
-                            };
-
-                            const typeChip = getTypeChip(question.type);
-
-                            return (
-                              <div 
-                                key={question.id} 
-                                className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 p-6 animate-in fade-in slide-in-from-bottom-2"
-                              >
-                                <div className="flex items-start gap-4">
-                                  {/* Question Number Badge */}
-                                  <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                    <span className="text-lg font-bold text-indigo-700">{index + 1}</span>
-                                  </div>
-                                  
-                                  <div className="flex-1 min-w-0">
-                                    {/* Question Header */}
-                                    <div className="flex items-start justify-between gap-4 mb-3">
-                                      <p className="text-lg font-semibold text-gray-900 flex-1">{question.prompt}</p>
-                                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${typeChip.bg} ${typeChip.text} flex-shrink-0`}>
-                                        <span>{typeChip.icon}</span>
-                                        {typeChip.label}
-                                      </span>
-                                    </div>
-
-                                    {/* Answer Options */}
-                                    <div className="space-y-2 mb-3">
-                                      {question.options.map((option, optIdx) => (
-                                        <div
-                                          key={option.id}
-                                          className={`flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg transition-colors ${
-                                            option.isCorrect 
-                                              ? "bg-emerald-50 border border-emerald-200 text-emerald-900 font-medium" 
-                                              : "bg-gray-50 border border-gray-200 text-gray-700"
-                                          }`}
-                                        >
-                                          <span className="font-semibold text-gray-500 w-6">{String.fromCharCode(65 + optIdx)}.</span>
-                                          <span className="flex-1">{option.label}</span>
-                                          {option.isCorrect && (
-                                            <span className="text-emerald-600 font-bold">✓</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-
-                                    {/* Explanation */}
-                                    {question.explanation && (
-                                      <div className="p-3 bg-sky-50 border border-sky-100 rounded-lg">
-                                        <p className="text-xs font-medium text-sky-900 mb-1">Explanation</p>
-                                        <p className="text-sm text-sky-800">{question.explanation}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {/* Add Question CTA Card */}
-                          {!isManager && (
-                            <button
-                              disabled
-                              className="w-full bg-white rounded-xl border-2 border-dashed border-gray-300 p-8 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all duration-200 opacity-50 cursor-not-allowed"
-                            >
-                              <Plus className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                              <p className="text-sm font-medium text-gray-600">Add Another Question (Coming Soon)</p>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Sidebar - Quiz Summary */}
-                    <div className="w-80 flex-shrink-0">
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sticky top-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quiz Configuration</h3>
-                        
-                        <div className="space-y-4">
-                          {/* Total Questions */}
-                          <div className="p-4 bg-indigo-50 rounded-lg">
-                            <div className="text-xs font-medium text-indigo-600 uppercase tracking-wide mb-1">Total Questions</div>
-                            <div className="text-3xl font-bold text-indigo-900">{questions.length}</div>
-                          </div>
-
-                          {/* Passing Score */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                              Passing Score
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={quiz.passingScorePct}
-                                onChange={(e) => {
-                                  if (!isManager) {
-                                    // Would need updateQuiz function here
-                                  }
-                                }}
-                                disabled={isManager}
-                                min="0"
-                                max="100"
-                                className={`flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                                  isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                                }`}
-                              />
-                              <span className="text-xl font-bold text-gray-900">%</span>
-                            </div>
-                          </div>
-
-                          {/* Max Attempts */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                              Max Attempts
-                            </label>
-                            <input
-                              type="number"
-                              value={quiz.maxAttempts}
-                              onChange={(e) => {
-                                if (!isManager) {
-                                  // Would need updateQuiz function here
-                                }
-                              }}
-                              disabled={isManager}
-                              min="1"
-                              className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                                isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                              }`}
-                            />
-                          </div>
-
-                          {/* Question Types Breakdown */}
-                          {questions.length > 0 && (
-                            <div className="pt-4 border-t border-gray-200">
-                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Question Types</div>
-                              <div className="space-y-2">
-                                {Object.entries(
-                                  questions.reduce((acc, q) => {
-                                    acc[q.type] = (acc[q.type] || 0) + 1;
-                                    return acc;
-                                  }, {} as Record<string, number>)
-                                ).map(([type, count]) => (
-                                  <div key={type} className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-600 capitalize">{type.replace('_', ' ')}</span>
-                                    <span className="font-semibold text-gray-900">{count}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center max-w-2xl mx-auto">
-                    <div className="text-gray-400 mb-4">
-                      <FileText className="w-16 h-16 mx-auto mb-3" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No quiz configured</h3>
-                    <p className="text-gray-500 mb-6">Quiz creation will be available in Epic 3</p>
-                    {!isManager && (
-                      <Button variant="primary" disabled>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Quiz (Coming Soon)
-                      </Button>
-                    )}
-                  </div>
+              <>
+                <QuizTab
+                  quiz={quiz}
+                  courseId={courseId}
+                  activeLessonId={activeLessonId}
+                  lessons={lessons}
+                  isManager={isManager}
+                  quizType={quizType}
+                  selectedLessonIdForQuiz={selectedLessonIdForQuiz}
+                  onQuizTypeChange={handleQuizTypeChange}
+                  onSelectLessonForQuiz={setSelectedLessonIdForQuiz}
+                  onCreateLessonQuiz={handleCreateLessonQuiz}
+                  onGenerate={handleGenerateQuestions}
+                  onCreateQuestion={handleCreateQuestion}
+                  onEditQuestion={handleEditQuestion}
+                  onDeleteQuestion={handleDeleteQuestion}
+                  onDuplicateQuestion={handleDuplicateQuestion}
+                  onDragEnd={handleQuizDragEnd}
+                  onUpdateConfig={handleUpdateQuizConfig}
+                  onPreview={() => setIsPreviewQuizOpen(true)}
+                  onUndo={handleQuizUndo}
+                  onRedo={handleQuizRedo}
+                  onHistory={() => {
+                    setHistoryEntity({ type: 'course', id: courseId });
+                    setIsHistoryOpen(true);
+                  }}
+                  canUndo={canUndo('course', courseId)}
+                  canRedo={canRedo('course', courseId)}
+                  genScope={genScope}
+                  setGenScope={setGenScope}
+                  genScopeId={genScopeId}
+                  setGenScopeId={setGenScopeId}
+                  genCount={genCount}
+                  setGenCount={setGenCount}
+                  genTypes={genTypes}
+                  setGenTypes={setGenTypes}
+                  genLanguage={genLanguage}
+                  setGenLanguage={setGenLanguage}
+                  genDifficulties={genDifficulties}
+                  setGenDifficulties={setGenDifficulties}
+                  replaceExisting={replaceExisting}
+                  setReplaceExisting={setReplaceExisting}
+                  isGenerating={isGenerating}
+                  onOpenAIGenerator={() => setIsAIQuizModalOpen(true)} // Phase II 1I.2: Open AI modal
+                />
+                {toast && (
+                  <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                  />
                 )}
-              </div>
+                <EditQuestionModal
+                  isOpen={isEditQuestionModalOpen}
+                  onClose={() => {
+                    setIsEditQuestionModalOpen(false);
+                    setEditingQuestion(null);
+                  }}
+                  question={editingQuestion}
+                  onSave={handleSaveQuestion}
+                  onDelete={handleDeleteQuestion}
+                  isReadOnly={isManager}
+                />
+                {quiz && (
+                  <PreviewQuizModal
+                    isOpen={isPreviewQuizOpen}
+                    onClose={() => setIsPreviewQuizOpen(false)}
+                    quiz={quiz}
+                  />
+                )}
+                {/* Phase II 1I.2: AI Quiz Generator Modal */}
+                <AIQuizGeneratorModal
+                  isOpen={isAIQuizModalOpen}
+                  onClose={() => setIsAIQuizModalOpen(false)}
+                  courseId={courseId}
+                  lessonId={activeLessonId}
+                  onQuestionsGenerated={handleAIGeneratedQuestions}
+                  onError={(message) => {
+                    setToast({ message, type: "error" });
+                    setTimeout(() => setToast(null), 3000);
+                  }}
+                />
+              </>
             )}
 
             {activeTab === "settings" && (
               <div className="max-w-5xl space-y-6">
                 {/* Header */}
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Course Policy Settings</h2>
-                  <div className="flex items-start gap-2 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
-                    <svg className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                    <p className="text-sm text-indigo-800">
-                      These settings control how learners progress through the course. Changes are enforced in the course player.
-                    </p>
+                <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 rounded-2xl shadow-lg border-2 border-indigo-100 p-6 overflow-hidden">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-indigo-100 rounded-xl">
+                      <svg className="w-6 h-6 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-3xl font-bold text-gray-900 mb-2">Course Policy Settings</h2>
+                      <p className="text-sm text-gray-600">
+                        These settings control how learners progress through the course. Changes are enforced in the course player.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Progression Mode */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Progression Mode</h3>
-                  <select
-                    value={policy.progression}
-                    onChange={(e) => {
-                      setPolicy({ ...policy, progression: e.target.value as "linear" | "free" });
-                      setHasChanges(true);
-                    }}
-                    disabled={isManager}
-                    className={`w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                      isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                    }`}
-                  >
-                    <option value="linear">Linear — Learners must complete lessons in order</option>
-                    <option value="free">Free — Learners can access any lesson</option>
-                  </select>
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Progression Mode</h3>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <select
+                      value={policy.progression}
+                      onChange={(e) => {
+                        setPolicy({ ...policy, progression: e.target.value as "linear" | "free" });
+                        setHasChanges(true);
+                      }}
+                      disabled={isManager}
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
+                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                      }`}
+                    >
+                      <option value="linear">Linear — Learners must complete lessons in order</option>
+                      <option value="free">Free — Learners can access any lesson</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Completion Rules */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Completion Rules</h3>
-                  <div className="space-y-4">
-                    <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">Require all lessons</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Learners must complete every lesson to finish the course</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={policy.requireAllLessons}
-                        onChange={(e) => {
-                          setPolicy({ ...policy, requireAllLessons: e.target.checked });
-                          setHasChanges(true);
-                        }}
-                        disabled={isManager}
-                        className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
-                      />
-                    </label>
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-emerald-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Completion Rules</h3>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require all lessons</p>
+                          <p className="text-xs text-gray-600 mt-1">Learners must complete every lesson to finish the course</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.requireAllLessons}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, requireAllLessons: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
 
-                    <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">Require passing quiz</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Learners must pass the quiz to complete the course</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={policy.requirePassingQuiz}
-                        onChange={(e) => {
-                          setPolicy({ ...policy, requirePassingQuiz: e.target.checked });
-                          setHasChanges(true);
-                        }}
-                        disabled={isManager}
-                        className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
-                      />
-                    </label>
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require passing quiz</p>
+                          <p className="text-xs text-gray-600 mt-1">Learners must pass the quiz to complete the course</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.requirePassingQuiz}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, requirePassingQuiz: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
 
-                    <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">Lock sequential lessons</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Next lesson is locked until the current one is complete</p>
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Lock sequential lessons</p>
+                          <p className="text-xs text-gray-600 mt-1">Next lesson is locked until the current one is complete</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.lockNextUntilPrevious}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, lockNextUntilPrevious: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require learners to manually mark lessons complete</p>
+                          <p className="text-xs text-gray-600 mt-1">Learners must click "Mark Complete" to finish a lesson. Progress will not auto-complete on scroll or video watch.</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.requiresManualCompletion ?? false}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, requiresManualCompletion: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+
+                      {/* Phase II 1H.2d: New completion policy controls */}
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require quiz pass to complete lesson</p>
+                          <p className="text-xs text-gray-600 mt-1">Learners must pass the lesson's quiz before the lesson is marked complete</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.requireQuizPassToCompleteLesson ?? false}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, requireQuizPassToCompleteLesson: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require all lessons to complete course</p>
+                          <p className="text-xs text-gray-600 mt-1">All lessons must be completed before the course is marked complete</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.requireAllLessonsToCompleteCourse ?? true}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, requireAllLessonsToCompleteCourse: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Phase II 1H.2d: Certificate Settings */}
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-amber-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Certificate Settings</h3>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Issue certificate on course completion</p>
+                          <p className="text-xs text-gray-600 mt-1">Automatically issue a certificate when the course is completed</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={policy.issueCertificateOnComplete ?? true}
+                          onChange={(e) => {
+                            setPolicy({ ...policy, issueCertificateOnComplete: e.target.checked });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+
+                      <div className="p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Minimum score for certificate (%)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={policy.minScoreForCertificatePct ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value === "" ? undefined : parseInt(e.target.value, 10);
+                            setPolicy({ ...policy, minScoreForCertificatePct: value });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          placeholder="e.g., 80"
+                          className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                        />
+                        <p className="text-xs text-gray-600 mt-2">
+                          Minimum quiz score percentage required to receive certificate (leave blank to issue for any completion)
+                        </p>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={policy.lockNextUntilPrevious}
-                        onChange={(e) => {
-                          setPolicy({ ...policy, lockNextUntilPrevious: e.target.checked });
-                          setHasChanges(true);
-                        }}
-                        disabled={isManager}
-                        className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
-                      />
-                    </label>
+                    </div>
                   </div>
                 </div>
 
                 {/* Quiz Behavior */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Quiz Behavior</h3>
-                  <div className="space-y-4">
-                    <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">Enable quiz retakes</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Allow learners to retake the quiz after failure</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={policy.enableRetakes}
-                        onChange={(e) => {
-                          setPolicy({ ...policy, enableRetakes: e.target.checked });
-                          setHasChanges(true);
-                        }}
-                        disabled={isManager}
-                        className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
-                      />
-                    </label>
-
-                    <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">Show explanations</p>
-                        <p className="text-sm text-gray-500 mt-0.5">Display answer explanations when learners fail</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={policy.showExplanations}
-                        onChange={(e) => {
-                          setPolicy({ ...policy, showExplanations: e.target.checked });
-                          setHasChanges(true);
-                        }}
-                        disabled={isManager}
-                        className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
-                      />
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                          Max Quiz Attempts
-                        </label>
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-purple-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Quiz Behavior</h3>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Enable quiz retakes</p>
+                          <p className="text-xs text-gray-600 mt-1">Allow learners to retake the quiz after failure</p>
+                        </div>
                         <input
-                          type="number"
-                          value={policy.maxQuizAttempts || ""}
+                          type="checkbox"
+                          checked={policy.enableRetakes}
                           onChange={(e) => {
-                            setPolicy({ ...policy, maxQuizAttempts: e.target.value ? parseInt(e.target.value) : undefined });
+                            setPolicy({ ...policy, enableRetakes: e.target.checked });
                             setHasChanges(true);
                           }}
                           disabled={isManager}
-                          min="1"
-                          placeholder="Unlimited"
-                          className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                            isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                          }`}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
                         />
-                      </div>
+                      </label>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                          Retake Cooldown (min)
-                        </label>
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Show explanations</p>
+                          <p className="text-xs text-gray-600 mt-1">Display answer explanations when learners fail</p>
+                        </div>
                         <input
-                          type="number"
-                          value={policy.retakeCooldownMin || ""}
+                          type="checkbox"
+                          checked={policy.showExplanations}
                           onChange={(e) => {
-                            setPolicy({ ...policy, retakeCooldownMin: e.target.value ? parseInt(e.target.value) : undefined });
+                            setPolicy({ ...policy, showExplanations: e.target.checked });
                             setHasChanges(true);
                           }}
                           disabled={isManager}
-                          min="0"
-                          placeholder="No cooldown"
-                          className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                            isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                          }`}
+                          className="w-5 h-5 text-indigo-600 rounded border-2 border-gray-300 focus:ring-indigo-500 focus:ring-2 disabled:opacity-50"
                         />
+                      </label>
+
+                      <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
+                            Max Quiz Attempts
+                          </label>
+                          <input
+                            type="number"
+                            value={policy.maxQuizAttempts || ""}
+                            onChange={(e) => {
+                              setPolicy({ ...policy, maxQuizAttempts: e.target.value ? parseInt(e.target.value) : undefined });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            min="1"
+                            placeholder="Unlimited"
+                            className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
+                              isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
+                            Retake Cooldown (min)
+                          </label>
+                          <input
+                            type="number"
+                            value={policy.retakeCooldownMin || ""}
+                            onChange={(e) => {
+                              setPolicy({ ...policy, retakeCooldownMin: e.target.value ? parseInt(e.target.value) : undefined });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            min="0"
+                            placeholder="No cooldown"
+                            className={`w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
+                              isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                            }`}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Timing Requirements */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6">Timing Requirements</h3>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Min Video Watch Percentage
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={policy.minVideoWatchPct || ""}
-                          onChange={(e) => {
-                            setPolicy({ ...policy, minVideoWatchPct: e.target.value ? parseInt(e.target.value) : undefined });
-                            setHasChanges(true);
-                          }}
-                          disabled={isManager}
-                          min="0"
-                          max="100"
-                          placeholder="e.g., 80"
-                          className={`flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                            isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                          }`}
-                        />
-                        <span className="text-lg font-bold text-gray-900">%</span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1.5">Minimum percentage of video that must be watched</p>
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-amber-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Timing Requirements</h3>
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Min Time on Lesson
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={policy.minTimeOnLessonSec || ""}
-                          onChange={(e) => {
-                            setPolicy({ ...policy, minTimeOnLessonSec: e.target.value ? parseInt(e.target.value) : undefined });
-                            setHasChanges(true);
-                          }}
-                          disabled={isManager}
-                          min="0"
-                          placeholder="e.g., 60"
-                          className={`flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm ${
-                            isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                          }`}
-                        />
-                        <span className="text-sm font-medium text-gray-600">sec</span>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Min Video Watch Percentage
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={policy.minVideoWatchPct || ""}
+                            onChange={(e) => {
+                              setPolicy({ ...policy, minVideoWatchPct: e.target.value ? parseInt(e.target.value) : undefined });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            min="0"
+                            max="100"
+                            placeholder="e.g., 80"
+                            className={`flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
+                              isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                            }`}
+                          />
+                          <span className="text-lg font-bold text-gray-900">%</span>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2">Minimum percentage of video that must be watched</p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1.5">Minimum seconds required on each lesson</p>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Min Time on Lesson
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={policy.minTimeOnLessonSec || ""}
+                            onChange={(e) => {
+                              setPolicy({ ...policy, minTimeOnLessonSec: e.target.value ? parseInt(e.target.value) : undefined });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            min="0"
+                            placeholder="e.g., 60"
+                            className={`flex-1 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
+                              isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
+                            }`}
+                          />
+                          <span className="text-sm font-semibold text-gray-700">sec</span>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-2">Minimum seconds required on each lesson</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1757,225 +2638,215 @@ export default function CourseEditPage() {
             {activeTab === "assignment" && !isManager && (
               <div className="flex flex-col pb-24">
                 {/* Header */}
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Course Assignments</h2>
-                  <p className="text-sm text-gray-600">Assign this course to individual users, sites, or departments</p>
-                </div>
-
-                {/* Filter Chips */}
-                <div className="flex items-center gap-2 mb-6">
-                  {(["users", "sites", "depts"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setAssignTab(tab)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                        assignTab === tab
-                          ? "bg-indigo-600 text-white shadow-sm"
-                          : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
-                      }`}
-                    >
-                      {tab === "users" ? "Individual Users" : tab === "sites" ? "By Site" : "By Department"}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Selection Area */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-                  {assignTab === "users" && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Learners</h3>
-                      <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-                        {getUsers().filter(u => u.role === "LEARNER").map((user) => (
-                          <label 
-                            key={user.id} 
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all duration-200 cursor-pointer ${
-                              selectedUserIds.includes(user.id)
-                                ? "bg-indigo-50 border-indigo-300 shadow-sm"
-                                : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedUserIds.includes(user.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedUserIds([...selectedUserIds, user.id]);
-                                } else {
-                                  setSelectedUserIds(selectedUserIds.filter(id => id !== user.id));
-                                }
-                              }}
-                              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
-                            />
-                            <span className="flex-1 font-medium text-gray-900">{user.firstName} {user.lastName}</span>
-                          </label>
-                        ))}
+                <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 rounded-2xl shadow-lg border-2 border-indigo-100 p-6 mb-6 overflow-hidden">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-indigo-100 rounded-xl">
+                        <User className="w-6 h-6 text-indigo-600" />
                       </div>
-                      {selectedUserIds.length > 0 && (
-                        <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
-                          <p className="text-sm font-medium text-indigo-900">
-                            {selectedUserIds.length} {selectedUserIds.length === 1 ? 'learner' : 'learners'} selected
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {assignTab === "sites" && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Site</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {getSites().map((site) => (
-                          <label
-                            key={site.id}
-                            className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
-                              selectedSiteId === site.id
-                                ? "bg-indigo-50 border-indigo-500 shadow-sm"
-                                : "bg-white border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <span className="font-medium text-gray-900">{site.name}</span>
-                            <input
-                              type="radio"
-                              name="site"
-                              value={site.id}
-                              checked={selectedSiteId === site.id}
-                              onChange={(e) => setSelectedSiteId(e.target.value)}
-                              className="w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                            />
-                          </label>
-                        ))}
+                      <div className="flex-1">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-2">Course Assignments</h2>
+                        <p className="text-sm text-gray-600">Assign this course to users, roles, sites, or departments with due dates</p>
                       </div>
                     </div>
-                  )}
-
-                  {assignTab === "depts" && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Department</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {getDepartments().map((dept) => (
-                          <label
-                            key={dept.id}
-                            className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
-                              selectedDeptId === dept.id
-                                ? "bg-indigo-50 border-indigo-500 shadow-sm"
-                                : "bg-white border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <span className="font-medium text-gray-900">{dept.name}</span>
-                            <input
-                              type="radio"
-                              name="dept"
-                              value={dept.id}
-                              checked={selectedDeptId === dept.id}
-                              onChange={(e) => setSelectedDeptId(e.target.value)}
-                              className="w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                            />
-                          </label>
-                        ))}
-                      </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setIsResolveModalOpen(true)}
+                        className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border-2 border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                      >
+                        Resolve Preview
+                      </button>
+                      <Button variant="primary" onClick={handleCreateAssignment}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        New Assignment
+                      </Button>
                     </div>
-                  )}
-
-                  {/* Due Date */}
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Due Date (optional)
-                    </label>
-                    <input
-                      type="date"
-                      value={assignmentDueDate}
-                      onChange={(e) => setAssignmentDueDate(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                    />
                   </div>
                 </div>
 
-                {/* Current Assignments - Collapsible */}
-                <details open className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <summary className="px-6 py-4 font-semibold text-gray-900 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between">
-                    <span>Current Assignments ({assignments.length})</span>
-                    <span className="text-gray-400">▼</span>
-                  </summary>
-                  <div className="px-6 pb-6">
-                    {assignments.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <p className="text-sm">No assignments yet. Select learners above and click "Assign Selected" below.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {assignments.map((assignment) => (
-                          <div 
-                            key={assignment.id} 
-                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                                assignment.target.type === 'user' ? 'bg-indigo-100 text-indigo-700' :
-                                assignment.target.type === 'role' ? 'bg-purple-100 text-purple-700' :
-                                assignment.target.type === 'site' ? 'bg-sky-100 text-sky-700' :
-                                'bg-emerald-100 text-emerald-700'
-                              }`}>
-                                {assignment.target.type}
-                              </span>
-                              <span className="text-sm font-medium text-gray-900">{getAssignmentLabel(assignment)}</span>
-                              {assignment.dueAt && (
-                                <span className="text-xs text-gray-500">
-                                  Due {formatDate(assignment.dueAt)}
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => handleDeleteAssignment(assignment.id)}
-                              className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-all"
-                              title="Delete assignment"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Assignments Table */}
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                    <h3 className="text-lg font-bold text-gray-900">Current Assignments ({assignments.length})</h3>
                   </div>
-                </details>
-
-                {/* Sticky Footer */}
-                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
-                  <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                      {assignTab === "users" && selectedUserIds.length > 0 && (
-                        <span>{selectedUserIds.length} user{selectedUserIds.length === 1 ? '' : 's'} selected</span>
-                      )}
-                      {assignTab === "sites" && selectedSiteId && (
-                        <span>Site: {getSites().find(s => s.id === selectedSiteId)?.name}</span>
-                      )}
-                      {assignTab === "depts" && selectedDeptId && (
-                        <span>Dept: {getDepartments().find(d => d.id === selectedDeptId)?.name}</span>
-                      )}
+                  {assignments.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 mx-6 my-6">
+                      <p className="text-sm font-medium">No assignments yet. Click "New Assignment" to create one.</p>
                     </div>
-                    <Button 
-                      variant="primary" 
-                      onClick={handleCreateAssignment}
-                      className="shadow-lg"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Assign Selected ›
-                    </Button>
-                  </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Target</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Due Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {assignments.map((assignment) => (
+                            <tr key={assignment.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    assignment.target.type === 'user' ? 'bg-indigo-100 text-indigo-700' :
+                                    assignment.target.type === 'role' ? 'bg-purple-100 text-purple-700' :
+                                    assignment.target.type === 'site' ? 'bg-sky-100 text-sky-700' :
+                                    'bg-emerald-100 text-emerald-700'
+                                  }`}>
+                                    {assignment.target.type.toUpperCase()}
+                                  </span>
+                                  <span className="text-sm font-medium text-gray-900">{getAssignmentLabel(assignment)}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {assignment.dueAt ? (
+                                  <span className="text-sm text-gray-900">{formatDate(assignment.dueAt)}</span>
+                                ) : (
+                                  <span className="text-sm text-gray-400">No due date</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-500">{formatDate(assignment.updatedAt)}</span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleEditAssignment(assignment)}
+                                    className="text-indigo-600 hover:text-indigo-900 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAssignment(assignment.id)}
+                                    className="text-red-600 hover:text-red-900 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {activeTab === "assignment" && isManager && (
-              <Card>
-                <div className="text-center py-12 text-gray-500">
-                  <p className="mb-2">Assignment management is not available for Managers.</p>
-                  <p className="text-sm">Only Admins can assign courses to learners.</p>
+              <div className="flex flex-col pb-24">
+                {/* Read-only Banner */}
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-100 rounded-lg">
+                      <User className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-900 mb-1">Read-Only View</h3>
+                      <p className="text-xs text-amber-700">You can view assignments and resolved users for your scope, but cannot create or delete assignments.</p>
+                    </div>
+                  </div>
                 </div>
-              </Card>
+
+                {/* Header */}
+                <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 rounded-2xl shadow-lg border-2 border-indigo-100 p-6 mb-6 overflow-hidden">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="p-3 bg-indigo-100 rounded-xl">
+                        <User className="w-6 h-6 text-indigo-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-2">Course Assignments</h2>
+                        <p className="text-sm text-gray-600">View assignments for this course</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsResolveModalOpen(true)}
+                      className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border-2 border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                    >
+                      Resolve Preview
+                    </button>
+                  </div>
+                </div>
+
+                {/* Assignments Table */}
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                    <h3 className="text-lg font-bold text-gray-900">Current Assignments ({assignments.length})</h3>
+                  </div>
+                  {assignments.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 mx-6 my-6">
+                      <p className="text-sm font-medium">No assignments found.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Target</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Due Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Last Updated</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {assignments.map((assignment) => (
+                            <tr key={assignment.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    assignment.target.type === 'user' ? 'bg-indigo-100 text-indigo-700' :
+                                    assignment.target.type === 'role' ? 'bg-purple-100 text-purple-700' :
+                                    assignment.target.type === 'site' ? 'bg-sky-100 text-sky-700' :
+                                    'bg-emerald-100 text-emerald-700'
+                                  }`}>
+                                    {assignment.target.type.toUpperCase()}
+                                  </span>
+                                  <span className="text-sm font-medium text-gray-900">{getAssignmentLabel(assignment)}</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {assignment.dueAt ? (
+                                  <span className="text-sm text-gray-900">{formatDate(assignment.dueAt)}</span>
+                                ) : (
+                                  <span className="text-sm text-gray-400">No due date</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="text-sm text-gray-500">{formatDate(assignment.updatedAt)}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
       </AdminLayout>
+
+      {/* Phase II 1H.4: Assignment Modals */}
+      <CourseAssignmentModal
+        courseId={courseId}
+        assignment={editingAssignment}
+        isOpen={isAssignmentModalOpen}
+        onClose={() => {
+          setIsAssignmentModalOpen(false);
+          setEditingAssignment(null);
+        }}
+        onSave={handleAssignmentSaved}
+      />
+
+      <AssignmentResolveModal
+        courseId={courseId}
+        isOpen={isResolveModalOpen}
+        onClose={() => setIsResolveModalOpen(false)}
+      />
 
       {/* Epic 1G.4: History Drawer */}
       <HistoryDrawer
@@ -1985,6 +2856,85 @@ export default function CourseEditPage() {
         entityId={historyEntity?.id || courseId}
         isReadOnly={isManager}
       />
+
+      {/* Epic 1G.7: Standards Edit Modal */}
+      <StandardsEditModal
+        isOpen={isStandardsModalOpen}
+        onClose={() => setIsStandardsModalOpen(false)}
+        standards={course?.metadata?.standards}
+        onSave={handleSaveStandards}
+        isReadOnly={isManager}
+      />
+
+      {/* Phase II — 1M.1: New Skill Modal */}
+      <Modal
+        isOpen={isNewSkillModalOpen}
+        onClose={() => {
+          setIsNewSkillModalOpen(false);
+          setNewSkillName("");
+          setNewSkillCategory("");
+        }}
+        title="Create New Skill"
+        size="small"
+      >
+        <div className="px-6 py-6">
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Skill Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newSkillName}
+                onChange={(e) => setNewSkillName(e.target.value)}
+                placeholder="e.g., Lockout/Tagout"
+                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Category <span className="text-xs font-normal text-gray-500">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={newSkillCategory}
+                onChange={(e) => setNewSkillCategory(e.target.value)}
+                placeholder="e.g., Safety, Equipment, Compliance"
+                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsNewSkillModalOpen(false);
+                  setNewSkillName("");
+                  setNewSkillCategory("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCreateSkill}
+                disabled={!newSkillName.trim()}
+              >
+                Create Skill
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </RouteGuard>
   );
 }

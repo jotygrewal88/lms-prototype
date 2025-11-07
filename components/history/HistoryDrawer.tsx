@@ -292,6 +292,12 @@ function formatAiAction(action: AiAction): string {
     ai_simplify: 'Simplify',
     ai_add_quiz: 'Add Quiz',
     ai_autofill_metadata: 'Autofill Metadata',
+    style_fix: 'Style Fix',
+    style_fix_inline: 'Inline Style Fix',
+    style_adjust_tone: 'Adjust Tone',
+    insert_glossary_callout: 'Insert Glossary Callout',
+    style_fix_bulk: 'Bulk Style Fix',
+    style_guide_updated_inline: 'Update Style Guide',
   };
   return labels[action] || action;
 }

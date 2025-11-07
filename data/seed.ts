@@ -1,5 +1,5 @@
 // Phase I Epic 1, 2, 3 & Polish Pack: Seed data for UpKeep LMS demo
-import { Organization, Site, Department, User, Training, TrainingCompletion, ReminderRule, NotificationTemplate } from "@/types";
+import { Organization, Site, Department, User, Training, TrainingCompletion, ReminderRule, NotificationTemplate, CertificateTemplate } from "@/types";
 import { today, addDays, calculateOverdueDays } from "@/lib/utils";
 
 export const organization: Organization = {
@@ -10,6 +10,19 @@ export const organization: Organization = {
   settings: {
     timezone: "America/Los_Angeles",
     dateFormat: "YYYY-MM-DD",
+  },
+  styleGuide: {
+    tone: 'professional',
+    readingLevelTarget: 'standard',
+    preferredTerms: [
+      { term: "chemical suit", preferred: "chemical-resistant suit" }
+    ],
+    bannedTerms: ["PPE kit"],
+    glossary: [
+      { term: "PPE", definition: "Personal Protective Equipment - clothing and equipment designed to protect workers from hazards" },
+      { term: "LOTO", definition: "Lockout/Tagout - safety procedure used to ensure dangerous machines are properly shut off" },
+      { term: "OSHA", definition: "Occupational Safety and Health Administration - federal agency that sets and enforces workplace safety standards" },
+    ],
   },
 };
 
@@ -316,6 +329,7 @@ export const users: User[] = [
 ];
 
 // Phase I Epic 2: Trainings
+// Phase II: Linked to Courses for LMS integration
 export const trainings: Training[] = [
   {
     id: "tng_001",
@@ -328,6 +342,7 @@ export const trainings: Training[] = [
     retrainIntervalDays: 365,
     ownerManagerId: "usr_mgr_a_wh",
     policyUrl: "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.178",
+    courseId: "crs_002", // Links to Forklift Operation Certification course
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
   },
@@ -342,6 +357,7 @@ export const trainings: Training[] = [
     retrainIntervalDays: 365,
     ownerManagerId: "usr_admin_1",
     policyUrl: "https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.132",
+    courseId: "crs_001", // Links to Workplace Safety Fundamentals course (includes PPE content)
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
   },
@@ -355,6 +371,7 @@ export const trainings: Training[] = [
     },
     retrainIntervalDays: 730,
     ownerManagerId: "usr_mgr_b_maint",
+    // Note: No courseId - this training is not yet available as a course
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
   },
@@ -368,20 +385,22 @@ export const trainings: Training[] = [
     },
     retrainIntervalDays: 365,
     ownerManagerId: "usr_admin_1",
+    courseId: "crs_004", // Links to Emergency Response & Evacuation course
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
   },
 ];
 
 // Phase I Epic 2: Training Completions (enriched for AI insights)
+// Phase II: Added courseId to link completions to courses
 export const completions: TrainingCompletion[] = [
-  // A. PACKAGING @ PLANT A: OVERDUE CLUSTER (Forklift Safety)
-  { id: "cmp_pkg_001", trainingId: "tng_001", userId: "usr_lrn_a_pkg_1", status: "OVERDUE", dueAt: addDays(today(), -21), overdueDays: 21, assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_pkg_002", trainingId: "tng_001", userId: "usr_lrn_a_pkg_2", status: "OVERDUE", dueAt: addDays(today(), -18), overdueDays: 18, assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_pkg_003", trainingId: "tng_001", userId: "usr_lrn_a_pkg_3", status: "OVERDUE", dueAt: addDays(today(), -14), overdueDays: 14, assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_pkg_004", trainingId: "tng_001", userId: "usr_lrn_a_pkg_4", status: "OVERDUE", dueAt: addDays(today(), -9), overdueDays: 9, assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_pkg_005", trainingId: "tng_001", userId: "usr_lrn_a_pkg_5", status: "OVERDUE", dueAt: addDays(today(), -5), overdueDays: 5, assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_pkg_006", trainingId: "tng_001", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -2), overdueDays: 2, assignedManagerId: "usr_mgr_a_pkg" },
+  // A. PACKAGING @ PLANT A: OVERDUE CLUSTER (Forklift Safety -> crs_002)
+  { id: "cmp_pkg_001", trainingId: "tng_001", userId: "usr_lrn_a_pkg_1", status: "OVERDUE", dueAt: addDays(today(), -21), overdueDays: 21, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_pkg_002", trainingId: "tng_001", userId: "usr_lrn_a_pkg_2", status: "OVERDUE", dueAt: addDays(today(), -18), overdueDays: 18, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_pkg_003", trainingId: "tng_001", userId: "usr_lrn_a_pkg_3", status: "OVERDUE", dueAt: addDays(today(), -14), overdueDays: 14, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_pkg_004", trainingId: "tng_001", userId: "usr_lrn_a_pkg_4", status: "OVERDUE", dueAt: addDays(today(), -9), overdueDays: 9, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_pkg_005", trainingId: "tng_001", userId: "usr_lrn_a_pkg_5", status: "OVERDUE", dueAt: addDays(today(), -5), overdueDays: 5, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_pkg_006", trainingId: "tng_001", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -2), overdueDays: 2, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
   
   // B. PLANT B MAINTENANCE: OVERDUE LOCKOUT/TAGOUT CLUSTER (Diego Alvarez)
   { id: "cmp_loto_001", trainingId: "tng_003", userId: "usr_lrn_b_maint_1", status: "OVERDUE", dueAt: addDays(today(), -15), overdueDays: 15, assignedManagerId: "usr_mgr_b_maint" },
@@ -392,62 +411,62 @@ export const completions: TrainingCompletion[] = [
   { id: "cmp_loto_006", trainingId: "tng_003", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 7), assignedManagerId: "usr_mgr_a" },
   
   // C. PLANT A WAREHOUSE: OVERDUE CLUSTER (Priya Singh)
-  { id: "cmp_late_001", trainingId: "tng_002", userId: "usr_lrn_a_pkg_1", status: "COMPLETED", dueAt: addDays(today(), -20), completedAt: addDays(today(), -17), expiresAt: addDays(addDays(today(), -17), 365), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_late_002", trainingId: "tng_002", userId: "usr_lrn_a_pkg_2", status: "COMPLETED", dueAt: addDays(today(), -18), completedAt: addDays(today(), -14), expiresAt: addDays(addDays(today(), -14), 365), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_late_003", trainingId: "tng_004", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -25), completedAt: addDays(today(), -22), expiresAt: addDays(addDays(today(), -22), 365), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_late_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -22), completedAt: addDays(today(), -18), expiresAt: addDays(addDays(today(), -18), 365), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_late_005", trainingId: "tng_002", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -15), overdueDays: 15, assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_late_006", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "OVERDUE", dueAt: addDays(today(), -14), overdueDays: 14, assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_late_007", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -10), overdueDays: 10, assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_late_001", trainingId: "tng_002", userId: "usr_lrn_a_pkg_1", status: "COMPLETED", dueAt: addDays(today(), -20), completedAt: addDays(today(), -17), expiresAt: addDays(addDays(today(), -17), 365), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_late_002", trainingId: "tng_002", userId: "usr_lrn_a_pkg_2", status: "COMPLETED", dueAt: addDays(today(), -18), completedAt: addDays(today(), -14), expiresAt: addDays(addDays(today(), -14), 365), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_late_003", trainingId: "tng_004", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -25), completedAt: addDays(today(), -22), expiresAt: addDays(addDays(today(), -22), 365), assignedManagerId: "usr_mgr_b", courseId: "crs_004" },
+  { id: "cmp_late_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -22), completedAt: addDays(today(), -18), expiresAt: addDays(addDays(today(), -18), 365), assignedManagerId: "usr_mgr_b", courseId: "crs_004" },
+  { id: "cmp_late_005", trainingId: "tng_002", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -15), overdueDays: 15, assignedManagerId: "usr_mgr_a_wh", courseId: "crs_001" },
+  { id: "cmp_late_006", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "OVERDUE", dueAt: addDays(today(), -14), overdueDays: 14, assignedManagerId: "usr_mgr_a_wh", courseId: "crs_004" },
+  { id: "cmp_late_007", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "OVERDUE", dueAt: addDays(today(), -10), overdueDays: 10, assignedManagerId: "usr_mgr_a_wh", courseId: "crs_002" },
   { id: "cmp_late_008", trainingId: "tng_003", userId: "usr_lrn_a_wh_2", status: "OVERDUE", dueAt: addDays(today(), -7), overdueDays: 7, assignedManagerId: "usr_mgr_a_wh" },
   
   // D. RETRAINING WAVE: EXPIRING SOON (expiresAt within next 30 days)
-  { id: "cmp_expire_001", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "COMPLETED", dueAt: addDays(today(), -350), completedAt: addDays(today(), -355), expiresAt: addDays(today(), 10), proofUrl: "https://example.com/cert/001.pdf", assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_expire_002", trainingId: "tng_001", userId: "usr_lrn_a_wh_2", status: "COMPLETED", dueAt: addDays(today(), -348), completedAt: addDays(today(), -352), expiresAt: addDays(today(), 13), assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_expire_003", trainingId: "tng_002", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -345), completedAt: addDays(today(), -348), expiresAt: addDays(today(), 17), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_expire_004", trainingId: "tng_002", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -342), completedAt: addDays(today(), -345), expiresAt: addDays(today(), 20), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_expire_005", trainingId: "tng_002", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -340), completedAt: addDays(today(), -343), expiresAt: addDays(today(), 22), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_expire_006", trainingId: "tng_001", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -338), completedAt: addDays(today(), -340), expiresAt: addDays(today(), 25), proofUrl: "https://example.com/cert/006.pdf", assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_expire_007", trainingId: "tng_001", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -337), completedAt: addDays(today(), -339), expiresAt: addDays(today(), 26), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_expire_008", trainingId: "tng_004", userId: "usr_lrn_a_pkg_3", status: "COMPLETED", dueAt: addDays(today(), -353), completedAt: addDays(today(), -355), expiresAt: addDays(today(), 10), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_expire_009", trainingId: "tng_004", userId: "usr_lrn_a_pkg_4", status: "COMPLETED", dueAt: addDays(today(), -349), completedAt: addDays(today(), -351), expiresAt: addDays(today(), 14), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_expire_010", trainingId: "tng_004", userId: "usr_lrn_a_pkg_5", status: "COMPLETED", dueAt: addDays(today(), -344), completedAt: addDays(today(), -346), expiresAt: addDays(today(), 19), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_expire_011", trainingId: "tng_002", userId: "usr_lrn_a_pkg_6", status: "COMPLETED", dueAt: addDays(today(), -339), completedAt: addDays(today(), -341), expiresAt: addDays(today(), 24), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_expire_012", trainingId: "tng_001", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -357), completedAt: addDays(today(), -359), expiresAt: addDays(today(), 6), proofUrl: "https://example.com/cert/012.pdf", assignedManagerId: "usr_mgr_b" },
+  { id: "cmp_expire_001", trainingId: "tng_001", userId: "usr_lrn_a_wh_1", status: "COMPLETED", dueAt: addDays(today(), -350), completedAt: addDays(today(), -355), expiresAt: addDays(today(), 10), proofUrl: "https://example.com/cert/001.pdf", assignedManagerId: "usr_mgr_a_wh", courseId: "crs_002" },
+  { id: "cmp_expire_002", trainingId: "tng_001", userId: "usr_lrn_a_wh_2", status: "COMPLETED", dueAt: addDays(today(), -348), completedAt: addDays(today(), -352), expiresAt: addDays(today(), 13), assignedManagerId: "usr_mgr_a_wh", courseId: "crs_002" },
+  { id: "cmp_expire_003", trainingId: "tng_002", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -345), completedAt: addDays(today(), -348), expiresAt: addDays(today(), 17), assignedManagerId: "usr_mgr_b", courseId: "crs_001" },
+  { id: "cmp_expire_004", trainingId: "tng_002", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -342), completedAt: addDays(today(), -345), expiresAt: addDays(today(), 20), assignedManagerId: "usr_mgr_b", courseId: "crs_001" },
+  { id: "cmp_expire_005", trainingId: "tng_002", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -340), completedAt: addDays(today(), -343), expiresAt: addDays(today(), 22), assignedManagerId: "usr_mgr_b", courseId: "crs_001" },
+  { id: "cmp_expire_006", trainingId: "tng_001", userId: "usr_lrn_b_wh_1", status: "COMPLETED", dueAt: addDays(today(), -338), completedAt: addDays(today(), -340), expiresAt: addDays(today(), 25), proofUrl: "https://example.com/cert/006.pdf", assignedManagerId: "usr_mgr_b", courseId: "crs_002" },
+  { id: "cmp_expire_007", trainingId: "tng_001", userId: "usr_lrn_b_wh_2", status: "COMPLETED", dueAt: addDays(today(), -337), completedAt: addDays(today(), -339), expiresAt: addDays(today(), 26), assignedManagerId: "usr_mgr_b", courseId: "crs_002" },
+  { id: "cmp_expire_008", trainingId: "tng_004", userId: "usr_lrn_a_pkg_3", status: "COMPLETED", dueAt: addDays(today(), -353), completedAt: addDays(today(), -355), expiresAt: addDays(today(), 10), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  { id: "cmp_expire_009", trainingId: "tng_004", userId: "usr_lrn_a_pkg_4", status: "COMPLETED", dueAt: addDays(today(), -349), completedAt: addDays(today(), -351), expiresAt: addDays(today(), 14), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  { id: "cmp_expire_010", trainingId: "tng_004", userId: "usr_lrn_a_pkg_5", status: "COMPLETED", dueAt: addDays(today(), -344), completedAt: addDays(today(), -346), expiresAt: addDays(today(), 19), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  { id: "cmp_expire_011", trainingId: "tng_002", userId: "usr_lrn_a_pkg_6", status: "COMPLETED", dueAt: addDays(today(), -339), completedAt: addDays(today(), -341), expiresAt: addDays(today(), 24), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_expire_012", trainingId: "tng_001", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -357), completedAt: addDays(today(), -359), expiresAt: addDays(today(), 6), proofUrl: "https://example.com/cert/012.pdf", assignedManagerId: "usr_mgr_b", courseId: "crs_002" },
   
   // E. REMAINING COMPLETIONS: Mix to reach ~70 total
-  // PPE Basics (All learners)
-  { id: "cmp_ppe_001", trainingId: "tng_002", userId: "usr_lrn_a_pkg_3", status: "COMPLETED", dueAt: addDays(today(), -60), completedAt: addDays(today(), -65), expiresAt: addDays(addDays(today(), -65), 365), proofUrl: "https://example.com/cert/ppe1.pdf", assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_ppe_002", trainingId: "tng_002", userId: "usr_lrn_a_pkg_4", status: "ASSIGNED", dueAt: addDays(today(), 12), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_ppe_003", trainingId: "tng_002", userId: "usr_lrn_a_pkg_5", status: "COMPLETED", dueAt: addDays(today(), -50), completedAt: addDays(today(), -52), expiresAt: addDays(addDays(today(), -52), 365), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_ppe_004", trainingId: "tng_002", userId: "usr_lrn_a_wh_2", status: "ASSIGNED", dueAt: addDays(today(), 8), assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_ppe_005", trainingId: "tng_002", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -40), completedAt: addDays(today(), -43), expiresAt: addDays(addDays(today(), -43), 365), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_ppe_006", trainingId: "tng_002", userId: "usr_lrn_b_maint_1", status: "COMPLETED", dueAt: addDays(today(), -35), completedAt: addDays(today(), -38), expiresAt: addDays(addDays(today(), -38), 365), proofUrl: "https://example.com/cert/ppe6.pdf", assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_ppe_007", trainingId: "tng_002", userId: "usr_lrn_b_maint_2", status: "ASSIGNED", dueAt: addDays(today(), 15), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_ppe_008", trainingId: "tng_002", userId: "usr_lrn_b_maint_3", status: "COMPLETED", dueAt: addDays(today(), -70), completedAt: addDays(today(), -73), expiresAt: addDays(addDays(today(), -73), 365), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_ppe_009", trainingId: "tng_002", userId: "usr_lrn_b_maint_4", status: "ASSIGNED", dueAt: addDays(today(), 18), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_ppe_010", trainingId: "tng_002", userId: "usr_lrn_b_maint_5", status: "COMPLETED", dueAt: addDays(today(), -45), completedAt: addDays(today(), -47), expiresAt: addDays(addDays(today(), -47), 365), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_ppe_011", trainingId: "tng_002", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 10), assignedManagerId: "usr_mgr_a" },
+  // PPE Basics (All learners) -> crs_001
+  { id: "cmp_ppe_001", trainingId: "tng_002", userId: "usr_lrn_a_pkg_3", status: "COMPLETED", dueAt: addDays(today(), -60), completedAt: addDays(today(), -65), expiresAt: addDays(addDays(today(), -65), 365), proofUrl: "https://example.com/cert/ppe1.pdf", assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_ppe_002", trainingId: "tng_002", userId: "usr_lrn_a_pkg_4", status: "ASSIGNED", dueAt: addDays(today(), 12), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_ppe_003", trainingId: "tng_002", userId: "usr_lrn_a_pkg_5", status: "COMPLETED", dueAt: addDays(today(), -50), completedAt: addDays(today(), -52), expiresAt: addDays(addDays(today(), -52), 365), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_ppe_004", trainingId: "tng_002", userId: "usr_lrn_a_wh_2", status: "ASSIGNED", dueAt: addDays(today(), 8), assignedManagerId: "usr_mgr_a_wh", courseId: "crs_001" },
+  { id: "cmp_ppe_005", trainingId: "tng_002", userId: "usr_lrn_b_wh_3", status: "COMPLETED", dueAt: addDays(today(), -40), completedAt: addDays(today(), -43), expiresAt: addDays(addDays(today(), -43), 365), assignedManagerId: "usr_mgr_b", courseId: "crs_001" },
+  { id: "cmp_ppe_006", trainingId: "tng_002", userId: "usr_lrn_b_maint_1", status: "COMPLETED", dueAt: addDays(today(), -35), completedAt: addDays(today(), -38), expiresAt: addDays(addDays(today(), -38), 365), proofUrl: "https://example.com/cert/ppe6.pdf", assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_ppe_007", trainingId: "tng_002", userId: "usr_lrn_b_maint_2", status: "ASSIGNED", dueAt: addDays(today(), 15), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_ppe_008", trainingId: "tng_002", userId: "usr_lrn_b_maint_3", status: "COMPLETED", dueAt: addDays(today(), -70), completedAt: addDays(today(), -73), expiresAt: addDays(addDays(today(), -73), 365), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_ppe_009", trainingId: "tng_002", userId: "usr_lrn_b_maint_4", status: "ASSIGNED", dueAt: addDays(today(), 18), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_ppe_010", trainingId: "tng_002", userId: "usr_lrn_b_maint_5", status: "COMPLETED", dueAt: addDays(today(), -45), completedAt: addDays(today(), -47), expiresAt: addDays(addDays(today(), -47), 365), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_ppe_011", trainingId: "tng_002", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 10), assignedManagerId: "usr_mgr_a", courseId: "crs_001" },
   
-  // Fire Safety (All learners)
-  { id: "cmp_fire_001", trainingId: "tng_004", userId: "usr_lrn_a_pkg_1", status: "ASSIGNED", dueAt: addDays(today(), 20), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_fire_002", trainingId: "tng_004", userId: "usr_lrn_a_pkg_2", status: "COMPLETED", dueAt: addDays(today(), -55), completedAt: addDays(today(), -58), expiresAt: addDays(addDays(today(), -58), 365), assignedManagerId: "usr_mgr_a_pkg" },
-  { id: "cmp_fire_003", trainingId: "tng_004", userId: "usr_lrn_a_wh_1", status: "ASSIGNED", dueAt: addDays(today(), 22), assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_fire_004", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "COMPLETED", dueAt: addDays(today(), -65), completedAt: addDays(today(), -67), expiresAt: addDays(addDays(today(), -67), 365), proofUrl: "https://example.com/cert/fire4.pdf", assignedManagerId: "usr_mgr_a_wh" },
-  { id: "cmp_fire_005", trainingId: "tng_004", userId: "usr_lrn_b_wh_3", status: "ASSIGNED", dueAt: addDays(today(), 25), assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_fire_006", trainingId: "tng_004", userId: "usr_lrn_b_maint_1", status: "COMPLETED", dueAt: addDays(today(), -30), completedAt: addDays(today(), -33), expiresAt: addDays(addDays(today(), -33), 365), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_fire_007", trainingId: "tng_004", userId: "usr_lrn_b_maint_2", status: "ASSIGNED", dueAt: addDays(today(), 28), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_fire_008", trainingId: "tng_004", userId: "usr_lrn_b_maint_3", status: "COMPLETED", dueAt: addDays(today(), -75), completedAt: addDays(today(), -77), expiresAt: addDays(addDays(today(), -77), 365), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_fire_009", trainingId: "tng_004", userId: "usr_lrn_b_maint_4", status: "ASSIGNED", dueAt: addDays(today(), 30), assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_fire_010", trainingId: "tng_004", userId: "usr_lrn_b_maint_5", status: "COMPLETED", dueAt: addDays(today(), -48), completedAt: addDays(today(), -50), expiresAt: addDays(addDays(today(), -50), 365), proofUrl: "https://example.com/cert/fire10.pdf", assignedManagerId: "usr_mgr_b_maint" },
-  { id: "cmp_fire_011", trainingId: "tng_004", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 14), assignedManagerId: "usr_mgr_a" },
-  { id: "cmp_fire_012", trainingId: "tng_004", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -4), overdueDays: 4, assignedManagerId: "usr_mgr_a_pkg" },
+  // Fire Safety (All learners) -> crs_004
+  { id: "cmp_fire_001", trainingId: "tng_004", userId: "usr_lrn_a_pkg_1", status: "ASSIGNED", dueAt: addDays(today(), 20), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  { id: "cmp_fire_002", trainingId: "tng_004", userId: "usr_lrn_a_pkg_2", status: "COMPLETED", dueAt: addDays(today(), -55), completedAt: addDays(today(), -58), expiresAt: addDays(addDays(today(), -58), 365), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  { id: "cmp_fire_003", trainingId: "tng_004", userId: "usr_lrn_a_wh_1", status: "ASSIGNED", dueAt: addDays(today(), 22), assignedManagerId: "usr_mgr_a_wh", courseId: "crs_004" },
+  { id: "cmp_fire_004", trainingId: "tng_004", userId: "usr_lrn_a_wh_2", status: "COMPLETED", dueAt: addDays(today(), -65), completedAt: addDays(today(), -67), expiresAt: addDays(addDays(today(), -67), 365), proofUrl: "https://example.com/cert/fire4.pdf", assignedManagerId: "usr_mgr_a_wh", courseId: "crs_004" },
+  { id: "cmp_fire_005", trainingId: "tng_004", userId: "usr_lrn_b_wh_3", status: "ASSIGNED", dueAt: addDays(today(), 25), assignedManagerId: "usr_mgr_b", courseId: "crs_004" },
+  { id: "cmp_fire_006", trainingId: "tng_004", userId: "usr_lrn_b_maint_1", status: "COMPLETED", dueAt: addDays(today(), -30), completedAt: addDays(today(), -33), expiresAt: addDays(addDays(today(), -33), 365), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
+  { id: "cmp_fire_007", trainingId: "tng_004", userId: "usr_lrn_b_maint_2", status: "ASSIGNED", dueAt: addDays(today(), 28), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
+  { id: "cmp_fire_008", trainingId: "tng_004", userId: "usr_lrn_b_maint_3", status: "COMPLETED", dueAt: addDays(today(), -75), completedAt: addDays(today(), -77), expiresAt: addDays(addDays(today(), -77), 365), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
+  { id: "cmp_fire_009", trainingId: "tng_004", userId: "usr_lrn_b_maint_4", status: "ASSIGNED", dueAt: addDays(today(), 30), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
+  { id: "cmp_fire_010", trainingId: "tng_004", userId: "usr_lrn_b_maint_5", status: "COMPLETED", dueAt: addDays(today(), -48), completedAt: addDays(today(), -50), expiresAt: addDays(addDays(today(), -50), 365), proofUrl: "https://example.com/cert/fire10.pdf", assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
+  { id: "cmp_fire_011", trainingId: "tng_004", userId: "usr_lrn_a_maint_1", status: "ASSIGNED", dueAt: addDays(today(), 14), assignedManagerId: "usr_mgr_a", courseId: "crs_004" },
+  { id: "cmp_fire_012", trainingId: "tng_004", userId: "usr_lrn_a_pkg_6", status: "OVERDUE", dueAt: addDays(today(), -4), overdueDays: 4, assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
   
-  // Forklift Safety - PLANT B WAREHOUSE OVERDUE CLUSTER (Jennifer Manager)
-  { id: "cmp_fork_001", trainingId: "tng_001", userId: "usr_lrn_b_wh_1", status: "OVERDUE", dueAt: addDays(today(), -11), overdueDays: 11, assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_fork_002", trainingId: "tng_001", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -6), overdueDays: 6, assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_fork_003", trainingId: "tng_002", userId: "usr_lrn_b_wh_2", status: "OVERDUE", dueAt: addDays(today(), -13), overdueDays: 13, assignedManagerId: "usr_mgr_b" },
-  { id: "cmp_fork_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -9), overdueDays: 9, assignedManagerId: "usr_mgr_b" },
+  // Forklift Safety - PLANT B WAREHOUSE OVERDUE CLUSTER (Jennifer Manager) -> crs_002
+  { id: "cmp_fork_001", trainingId: "tng_001", userId: "usr_lrn_b_wh_1", status: "OVERDUE", dueAt: addDays(today(), -11), overdueDays: 11, assignedManagerId: "usr_mgr_b", courseId: "crs_002" },
+  { id: "cmp_fork_002", trainingId: "tng_001", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -6), overdueDays: 6, assignedManagerId: "usr_mgr_b", courseId: "crs_002" },
+  { id: "cmp_fork_003", trainingId: "tng_002", userId: "usr_lrn_b_wh_2", status: "OVERDUE", dueAt: addDays(today(), -13), overdueDays: 13, assignedManagerId: "usr_mgr_b", courseId: "crs_001" },
+  { id: "cmp_fork_004", trainingId: "tng_004", userId: "usr_lrn_b_wh_3", status: "OVERDUE", dueAt: addDays(today(), -9), overdueDays: 9, assignedManagerId: "usr_mgr_b", courseId: "crs_004" },
   
   // Lockout/Tagout (Maintenance depts) - additional
   { id: "cmp_loto_007", trainingId: "tng_003", userId: "usr_lrn_a_maint_1", status: "COMPLETED", dueAt: addDays(today(), -180), completedAt: addDays(today(), -185), expiresAt: addDays(addDays(today(), -185), 730), proofUrl: "https://example.com/cert/loto7.pdf", assignedManagerId: "usr_mgr_a" },
@@ -500,6 +519,33 @@ export const notificationTemplates: NotificationTemplate[] = [
     type: "escalation",
     subject: "Escalation: {{employee}} - {{training}} Training Overdue",
     body: "Manager Alert:\n\n{{employee}} has not completed {{training}} training which was due on {{due_date}}.\n\nPlease follow up immediately.\n\nSite: {{site}}",
+  },
+];
+
+// Phase II 1H.3: Certificate Templates
+export const certificateTemplates: CertificateTemplate[] = [
+  {
+    id: "cert_template_default",
+    name: "Default",
+    isDefault: true,
+    primaryColor: "#2563EB",
+    accentColor: "#1E40AF",
+    showOrgLogo: true,
+    showSignatures: true,
+    fields: {
+      showCourseTitle: true,
+      showUserName: true,
+      showIssuedAt: true,
+      showSerial: true,
+      showCustomText: false,
+      customText: "",
+    },
+    signatures: [
+      { title: "Training Manager", name: "Jennifer Manager" },
+      { title: "CEO", name: "John Admin" },
+    ],
+    createdAt: today(),
+    updatedAt: today(),
   },
 ];
 

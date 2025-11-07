@@ -21,9 +21,11 @@ import {
   getSites,
   getDepartments,
   getUser,
+  getCertificatesByUserId,
 } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { CompletionStatus, getFullName } from "@/types";
+import { Award, ExternalLink } from "lucide-react";
 
 export default function AuditSnapshotDetailPage() {
   const params = useParams();
@@ -196,6 +198,77 @@ export default function AuditSnapshotDetailPage() {
               </table>
             </div>
           </Card>
+
+          {/* Phase II 1H.3: Certificates Section */}
+          {(() => {
+            // Collect unique user IDs from completions
+            const userIds = [...new Set(snapshot.rows.map(row => row.userId))];
+            
+            // Get all certificates for these users
+            const allCertificates = userIds.flatMap(userId => getCertificatesByUserId(userId));
+            
+            // Filter certificates that might be related to course completions
+            // (Note: TrainingCompletion might have courseId if it's course-based)
+            const relatedCertificates = allCertificates.filter(cert => {
+              // Check if any completion in snapshot is for a course that matches this certificate
+              return snapshot.rows.some(row => {
+                const training = getTraining(row.trainingId);
+                // If training has courseId, match it with certificate's courseId
+                return training?.courseId === cert.courseId;
+              });
+            });
+
+            if (relatedCertificates.length === 0) return null;
+
+            return (
+              <Card className="mt-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Award className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Certificates</h2>
+                  <span className="text-sm text-gray-500">({relatedCertificates.length})</span>
+                </div>
+                <div className="space-y-3">
+                  {relatedCertificates.map((cert) => {
+                    const user = getUserById(cert.userId);
+                    return (
+                      <div
+                        key={cert.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">
+                              {cert.courseTitle || "Course Certificate"}
+                            </span>
+                            {user && (
+                              <span className="text-sm text-gray-500">
+                                • {getFullName(user)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                            <span>Serial: <span className="font-mono">{cert.serial}</span></span>
+                            <span>Issued: {formatDate(cert.issuedAt)}</span>
+                          </div>
+                        </div>
+                        {cert.pdfUrl && (
+                          <a
+                            href={cert.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-md transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            View PDF
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })()}
         </div>
       </AdminLayout>
     </RouteGuard>

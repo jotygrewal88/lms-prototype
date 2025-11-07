@@ -392,7 +392,7 @@ export default function AIGenerateModal({
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="ghost" onClick={handleClose} disabled={isGenerating}>
+          <Button variant="secondary" onClick={handleClose} disabled={isGenerating}>
             Cancel
           </Button>
           <Button 

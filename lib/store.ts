@@ -2,7 +2,7 @@
 // Phase II Epic 1: Extended with Course Library
 "use client";
 
-import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType } from "@/types";
+import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, CertificateTemplate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType, CourseMetadata, OrgStyleGuide, StyleAuditIssue, IgnoredLint, QuizAttempt, GradedQuestion, CoursePolicy, QuizPolicy, Skill, getFullName, LibraryItem } from "@/types";
 import { 
   organization as seedOrg, 
   users as seedUsers, 
@@ -11,7 +11,8 @@ import {
   trainings as seedTrainings,
   completions as seedCompletions,
   reminderRules as seedReminderRules,
-  notificationTemplates as seedNotificationTemplates
+  notificationTemplates as seedNotificationTemplates,
+  certificateTemplates as seedCertificateTemplates
 } from "@/data/seed";
 import {
   courses as seedCourses,
@@ -24,6 +25,8 @@ import {
   progressLessons as seedProgressLessons,
   certificates as seedCertificates
 } from "@/data/seedCoursesV2";
+import { seedSkills } from "@/data/seedSkills";
+import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
 
 // Re-export Scope type for convenience
 export type { Scope };
@@ -51,6 +54,15 @@ let quizzes: Quiz[] = [...seedQuizzes];
 let questions: Question[] = [...seedQuestions];
 let assignments: CourseAssignment[] = [...seedAssignments];
 
+// Phase II — 1M.1: Skills Tagging state
+let skills: Skill[] = [...seedSkills];
+
+// Phase II — 1N.3: Library state
+let libraryItems: LibraryItem[] = [...seedLibraryItems];
+
+// Phase II 1H.2a: Quiz Attempts state
+let quizAttempts: QuizAttempt[] = [];
+
 // Epic 1G.4: Versioning & Audit State
 let versionSnapshots: VersionSnapshot[] = [];
 let auditEvents: AuditEvent[] = [];
@@ -61,6 +73,7 @@ const redoStack: Record<string, string[]> = {};
 let progressCourses: ProgressCourse[] = [...seedProgressCourses];
 let progressLessons: ProgressLesson[] = [...seedProgressLessons];
 let certificates: Certificate[] = [...seedCertificates];
+let certificateTemplates: CertificateTemplate[] = [...seedCertificateTemplates];
 
 // Scope state with localStorage persistence
 const SCOPE_STORAGE_KEY = "uklms_scope";
@@ -540,6 +553,8 @@ export function resetToSeed(): void {
   progressCourses = [...seedProgressCourses];
   progressLessons = [...seedProgressLessons];
   certificates = [...seedCertificates];
+  // Phase II — 1M.1: Reset skills
+  skills = [...seedSkills];
   
   // Epic 1G.4: Initialize sample version snapshots and audit events
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -1130,6 +1145,24 @@ export function getQuizByCourseId(courseId: string): Quiz | undefined {
   return quizzes.find(q => q.courseId === courseId);
 }
 
+export function getQuizzesByCourseId(courseId: string): Quiz[] {
+  return quizzes.filter(q => q.courseId === courseId);
+}
+
+export function getQuizzesByLessonId(lessonId: string): Quiz[] {
+  return quizzes.filter(q => q.lessonId === lessonId);
+}
+
+export function getQuizByLesson(courseId: string, lessonId: string): Quiz | undefined {
+  // First try to find a quiz directly associated with the lesson
+  const lessonQuiz = quizzes.find(q => q.lessonId === lessonId);
+  if (lessonQuiz) return lessonQuiz;
+  
+  // If no lesson-specific quiz, check for course-level quiz
+  const courseQuiz = quizzes.find(q => q.courseId === courseId && !q.lessonId);
+  return courseQuiz;
+}
+
 export function getQuizById(id: string): Quiz | undefined {
   return quizzes.find(q => q.id === id);
 }
@@ -1156,6 +1189,46 @@ export function createQuiz(data: Omit<Quiz, "id" | "createdAt" | "updatedAt">): 
   return quiz;
 }
 
+/**
+ * Create an empty quiz for a course or lesson
+ */
+export function createEmptyQuizFor(courseId: string, lessonId?: string): Quiz {
+  const now = timestamp();
+  const quizId = `qz_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
+  const quiz: Quiz = {
+    id: quizId,
+    courseId,
+    lessonId,
+    title: lessonId ? "Lesson Quiz" : "Course Quiz",
+    description: "",
+    questions: [],
+    config: {
+      passingScore: 70,
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      showRationales: true,
+    },
+    questionIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  quizzes.push(quiz);
+  
+  // Link quiz to course if it's a course-level quiz
+  if (!lessonId) {
+    const course = courses.find(c => c.id === courseId);
+    if (course) {
+      course.quizId = quiz.id;
+      course.updatedAt = timestamp();
+    }
+  }
+  
+  notifyListeners();
+  return quiz;
+}
+
 export function updateQuiz(id: string, updates: Partial<Omit<Quiz, "id" | "createdAt" | "updatedAt">>): void {
   const index = quizzes.findIndex(q => q.id === id);
   if (index !== -1) {
@@ -1166,6 +1239,35 @@ export function updateQuiz(id: string, updates: Partial<Omit<Quiz, "id" | "creat
     };
     notifyListeners();
   }
+}
+
+/**
+ * Upsert a quiz (create if doesn't exist, update if exists)
+ */
+export function upsertQuiz(quiz: Quiz, cause?: string): void {
+  const index = quizzes.findIndex(q => q.id === quiz.id);
+  if (index !== -1) {
+    quizzes[index] = {
+      ...quiz,
+      updatedAt: timestamp()
+    };
+  } else {
+    quizzes.push({
+      ...quiz,
+      createdAt: quiz.createdAt || timestamp(),
+      updatedAt: timestamp()
+    });
+    
+    // Link quiz to course if it's a course-level quiz
+    if (!quiz.lessonId) {
+      const course = courses.find(c => c.id === quiz.courseId);
+      if (course) {
+        course.quizId = quiz.id;
+        course.updatedAt = timestamp();
+      }
+    }
+  }
+  notifyListeners();
 }
 
 export function deleteQuiz(id: string): void {
@@ -1223,7 +1325,100 @@ export function createQuestion(data: Omit<Question, "id" | "createdAt" | "update
   return question;
 }
 
-export function updateQuestion(id: string, updates: Partial<Omit<Question, "id" | "createdAt" | "updatedAt">>): void {
+/**
+ * Add a question to a quiz (wrapper for createQuestion)
+ */
+export function addQuestion(quizId: string, question: Question): void {
+  // If question already has an id, update it; otherwise create it
+  if (question.id) {
+    const existing = questions.find(q => q.id === question.id);
+    if (existing) {
+      updateQuestion(question.id, question);
+    } else {
+      // Question exists but not in store, add it
+      questions.push(question);
+      
+      // Add to quiz's questionIds if not already there
+      const quiz = quizzes.find(q => q.id === quizId);
+      if (quiz && !quiz.questionIds.includes(question.id)) {
+        quiz.questionIds.push(question.id);
+        quiz.updatedAt = timestamp();
+        
+        // Also update quiz.questions array if it exists
+        if (quiz.questions) {
+          const qIndex = quiz.questions.findIndex(q => q.id === question.id);
+          if (qIndex !== -1) {
+            quiz.questions[qIndex] = question;
+          } else {
+            quiz.questions.push(question);
+          }
+        }
+      }
+      notifyListeners();
+    }
+  } else {
+    // Create new question
+    createQuestion({
+      ...question,
+      quizId
+    });
+  }
+}
+
+/**
+ * Reorder questions in a quiz
+ */
+export function reorderQuestions(quizId: string, oldIndex: number, newIndex: number): void {
+  const quiz = quizzes.find(q => q.id === quizId);
+  if (!quiz) return;
+  
+  // Reorder questionIds array
+  if (quiz.questionIds && quiz.questionIds.length > oldIndex && quiz.questionIds.length > newIndex) {
+    const [moved] = quiz.questionIds.splice(oldIndex, 1);
+    quiz.questionIds.splice(newIndex, 0, moved);
+  }
+  
+  // Reorder questions array if it exists
+  if (quiz.questions && quiz.questions.length > oldIndex && quiz.questions.length > newIndex) {
+    const [moved] = quiz.questions.splice(oldIndex, 1);
+    quiz.questions.splice(newIndex, 0, moved);
+  }
+  
+  quiz.updatedAt = timestamp();
+  notifyListeners();
+}
+
+export function updateQuestion(id: string, updates: Partial<Omit<Question, "id" | "createdAt" | "updatedAt">>): void;
+export function updateQuestion(quizId: string, questionId: string, question: Question): void;
+export function updateQuestion(idOrQuizId: string, updatesOrQuestionId: Partial<Omit<Question, "id" | "createdAt" | "updatedAt">> | string, question?: Question): void {
+  // Handle 3-parameter version: updateQuestion(quizId, questionId, question)
+  if (question !== undefined && typeof updatesOrQuestionId === 'string') {
+    const questionId = updatesOrQuestionId;
+    const index = questions.findIndex(q => q.id === questionId);
+    if (index !== -1) {
+      questions[index] = {
+        ...question,
+        updatedAt: timestamp()
+      };
+      
+      // Also update quiz.questions array if it exists
+      const quiz = quizzes.find(q => q.id === idOrQuizId);
+      if (quiz && quiz.questions) {
+        const qIndex = quiz.questions.findIndex(q => q.id === questionId);
+        if (qIndex !== -1) {
+          quiz.questions[qIndex] = question;
+          quiz.updatedAt = timestamp();
+        }
+      }
+      
+      notifyListeners();
+    }
+    return;
+  }
+  
+  // Handle 2-parameter version: updateQuestion(id, updates)
+  const id = idOrQuizId;
+  const updates = updatesOrQuestionId as Partial<Omit<Question, "id" | "createdAt" | "updatedAt">>;
   const index = questions.findIndex(q => q.id === id);
   if (index !== -1) {
     questions[index] = { 
@@ -1278,6 +1473,171 @@ export function deleteAssignment(id: string): void {
   notifyListeners();
 }
 
+/**
+ * Delete a course assignment (alias for deleteAssignment for clarity)
+ */
+export function deleteCourseAssignment(id: string): void {
+  deleteAssignment(id);
+}
+
+/**
+ * Get assignment for a specific user and course
+ * Returns the assignment if the user matches the assignment target
+ */
+export function getAssignmentForUserAndCourse(userId: string, courseId: string): CourseAssignment | undefined {
+  const user = users.find(u => u.id === userId);
+  if (!user) return undefined;
+
+  return assignments.find(assignment => {
+    if (assignment.courseId !== courseId) return false;
+
+    const { target } = assignment;
+    switch (target.type) {
+      case "user":
+        return target.userIds?.includes(userId) ?? false;
+      case "role":
+        const roleMatch = target.roles?.includes(user.role) ?? false;
+        if (!roleMatch) return false;
+        // Check site filter if specified
+        if (target.siteIds && target.siteIds.length > 0) {
+          if (!user.siteId || !target.siteIds.includes(user.siteId)) return false;
+        }
+        // Check department filter if specified
+        if (target.departmentIds && target.departmentIds.length > 0) {
+          if (!user.departmentId || !target.departmentIds.includes(user.departmentId)) return false;
+        }
+        return true;
+      case "site":
+        return user.siteId && (target.siteIds?.includes(user.siteId) ?? false);
+      case "department":
+        return user.departmentId && (target.departmentIds?.includes(user.departmentId) ?? false);
+      default:
+        return false;
+    }
+  });
+}
+
+/**
+ * Get courses due soon for a user (within the specified number of days)
+ * Returns an array of { course, assignment } objects
+ */
+export function getDueSoonForUser(userId: string, days: number): Array<{ course: Course; assignment: CourseAssignment }> {
+  const now = new Date();
+  const dueDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  
+  const result: Array<{ course: Course; assignment: CourseAssignment }> = [];
+  
+  assignments.forEach(assignment => {
+    if (!assignment.dueAt) return;
+    
+    const assignmentDate = new Date(assignment.dueAt);
+    
+    // Check if assignment is for this user and due within the specified days
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    
+    const { target } = assignment;
+    let isAssigned = false;
+    
+    switch (target.type) {
+      case "user":
+        isAssigned = target.userIds?.includes(userId) ?? false;
+        break;
+      case "role":
+        isAssigned = target.roles?.includes(user.role) ?? false;
+        if (isAssigned) {
+          // Check site filter if specified
+          if (target.siteIds && target.siteIds.length > 0) {
+            if (!user.siteId || !target.siteIds.includes(user.siteId)) isAssigned = false;
+          }
+          // Check department filter if specified
+          if (target.departmentIds && target.departmentIds.length > 0) {
+            if (!user.departmentId || !target.departmentIds.includes(user.departmentId)) isAssigned = false;
+          }
+        }
+        break;
+      case "site":
+        isAssigned = user.siteId && (target.siteIds?.includes(user.siteId) ?? false);
+        break;
+      case "department":
+        isAssigned = user.departmentId && (target.departmentIds?.includes(user.departmentId) ?? false);
+        break;
+    }
+    
+    if (!isAssigned) return;
+    
+    // Check if due date is in the future but within the specified days
+    if (assignmentDate > now && assignmentDate <= dueDate) {
+      const course = courses.find(c => c.id === assignment.courseId);
+      if (course && course.published) {
+        result.push({ course, assignment });
+      }
+    }
+  });
+  
+  return result;
+}
+
+/**
+ * Get overdue courses for a user
+ * Returns an array of { course, assignment, daysOverdue } objects
+ */
+export function getOverdueForUser(userId: string): Array<{ course: Course; assignment: CourseAssignment; daysOverdue: number }> {
+  const now = new Date();
+  
+  const result: Array<{ course: Course; assignment: CourseAssignment; daysOverdue: number }> = [];
+  
+  assignments.forEach(assignment => {
+    if (!assignment.dueAt) return;
+    
+    const assignmentDate = new Date(assignment.dueAt);
+    
+    // Check if assignment is overdue
+    if (assignmentDate < now) {
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+      
+      const { target } = assignment;
+      let isAssigned = false;
+      
+      switch (target.type) {
+        case "user":
+          isAssigned = target.userIds?.includes(userId) ?? false;
+          break;
+        case "role":
+          isAssigned = target.roles?.includes(user.role) ?? false;
+          if (isAssigned) {
+            // Check site filter if specified
+            if (target.siteIds && target.siteIds.length > 0) {
+              if (!user.siteId || !target.siteIds.includes(user.siteId)) isAssigned = false;
+            }
+            // Check department filter if specified
+            if (target.departmentIds && target.departmentIds.length > 0) {
+              if (!user.departmentId || !target.departmentIds.includes(user.departmentId)) isAssigned = false;
+            }
+          }
+          break;
+        case "site":
+          isAssigned = user.siteId && (target.siteIds?.includes(user.siteId) ?? false);
+          break;
+        case "department":
+          isAssigned = user.departmentId && (target.departmentIds?.includes(user.departmentId) ?? false);
+          break;
+      }
+      
+      if (!isAssigned) return;
+      
+      const course = courses.find(c => c.id === assignment.courseId);
+      if (course && course.published) {
+        const daysOverdue = Math.floor((now.getTime() - assignmentDate.getTime()) / (24 * 60 * 60 * 1000));
+        result.push({ course, assignment, daysOverdue });
+      }
+    }
+  });
+  
+  return result;
+}
+
 // Get assigned courses for a user (resolves user/role/site/dept targeting)
 export function getAssignedCoursesForUser(userId: string): Course[] {
   const user = users.find(u => u.id === userId);
@@ -1291,16 +1651,30 @@ export function getAssignedCoursesForUser(userId: string): Course[] {
 
     switch (target.type) {
       case "user":
-        isAssigned = target.userId === userId;
+        isAssigned = target.userIds?.includes(userId) ?? false;
         break;
       case "role":
-        isAssigned = user.role === target.role;
+        isAssigned = target.roles?.includes(user.role) ?? false;
+        if (isAssigned) {
+          // Check site filter if specified
+          if (target.siteIds && target.siteIds.length > 0) {
+            if (!user.siteId || !target.siteIds.includes(user.siteId)) {
+              isAssigned = false;
+            }
+          }
+          // Check department filter if specified
+          if (target.departmentIds && target.departmentIds.length > 0) {
+            if (!user.departmentId || !target.departmentIds.includes(user.departmentId)) {
+              isAssigned = false;
+            }
+          }
+        }
         break;
       case "site":
-        isAssigned = user.siteId === target.siteId;
+        isAssigned = user.siteId && (target.siteIds?.includes(user.siteId) ?? false);
         break;
-      case "dept":
-        isAssigned = user.departmentId === target.deptId;
+      case "department":
+        isAssigned = user.departmentId && (target.departmentIds?.includes(user.departmentId) ?? false);
         break;
     }
 
@@ -1309,7 +1683,18 @@ export function getAssignedCoursesForUser(userId: string): Course[] {
     }
   });
 
-  return courses.filter(c => assignedCourseIds.has(c.id));
+  // Also check TrainingCompletions for courses assigned via training records
+  completions.forEach(completion => {
+    if (completion.userId === userId && completion.courseId) {
+      const course = courses.find(c => c.id === completion.courseId && c.status === "published");
+      if (course) {
+        assignedCourseIds.add(course.id);
+      }
+    }
+  });
+
+  // Filter to only published courses
+  return courses.filter(c => assignedCourseIds.has(c.id) && c.status === "published");
 }
 
 // Progress Course operations
@@ -1452,6 +1837,361 @@ export function deleteProgressLesson(id: string): void {
   notifyListeners();
 }
 
+// Phase II 1H.5: Resume pointer functions
+/**
+ * Get the resume pointer (lesson ID) for a specific course and user
+ * Returns the most recent lesson that was started but not completed
+ */
+export function getResumePointerForCourse(userId: string, courseId: string): string | null {
+  const course = getCourseById(courseId);
+  if (!course) return null;
+
+  // Get all lesson progress for this user in this course
+  const lessonProgress = progressLessons.filter(
+    pl => pl.userId === userId && course.lessonIds.includes(pl.lessonId)
+  );
+
+  // Find the most recent lesson that was started but not completed
+  const inProgressLessons = lessonProgress.filter(
+    pl => (pl.status === "in_progress" || pl.startedAt) && !pl.completedAt
+  );
+
+  if (inProgressLessons.length === 0) {
+    // Check if there's a first lesson that hasn't been started
+    const firstLessonId = course.lessonIds[0];
+    if (firstLessonId) {
+      const firstLessonProgress = lessonProgress.find(pl => pl.lessonId === firstLessonId);
+      if (!firstLessonProgress || firstLessonProgress.status === "not_started") {
+        return firstLessonId; // Return first lesson if nothing started
+      }
+    }
+    return null;
+  }
+
+  // Sort by updatedAt (most recent first) and return the first one
+  inProgressLessons.sort((a, b) => {
+    const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+    const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  return inProgressLessons[0].lessonId;
+}
+
+// Helper functions for lesson player
+/**
+ * Check if a lesson is unlocked for a user
+ */
+export function isLessonUnlocked(course: Course, lessonId: string, userId: string): boolean {
+  const courseLessons = getLessonsByCourseId(course.id);
+  const lessonIndex = courseLessons.findIndex(l => l.id === lessonId);
+  
+  if (lessonIndex === -1) return false;
+  
+  // First lesson is always unlocked
+  if (lessonIndex === 0) return true;
+  
+  // If lockNextUntilPrevious is false, all lessons are unlocked
+  if (course.policy?.lockNextUntilPrevious === false) {
+    return true;
+  }
+  
+  // Check if all previous lessons are completed
+  for (let i = 0; i < lessonIndex; i++) {
+    const prevLesson = courseLessons[i];
+    const progress = getProgressLessonByLessonAndUser(prevLesson.id, userId);
+    if (!progress || progress.status !== "completed") {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Get progress lesson (convenience wrapper)
+ */
+export function getProgressLesson(userId: string, lessonId: string): ProgressLesson | undefined {
+  return getProgressLessonByLessonAndUser(lessonId, userId);
+}
+
+/**
+ * Get or create progress lesson
+ */
+export function getOrCreateProgressLesson(userId: string, lessonId: string): ProgressLesson {
+  return upsertProgressLesson(lessonId, userId, {});
+}
+
+/**
+ * Update lesson progress
+ */
+export function updateLessonProgress(lessonId: string, userId: string, updates: Partial<Omit<ProgressLesson, "id" | "lessonId" | "userId" | "createdAt" | "updatedAt">>): void {
+  const existing = getProgressLessonByLessonAndUser(lessonId, userId);
+  if (existing) {
+    updateProgressLesson(existing.id, updates);
+  } else {
+    upsertProgressLesson(lessonId, userId, updates);
+  }
+}
+
+/**
+ * Phase II 1H.5: Bump lesson telemetry (time, video watch percentage, scroll depth)
+ * Incrementally updates telemetry data for a lesson
+ */
+export function bumpLessonTelemetry(params: {
+  courseId: string;
+  lessonId: string;
+  userId: string;
+  timeDeltaSec?: number;
+  watchPct?: number;
+  videoPct?: number;
+  scrollDepth?: number;
+}): void {
+  const { lessonId, userId, timeDeltaSec, watchPct, videoPct, scrollDepth } = params;
+  
+  // Get or create progress lesson
+  const progress = getOrCreateProgressLesson(userId, lessonId);
+  
+  const updates: Partial<Omit<ProgressLesson, "id" | "lessonId" | "userId" | "createdAt" | "updatedAt">> = {};
+  
+  // Increment time spent
+  if (timeDeltaSec !== undefined && timeDeltaSec > 0) {
+    const currentTime = progress.timeSpentSec || 0;
+    updates.timeSpentSec = currentTime + timeDeltaSec;
+  }
+  
+  // Update video watch percentage (use videoPct if provided, otherwise watchPct)
+  const watchPercentage = videoPct !== undefined ? videoPct * 100 : watchPct;
+  if (watchPercentage !== undefined) {
+    // Ensure it's in 0-100 range
+    updates.watchPct = Math.max(0, Math.min(100, watchPercentage));
+  }
+  
+  // Update scroll depth
+  if (scrollDepth !== undefined) {
+    // Ensure it's in 0-1 range
+    updates.scrollDepth = Math.max(0, Math.min(1, scrollDepth));
+  }
+  
+  // Only update if there are changes
+  if (Object.keys(updates).length > 0) {
+    updateLessonProgress(lessonId, userId, updates);
+    
+    // Check completion thresholds after updating telemetry
+    const course = getCourseById(params.courseId);
+    if (course) {
+      const updatedProgress = getProgressLessonByLessonAndUser(lessonId, userId);
+      if (updatedProgress && checkLessonCompletionThresholds(course, updatedProgress)) {
+        // Auto-complete if thresholds are met and manual completion is not required
+        if (!course.policy?.requiresManualCompletion && updatedProgress.status !== "completed") {
+          completeLesson(params.courseId, lessonId, userId);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Start lesson tracking (creates or updates progress)
+ */
+export function startLesson(courseId: string, lessonId: string, userId: string): ProgressLesson {
+  const existing = getProgressLessonByLessonAndUser(lessonId, userId);
+  
+  if (existing) {
+    // Update status to in_progress if not already started
+    if (existing.status === "not_started" && !existing.startedAt) {
+      updateProgressLesson(existing.id, {
+        status: "in_progress",
+        startedAt: timestamp(),
+      });
+    }
+    return progressLessons.find(p => p.id === existing.id)!;
+  } else {
+    // Create new progress lesson
+    return upsertProgressLesson(lessonId, userId, {
+      status: "in_progress",
+      startedAt: timestamp(),
+    });
+  }
+}
+
+/**
+ * Get next lesson ID in course
+ */
+export function getNextLessonId(courseId: string, lessonId: string): string | null {
+  const course = getCourseById(courseId);
+  if (!course) return null;
+  
+  const lessonIndex = course.lessonIds.indexOf(lessonId);
+  if (lessonIndex === -1 || lessonIndex === course.lessonIds.length - 1) {
+    return null;
+  }
+  
+  return course.lessonIds[lessonIndex + 1];
+}
+
+/**
+ * Get previous lesson ID in course
+ */
+export function getPrevLessonId(courseId: string, lessonId: string): string | null {
+  const course = getCourseById(courseId);
+  if (!course) return null;
+  
+  const lessonIndex = course.lessonIds.indexOf(lessonId);
+  if (lessonIndex <= 0) {
+    return null;
+  }
+  
+  return course.lessonIds[lessonIndex - 1];
+}
+
+/**
+ * Get next unlocked lesson for a user
+ */
+export function getNextUnlockedLesson(courseId: string, userId: string, currentLessonId: string): string | null {
+  const course = getCourseById(courseId);
+  if (!course) return null;
+  
+  const nextId = getNextLessonId(courseId, currentLessonId);
+  if (!nextId) return null;
+  
+  if (isLessonUnlocked(course, nextId, userId)) {
+    return nextId;
+  }
+  
+  return null;
+}
+
+/**
+ * Update resume pointer for a user in a course
+ */
+export function updateResumePointer(userId: string, courseId: string, lessonId: string): void {
+  const progressCourse = getProgressCourseByCourseAndUser(courseId, userId);
+  if (progressCourse) {
+    updateProgressCourse(progressCourse.id, {
+      lastLessonId: lessonId,
+    });
+  } else {
+    // Create progress course if it doesn't exist
+    getOrCreateProgressCourse(userId, courseId);
+    const newProgressCourse = getProgressCourseByCourseAndUser(courseId, userId);
+    if (newProgressCourse) {
+      updateProgressCourse(newProgressCourse.id, {
+        lastLessonId: lessonId,
+      });
+    }
+  }
+}
+
+/**
+ * Check if lesson completion thresholds are met
+ */
+export function checkLessonCompletionThresholds(course: Course, progress: ProgressLesson): boolean {
+  const policy = course.policy;
+  if (!policy) return true; // No policy means no thresholds
+  
+  // Check time spent threshold
+  if (policy.minTimeOnLessonSec && (progress.timeSpentSec || 0) < policy.minTimeOnLessonSec) {
+    return false;
+  }
+  
+  // Check video watch percentage threshold
+  if (policy.minVideoWatchPct && (progress.watchPct || 0) < policy.minVideoWatchPct) {
+    return false;
+  }
+  
+  // Check scroll depth threshold (if implemented)
+  if (policy.minScrollDepth && (progress.scrollDepth || 0) < policy.minScrollDepth) {
+    return false;
+  }
+  
+  // If requireQuizPassToCompleteLesson, check quiz pass requirement
+  if (policy.requireQuizPassToCompleteLesson && progress.lastQuizAttemptId) {
+    const attempt = quizAttempts.find(a => a.id === progress.lastQuizAttemptId);
+    if (!attempt || !attempt.submittedAt) {
+      // Quiz not submitted yet
+      return false;
+    }
+    // Quiz pass status is checked in tryCompleteLesson
+  }
+  
+  return true;
+}
+
+/**
+ * Complete a lesson for a user
+ */
+export function completeLesson(courseId: string, lessonId: string, userId: string): void {
+  const progress = getProgressLessonByLessonAndUser(lessonId, userId);
+  const course = getCourseById(courseId);
+  
+  if (!course) {
+    throw new Error(`Course ${courseId} not found`);
+  }
+  
+  // Check if quiz pass is required
+  if (course.policy?.requireQuizPassToCompleteLesson) {
+    const lesson = getLessonById(lessonId);
+    if (lesson?.quizId) {
+      const quiz = getQuizById(lesson.quizId);
+      if (quiz) {
+        const attempts = getAttemptsForQuiz(quiz.id, userId);
+        const lastPassedAttempt = attempts.find(a => a.submittedAt && a.passed);
+        if (!lastPassedAttempt) {
+          throw new Error("Quiz must be passed to complete this lesson");
+        }
+      }
+    }
+  }
+  
+  if (progress) {
+    updateProgressLesson(progress.id, {
+      status: "completed",
+      completedAt: timestamp(),
+    });
+  } else {
+    upsertProgressLesson(lessonId, userId, {
+      status: "completed",
+      completedAt: timestamp(),
+    });
+  }
+  
+  // Try to complete the course
+  tryCompleteCourse({ courseId, userId });
+  
+  notifyListeners();
+}
+
+/**
+ * Get the resume pointer (courseId and lessonId) for a user across all courses
+ * Returns the most recent course/lesson combination the user was working on
+ */
+export function getResumePointer(userId: string): { courseId: string; lessonId: string } | null {
+  // Get all assigned courses
+  const assignedCourses = getAssignedCoursesForUser(userId);
+  
+  // Find the most recent in-progress lesson across all courses
+  let mostRecent: { courseId: string; lessonId: string; updatedAt: string } | null = null;
+
+  assignedCourses.forEach(course => {
+    const lessonId = getResumePointerForCourse(userId, course.id);
+    if (lessonId) {
+      const progress = getProgressLessonByLessonAndUser(lessonId, userId);
+      if (progress && progress.updatedAt) {
+        if (!mostRecent || new Date(progress.updatedAt) > new Date(mostRecent.updatedAt)) {
+          mostRecent = {
+            courseId: course.id,
+            lessonId,
+            updatedAt: progress.updatedAt,
+          };
+        }
+      }
+    }
+  });
+
+  return mostRecent ? { courseId: mostRecent.courseId, lessonId: mostRecent.lessonId } : null;
+}
+
 // Certificate operations
 export function getCertificates(): Certificate[] {
   return certificates;
@@ -1492,6 +2232,133 @@ export function issueCertificate(
 export function deleteCertificate(id: string): void {
   certificates = certificates.filter(c => c.id !== id);
   notifyListeners();
+}
+
+// Certificate Template operations
+export function getCertificateTemplates(): CertificateTemplate[] {
+  return [...certificateTemplates];
+}
+
+export function getCertificateTemplateById(id: string): CertificateTemplate | undefined {
+  return certificateTemplates.find(t => t.id === id);
+}
+
+export function getEffectiveCertificateTemplate(): CertificateTemplate | undefined {
+  return certificateTemplates.find(t => t.isDefault) || certificateTemplates[0];
+}
+
+export function createCertificateTemplate(data: Omit<CertificateTemplate, "id" | "createdAt" | "updatedAt">): CertificateTemplate {
+  const now = timestamp();
+  const template: CertificateTemplate = {
+    ...data,
+    id: `cert_tmpl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  certificateTemplates.push(template);
+  notifyListeners();
+  return template;
+}
+
+export function updateCertificateTemplate(id: string, updates: Partial<Omit<CertificateTemplate, "id" | "createdAt" | "updatedAt">>): void {
+  const template = certificateTemplates.find(t => t.id === id);
+  if (template) {
+    Object.assign(template, updates, { updatedAt: timestamp() });
+    notifyListeners();
+  }
+}
+
+export function setDefaultCertificateTemplate(templateId: string): void {
+  // Remove default from all templates
+  certificateTemplates.forEach(t => {
+    if (t.isDefault) {
+      t.isDefault = false;
+    }
+  });
+  
+  // Set the specified template as default
+  const template = certificateTemplates.find(t => t.id === templateId);
+  if (template) {
+    template.isDefault = true;
+    template.updatedAt = timestamp();
+    notifyListeners();
+  }
+}
+
+/**
+ * Resolve all user IDs that are assigned to a course based on all assignments
+ * Resolves user/role/site/dept targeting and returns unique user IDs
+ */
+export function resolveAssigneesForCourse(courseId: string): string[] {
+  const userSet = new Set<string>();
+  
+  assignments.forEach(assignment => {
+    if (assignment.courseId !== courseId) return;
+    
+    const { target } = assignment;
+    
+    switch (target.type) {
+      case "user":
+        target.userIds?.forEach(userId => userSet.add(userId));
+        break;
+      case "role":
+        users.forEach(user => {
+          if (target.roles?.includes(user.role)) {
+            // Check site filter if specified
+            if (target.siteIds && target.siteIds.length > 0) {
+              if (!user.siteId || !target.siteIds.includes(user.siteId)) return;
+            }
+            // Check department filter if specified
+            if (target.departmentIds && target.departmentIds.length > 0) {
+              if (!user.departmentId || !target.departmentIds.includes(user.departmentId)) return;
+            }
+            userSet.add(user.id);
+          }
+        });
+        break;
+      case "site":
+        users.forEach(user => {
+          if (user.siteId && target.siteIds?.includes(user.siteId)) {
+            userSet.add(user.id);
+          }
+        });
+        break;
+      case "department":
+        users.forEach(user => {
+          if (user.departmentId && target.departmentIds?.includes(user.departmentId)) {
+            userSet.add(user.id);
+          }
+        });
+        break;
+    }
+  });
+  
+  return Array.from(userSet);
+}
+
+// Placeholder functions for AI course metadata/styling (stubs for now)
+export function collectCourseHtml(courseId: string): string {
+  // TODO: Implement course HTML collection
+  return "";
+}
+
+export function applyCourseMetadata(courseId: string, metadata: CourseMetadata): void {
+  // TODO: Implement course metadata application
+  const course = courses.find(c => c.id === courseId);
+  if (course) {
+    course.metadata = metadata;
+    course.updatedAt = timestamp();
+    notifyListeners();
+  }
+}
+
+export function applyBulkStyleFixes(courseId: string, fixes: Array<{ selector: string; property: string; value: string }>): void {
+  // TODO: Implement bulk style fixes
+  const course = courses.find(c => c.id === courseId);
+  if (course) {
+    course.updatedAt = timestamp();
+    notifyListeners();
+  }
 }
 
 // ===================================================================
@@ -1886,3 +2753,728 @@ export function performRedo(entityType: VersionedEntityType, entityId: string): 
   return result !== null;
 }
 
+// Phase II 1I.1: Quiz Attempt Functions (moved here for Phase II 1I.3 integration)
+
+/**
+ * Get quiz policy with defaults
+ */
+export function getQuizPolicy(quiz: Quiz): QuizPolicy {
+  if (quiz.policy) {
+    return quiz.policy;
+  }
+  
+  // Fallback to legacy config
+  const config = quiz.config || {};
+  // Handle maxAttempts: 0 means unlimited, undefined also means unlimited
+  // Only set maxAttempts if it's explicitly a positive number
+  const maxAttempts = config.maxAttempts !== undefined && config.maxAttempts > 0
+    ? config.maxAttempts
+    : (quiz.maxAttempts !== undefined && quiz.maxAttempts > 0 ? quiz.maxAttempts : undefined);
+  
+  return {
+    passingScorePct: config.passingScore ?? quiz.passingScorePct ?? 80,
+    maxAttempts,
+    showFeedback: config.showFeedback ?? 'end',
+    shuffleQuestions: config.shuffleQuestions ?? false,
+    shuffleOptions: config.shuffleOptions ?? false,
+    lockOnPass: config.lockOnPass ?? false,
+  };
+}
+
+/**
+ * Start a quiz attempt (create or resume)
+ */
+export function startQuizAttempt(params: {
+  quizId: string;
+  courseId: string;
+  lessonId: string;
+  userId: string;
+}): QuizAttempt {
+  // Check for existing in-progress attempt
+  const existingAttempt = quizAttempts.find(
+    a => a.quizId === params.quizId &&
+         a.userId === params.userId &&
+         !a.submittedAt
+  );
+  
+  if (existingAttempt) {
+    return existingAttempt; // Resume existing attempt
+  }
+  
+  // Create new attempt
+  const attempt: QuizAttempt = {
+    id: `qa_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    quizId: params.quizId,
+    courseId: params.courseId,
+    lessonId: params.lessonId,
+    userId: params.userId,
+    startedAt: timestamp(),
+    answers: [],
+    createdAt: timestamp(),
+    updatedAt: timestamp(),
+  };
+  
+  quizAttempts.push(attempt);
+  notifyListeners();
+  return attempt;
+}
+
+/**
+ * Grade a quiz and return results
+ */
+export function gradeQuiz(
+  quizId: string,
+  answers: Array<{ questionId: string; value: string | string[] }>
+): { scorePct: number; passed: boolean; details: Array<{ questionId: string; correct: boolean; pointsAwarded: number; pointsPossible: number }> } {
+  const quiz = getQuizById(quizId);
+  if (!quiz) {
+    throw new Error('Quiz not found');
+  }
+  
+  const { gradeQuestion } = require('./quiz');
+  let totalPointsAwarded = 0;
+  let totalPointsPossible = 0;
+  const details: Array<{ questionId: string; correct: boolean; pointsAwarded: number; pointsPossible: number }> = [];
+  
+  quiz.questions.forEach(question => {
+    const answer = answers.find(a => a.questionId === question.id);
+    const result = gradeQuestion(question, answer?.value);
+    const pointsPossible = question.points ?? 1;
+    
+    totalPointsAwarded += result.pointsAwarded;
+    totalPointsPossible += pointsPossible;
+    
+    details.push({
+      questionId: question.id,
+      correct: result.correct,
+      pointsAwarded: result.pointsAwarded,
+      pointsPossible,
+    });
+  });
+  
+  const scorePct = totalPointsPossible > 0 
+    ? Math.round((totalPointsAwarded / totalPointsPossible) * 100)
+    : 0;
+  
+  const policy = getQuizPolicy(quiz);
+  const passed = scorePct >= policy.passingScorePct;
+  
+  return { scorePct, passed, details };
+}
+
+/**
+ * Submit a quiz attempt and calculate score
+ * Phase II 1I.3: Updated to check mastery and create remediation bundles
+ */
+export function submitQuizAttempt(
+  attemptId: string,
+  answers: Array<{ questionId: string; value: string | string[] }>
+): QuizAttempt {
+  const attempt = quizAttempts.find(a => a.id === attemptId);
+  if (!attempt || attempt.submittedAt) {
+    throw new Error('Attempt not found or already submitted');
+  }
+
+  const quiz = getQuizById(attempt.quizId);
+  if (!quiz) {
+    throw new Error('Quiz not found');
+  }
+
+  // Grade the quiz
+  const gradingResult = gradeQuiz(attempt.quizId, answers);
+
+  // Update attempt with answers and results
+  attempt.submittedAt = timestamp();
+  attempt.answers = answers;
+  attempt.scorePct = gradingResult.scorePct;
+  attempt.passed = gradingResult.passed;
+  attempt.updatedAt = timestamp();
+
+  // Update progress lesson with quiz attempt tracking
+  const progress = getProgressLessonByLessonAndUser(attempt.lessonId, attempt.userId);
+  if (progress) {
+    updateProgressLesson(progress.id, {
+      lastQuizAttemptId: attempt.id,
+    });
+    if (gradingResult.passed) {
+      updateProgressLesson(progress.id, {
+        lastPassedQuizAttemptId: attempt.id,
+      });
+    }
+  }
+
+  // Check if quiz pass should complete lesson
+  const course = courses.find(c => c.id === attempt.courseId);
+  if (course?.policy?.requireQuizPassToCompleteLesson && gradingResult.passed) {
+    markLessonCompleteByQuizPass({
+      courseId: attempt.courseId,
+      lessonId: attempt.lessonId,
+      userId: attempt.userId,
+      quizAttemptId: attempt.id,
+    });
+
+    // Try to complete course
+    tryCompleteCourse({ courseId: attempt.courseId, userId: attempt.userId });
+  }
+
+  // Log change
+  const { logChange } = require('./changeLog');
+  logChange(
+    attempt.id,
+    `Quiz ${gradingResult.passed ? 'passed' : 'failed'} with ${gradingResult.scorePct}%`,
+    {
+      action: gradingResult.passed ? 'quiz_passed' : 'quiz_failed',
+      scorePct: gradingResult.scorePct,
+      passed: gradingResult.passed,
+      attemptId: attempt.id,
+    },
+    'QuizAttempt'
+  );
+
+  notifyListeners();
+  return attempt;
+}
+
+/**
+ * Get attempts for a specific quiz by user
+ */
+export function getAttemptsForQuiz(quizId: string, userId: string): QuizAttempt[] {
+  return quizAttempts.filter(
+    a => a.quizId === quizId && a.userId === userId && a.submittedAt
+  );
+}
+
+/**
+ * Get active (in-progress) attempt for a quiz
+ */
+export function getActiveAttempt(userId: string, quizId: string): QuizAttempt | undefined {
+  return quizAttempts.find(
+    a => a.quizId === quizId && a.userId === userId && !a.submittedAt
+  );
+}
+
+/**
+ * Get last passed attempt for a quiz
+ */
+export function getLastPassedAttempt(quizId: string, userId: string): QuizAttempt | undefined {
+  const attempts = getAttemptsForQuiz(quizId, userId);
+  const passedAttempts = attempts.filter(a => a.passed);
+  if (passedAttempts.length === 0) return undefined;
+  
+  return passedAttempts.sort((a, b) => 
+    new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime()
+  )[0];
+}
+
+/**
+ * Check if user can start a new attempt
+ */
+export function canStartAttempt(
+  quizId: string,
+  userId: string,
+  policy: QuizPolicy
+): { canStart: boolean; attemptsUsed: number; attemptsRemaining: number | null; reason?: string } {
+  const attempts = getAttemptsForQuiz(quizId, userId);
+  const attemptsUsed = attempts.length;
+  
+  // Check max attempts
+  if (policy.maxAttempts !== undefined && attemptsUsed >= policy.maxAttempts) {
+    return {
+      canStart: false,
+      attemptsUsed,
+      attemptsRemaining: 0,
+      reason: 'Maximum attempts reached',
+    };
+  }
+  
+  // Check lock on pass
+  if (policy.lockOnPass) {
+    const lastPassed = getLastPassedAttempt(quizId, userId);
+    if (lastPassed) {
+      return {
+        canStart: false,
+        attemptsUsed,
+        attemptsRemaining: policy.maxAttempts ? policy.maxAttempts - attemptsUsed : null,
+        reason: 'Quiz locked after passing',
+      };
+    }
+  }
+  
+  return {
+    canStart: true,
+    attemptsUsed,
+    attemptsRemaining: policy.maxAttempts ? policy.maxAttempts - attemptsUsed : null,
+  };
+}
+
+/**
+ * Get all quiz attempts (for admin)
+ */
+export function getAllQuizAttempts(): QuizAttempt[] {
+  return [...quizAttempts];
+}
+
+// ============================================================================
+// Phase II — 1M.1: Skills Tagging Functions
+// ============================================================================
+
+/**
+ * Get all skills
+ */
+export function getSkills(): Skill[] {
+  return [...skills];
+}
+
+/**
+ * Get skill by ID
+ */
+export function getSkillById(id: string): Skill | undefined {
+  return skills.find(s => s.id === id);
+}
+
+/**
+ * Create a new skill
+ */
+export function createSkill(name: string, category?: string): Skill {
+  const now = timestamp();
+  const skill: Skill = {
+    id: `skl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    name: name.trim(),
+    category: category?.trim() || undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+  skills.push(skill);
+  notifyListeners();
+  return skill;
+}
+
+/**
+ * Update a skill
+ */
+export function updateSkill(id: string, updates: Partial<Omit<Skill, "id" | "createdAt" | "updatedAt">>): void {
+  const skill = skills.find(s => s.id === id);
+  if (!skill) return;
+  
+  Object.assign(skill, updates);
+  skill.updatedAt = timestamp();
+  notifyListeners();
+}
+
+/**
+ * Delete a skill (checks if used in courses)
+ */
+export function deleteSkill(id: string): void {
+  // Check if skill is assigned to any course
+  const isUsed = courses.some(c => c.skills?.includes(id));
+  if (isUsed) {
+    throw new Error("Cannot delete skill: it is assigned to one or more courses");
+  }
+  
+  skills = skills.filter(s => s.id !== id);
+  notifyListeners();
+}
+
+/**
+ * Assign skills to a course
+ */
+export function assignSkillsToCourse(courseId: string, skillIds: string[]): void {
+  const course = courses.find(c => c.id === courseId);
+  if (!course) return;
+  
+  course.skills = [...skillIds];
+  course.updatedAt = timestamp();
+  notifyListeners();
+}
+
+/**
+ * Get skills for a course
+ */
+export function getSkillsByCourseId(courseId: string): Skill[] {
+  const course = courses.find(c => c.id === courseId);
+  if (!course || !course.skills || course.skills.length === 0) return [];
+  
+  return course.skills
+    .map(skillId => skills.find(s => s.id === skillId))
+    .filter((skill): skill is Skill => skill !== undefined);
+}
+
+/**
+ * Get earned skills by user (from completed courses)
+ */
+export function getEarnedSkillsByUser(userId: string): Array<{ skill: Skill; courses: Course[] }> {
+  // Get all completed courses for user from ProgressCourse
+  const completedProgress = progressCourses.filter(p => p.userId === userId && p.status === "completed");
+  const completedCourseIds = new Set(completedProgress.map(p => p.courseId));
+  
+  // Also check certificates
+  const certificatesForUser = certificates.filter(c => c.userId === userId);
+  certificatesForUser.forEach(cert => completedCourseIds.add(cert.courseId));
+  
+  // Phase II — 1M.1: Also check TrainingCompletions with COMPLETED status and courseId
+  const completedTrainings = completions.filter(
+    c => c.userId === userId && 
+    c.status === "COMPLETED" && 
+    c.courseId !== undefined
+  );
+  completedTrainings.forEach(completion => {
+    if (completion.courseId) {
+      completedCourseIds.add(completion.courseId);
+    }
+  });
+  
+  // Get all skills from completed courses
+  const skillToCoursesMap = new Map<string, Course[]>();
+  
+  completedCourseIds.forEach(courseId => {
+    const course = courses.find(c => c.id === courseId);
+    if (!course || !course.skills) return;
+    
+    course.skills.forEach(skillId => {
+      if (!skillToCoursesMap.has(skillId)) {
+        skillToCoursesMap.set(skillId, []);
+      }
+      skillToCoursesMap.get(skillId)!.push(course);
+    });
+  });
+  
+  // Convert to array format
+  return Array.from(skillToCoursesMap.entries())
+    .map(([skillId, courses]) => {
+      const skill = skills.find(s => s.id === skillId);
+      if (!skill) return null;
+      return { skill, courses };
+    })
+    .filter((item): item is { skill: Skill; courses: Course[] } => item !== null)
+    .sort((a, b) => a.skill.name.localeCompare(b.skill.name));
+}
+
+/**
+ * Get courses that teach a skill
+ */
+export function getCoursesBySkill(skillId: string): Course[] {
+  return courses.filter(c => c.skills?.includes(skillId));
+}
+
+// Phase II 1I.3: Adaptive Learning Loop functionality removed (reverted)
+
+// ============================================================================
+// Phase II — 1N.3: Library API
+// ============================================================================
+
+export interface LibraryFilters {
+  type?: "file" | "link";
+  fileType?: "pdf" | "ppt" | "pptx" | "doc" | "docx" | "image" | "video" | "other";
+  source?: "upload" | "loom" | "teams" | "youtube" | "vimeo" | "sharepoint" | "drive" | "other";
+  tags?: string[];
+  categories?: string[];
+  siteId?: string;
+  departmentId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  includeArchived?: boolean;
+}
+
+/**
+ * Get Library items with optional filtering
+ */
+export function getLibraryItems(filters?: LibraryFilters): LibraryItem[] {
+  let items = [...libraryItems];
+  const currentUser = getCurrentUser();
+  
+  // Permission filtering: Managers only see items in their scope or unscoped items
+  if (currentUser.role === "MANAGER") {
+    items = items.filter(item => {
+      // Unscoped items (no siteId/departmentId) are visible to all managers
+      if (!item.siteId && !item.departmentId) return true;
+      
+      // Manager's site matches
+      if (currentUser.siteId && item.siteId === currentUser.siteId) {
+        // If item has departmentId, manager must match that department
+        if (item.departmentId) {
+          return currentUser.departmentId === item.departmentId;
+        }
+        // Item is site-scoped only, manager can see it
+        return true;
+      }
+      
+      return false;
+    });
+  }
+  
+  // Apply filters
+  if (filters) {
+    if (filters.type) {
+      items = items.filter(item => item.type === filters.type);
+    }
+    
+    if (filters.fileType) {
+      items = items.filter(item => item.fileType === filters.fileType);
+    }
+    
+    if (filters.source) {
+      items = items.filter(item => item.source === filters.source);
+    }
+    
+    if (filters.tags && filters.tags.length > 0) {
+      items = items.filter(item => 
+        filters.tags!.some(tag => item.tags.includes(tag))
+      );
+    }
+    
+    if (filters.categories && filters.categories.length > 0) {
+      items = items.filter(item => 
+        filters.categories!.some(cat => item.categories.includes(cat))
+      );
+    }
+    
+    if (filters.siteId) {
+      items = items.filter(item => item.siteId === filters.siteId);
+    }
+    
+    if (filters.departmentId) {
+      items = items.filter(item => item.departmentId === filters.departmentId);
+    }
+    
+    if (filters.dateFrom) {
+      items = items.filter(item => item.createdAt >= filters.dateFrom!);
+    }
+    
+    if (filters.dateTo) {
+      items = items.filter(item => item.createdAt <= filters.dateTo!);
+    }
+    
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      items = items.filter(item => 
+        item.title.toLowerCase().includes(searchLower) ||
+        item.description?.toLowerCase().includes(searchLower) ||
+        item.tags.some(tag => tag.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    if (!filters.includeArchived) {
+      items = items.filter(item => !item.archivedAt);
+    }
+  } else {
+    // Default: exclude archived
+    items = items.filter(item => !item.archivedAt);
+  }
+  
+  return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/**
+ * Get Library item by ID
+ */
+export function getLibraryItemById(id: string): LibraryItem | undefined {
+  return libraryItems.find(item => item.id === id);
+}
+
+/**
+ * Create a new Library item
+ */
+export function createLibraryItem(
+  data: Omit<LibraryItem, "id" | "createdAt" | "updatedAt" | "version">
+): LibraryItem {
+  const now = timestamp();
+  const currentUser = getCurrentUser();
+  
+  const item: LibraryItem = {
+    ...data,
+    id: `lib_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    createdByUserId: currentUser.id,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    tags: data.tags || [],
+    categories: data.categories || [],
+  };
+  
+  libraryItems.push(item);
+  notifyListeners();
+  return item;
+}
+
+/**
+ * Update Library item metadata
+ */
+export function updateLibraryItem(
+  id: string,
+  updates: Partial<Omit<LibraryItem, "id" | "createdAt" | "updatedAt" | "version" | "parentId">>
+): void {
+  const item = libraryItems.find(i => i.id === id);
+  if (!item) return;
+  
+  const currentUser = getCurrentUser();
+  
+  // Permission check: Manager can only update items in their scope
+  if (currentUser.role === "MANAGER") {
+    if (item.siteId && item.siteId !== currentUser.siteId) {
+      throw new Error("Cannot update item outside your scope");
+    }
+    if (item.departmentId && item.departmentId !== currentUser.departmentId) {
+      throw new Error("Cannot update item outside your scope");
+    }
+  }
+  
+  Object.assign(item, updates, { updatedAt: timestamp() });
+  notifyListeners();
+}
+
+/**
+ * Archive Library item (soft delete)
+ */
+export function archiveLibraryItem(id: string): void {
+  const item = libraryItems.find(i => i.id === id);
+  if (!item) return;
+  
+  const currentUser = getCurrentUser();
+  
+  // Permission check: Manager can only archive items in their scope
+  if (currentUser.role === "MANAGER") {
+    if (item.siteId && item.siteId !== currentUser.siteId) {
+      throw new Error("Cannot archive item outside your scope");
+    }
+    if (item.departmentId && item.departmentId !== currentUser.departmentId) {
+      throw new Error("Cannot archive item outside your scope");
+    }
+  }
+  
+  item.archivedAt = timestamp();
+  item.updatedAt = timestamp();
+  notifyListeners();
+}
+
+/**
+ * Delete Library item (hard delete - Admin only)
+ */
+export function deleteLibraryItem(id: string): void {
+  const currentUser = getCurrentUser();
+  
+  if (currentUser.role !== "ADMIN") {
+    throw new Error("Only admins can delete library items");
+  }
+  
+  const index = libraryItems.findIndex(i => i.id === id);
+  if (index > -1) {
+    libraryItems.splice(index, 1);
+    notifyListeners();
+  }
+}
+
+/**
+ * Create a new version of a Library item
+ */
+export function createNewVersion(
+  parentId: string,
+  updates: Partial<Omit<LibraryItem, "id" | "createdAt" | "updatedAt" | "version" | "parentId">>
+): LibraryItem {
+  const parent = libraryItems.find(i => i.id === parentId);
+  if (!parent) {
+    throw new Error(`Parent item ${parentId} not found`);
+  }
+  
+  const currentUser = getCurrentUser();
+  const now = timestamp();
+  
+  // Permission check: Manager can only version items in their scope
+  if (currentUser.role === "MANAGER") {
+    if (parent.siteId && parent.siteId !== currentUser.siteId) {
+      throw new Error("Cannot create version of item outside your scope");
+    }
+    if (parent.departmentId && parent.departmentId !== currentUser.departmentId) {
+      throw new Error("Cannot create version of item outside your scope");
+    }
+  }
+  
+  const newVersion: LibraryItem = {
+    ...parent,
+    ...updates,
+    id: `lib_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    version: parent.version + 1,
+    parentId: parent.id,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: undefined,
+  };
+  
+  libraryItems.push(newVersion);
+  notifyListeners();
+  return newVersion;
+}
+
+/**
+ * Bulk create Library items (for bulk upload)
+ */
+export function bulkCreateLibraryItems(
+  items: Array<Omit<LibraryItem, "id" | "createdAt" | "updatedAt" | "version">>
+): LibraryItem[] {
+  const now = timestamp();
+  const currentUser = getCurrentUser();
+  const created: LibraryItem[] = [];
+  
+  items.forEach(data => {
+    const item: LibraryItem = {
+      ...data,
+      id: `lib_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      createdByUserId: currentUser.id,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      tags: data.tags || [],
+      categories: data.categories || [],
+    };
+    
+    libraryItems.push(item);
+    created.push(item);
+  });
+  
+  notifyListeners();
+  return created;
+}
+
+/**
+ * Compute checksum for duplicate detection
+ * Simple hash: filename (lowercase) + '_' + fileSize
+ */
+export function computeChecksum(filename: string, fileSize: number): string {
+  return `${filename.toLowerCase()}_${fileSize}`;
+}
+
+/**
+ * Check if newer version exists for a Library item
+ */
+export function getNewerVersion(libraryItemId: string): LibraryItem | null {
+  const item = libraryItems.find(i => i.id === libraryItemId);
+  if (!item) return null;
+  
+  // Find all versions (items with this item's ID as parentId)
+  const versions = libraryItems.filter(i => i.parentId === libraryItemId);
+  if (versions.length === 0) return null;
+  
+  // Return the highest version
+  return versions.sort((a, b) => b.version - a.version)[0];
+}
+
+/**
+ * Get all versions of a Library item (including parent)
+ */
+export function getLibraryItemVersions(libraryItemId: string): LibraryItem[] {
+  const item = libraryItems.find(i => i.id === libraryItemId);
+  if (!item) return [];
+  
+  // Find parent if this is a version
+  let rootId = libraryItemId;
+  if (item.parentId) {
+    rootId = item.parentId;
+  }
+  
+  // Get all items that are either the root or have root as parent
+  const versions = libraryItems.filter(i => 
+    i.id === rootId || i.parentId === rootId
+  );
+  
+  return versions.sort((a, b) => a.version - b.version);
+}

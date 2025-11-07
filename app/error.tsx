@@ -14,3 +14,10 @@ export default function GlobalError({ error }: { error: Error }) {
   );
 }
 
+
+
+
+
+
+
+
