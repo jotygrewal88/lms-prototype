@@ -1,8 +1,10 @@
-# LMS Prototype - Phase 1 Build Plan
+# LMS Prototype - Q1 Build Plan
 
 > **Version:** 1.0  
 > **Created:** January 5, 2026  
 > **Status:** Planning
+
+> **Note:** This document covers Q1 only. For Q2 (Course Builder, Learner Experience, Certificates, Analytics, AI Features, Settings), see the [interactive build plan](/build-plan.html) with tabbed navigation.
 
 ---
 

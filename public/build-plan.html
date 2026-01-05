@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LMS Prototype - Phase 1 Build Plan</title>
+  <title>LMS Prototype - Build Plan</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -365,6 +365,83 @@
       .diagram {
         font-size: 0.65rem;
       }
+      
+      .tabs {
+        flex-direction: column;
+      }
+      
+      .tab {
+        width: 100%;
+      }
+    }
+    
+    /* Tab Navigation */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0;
+    }
+    
+    .tab {
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s ease;
+    }
+    
+    .tab:hover {
+      color: var(--primary);
+      background: var(--bg-alt);
+    }
+    
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: transparent;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .phase-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-left: 12px;
+      vertical-align: middle;
+    }
+    
+    .phase-badge.phase1 {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    
+    .phase-badge.phase2 {
+      background: #fef3c7;
+      color: #b45309;
     }
   </style>
 </head>
@@ -380,7 +457,7 @@
     LMS Build Plan v1.0 | January 2026
   </div>
 
-  <h1>LMS Prototype - Phase 1 Build Plan</h1>
+  <h1>LMS Prototype - Build Plan</h1>
   
   <div class="meta">
     <p><strong>Version:</strong> 1.0</p>
@@ -388,7 +465,14 @@
     <p><strong>Status:</strong> Planning</p>
   </div>
 
-  <h2>Executive Summary</h2>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('phase1')">Q1: Foundation</button>
+    <button class="tab" onclick="switchTab('phase2')">Q2: Advanced Features</button>
+  </div>
+
+  <div id="phase1" class="tab-content active">
+  
+  <h2>Executive Summary <span class="phase-badge phase1">Q1</span></h2>
   <p>This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on five core modules that form the foundation of the system: <strong>Users, Trainings, Compliance, Library, and Notifications</strong>.</p>
   
   <h3>Recommended Build Order</h3>
@@ -1100,6 +1184,655 @@ npm run dev</div>
     <li><strong>Schedule</strong> regular check-ins to track progress</li>
   </ol>
 
+  </div><!-- End Phase 1 -->
+
+  <div id="phase2" class="tab-content">
+  
+  <h2>Executive Summary <span class="phase-badge phase2">Q2</span></h2>
+  <p>Q2 builds upon the foundation established in Q1, adding <strong>Course Builder, Learner Experience, Certificates & Skills, Analytics, AI Features, and Settings</strong>. These modules transform the compliance tracking system into a full learning management platform.</p>
+  
+  <h3>Recommended Build Order</h3>
+  <div class="build-order">
+    Course Builder → Learner Experience → Certificates → Analytics → AI Features → Settings
+  </div>
+  <p>This sequence builds content creation tools first, then the learner-facing experience, followed by supporting features.</p>
+
+  <hr>
+
+  <h2>Module Overview</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Module</th>
+        <th>Purpose</th>
+        <th>Key Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Course Builder</strong></td>
+        <td>Create and manage training content</td>
+        <td>Lesson editor, Resource types, Drag-and-drop, Course policies</td>
+      </tr>
+      <tr>
+        <td><strong>Learner Experience</strong></td>
+        <td>Deliver courses to learners</td>
+        <td>Course player, Progress tracking, Quiz system, Resume functionality</td>
+      </tr>
+      <tr>
+        <td><strong>Certificates & Skills</strong></td>
+        <td>Recognize achievements</td>
+        <td>Certificate generation, Templates, Skills passport</td>
+      </tr>
+      <tr>
+        <td><strong>Analytics</strong></td>
+        <td>Visualize compliance data</td>
+        <td>Dashboards, Trend charts, Missing learners, Drill-down reports</td>
+      </tr>
+      <tr>
+        <td><strong>AI Features</strong></td>
+        <td>Intelligent assistance</td>
+        <td>Smart Coach, Quiz generator, Content suggestions, Style analysis</td>
+      </tr>
+      <tr>
+        <td><strong>Settings</strong></td>
+        <td>Configure the system</td>
+        <td>Branding, Certificate templates, Glossary, Localization</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <h2>Architecture Diagram</h2>
+  <div class="diagram">┌─────────────────────────────────────────────────────────────────┐
+│                      COURSE BUILDER                              │
+│           (Lessons, Resources, Quizzes, Policies)                │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    LEARNER EXPERIENCE                            │
+│         (Course Player, Progress, Quizzes, Resume)               │
+└─────────────────────────────────────────────────────────────────┘
+                    │                           │
+                    ▼                           ▼
+┌───────────────────────────────┐   ┌─────────────────────────────┐
+│    CERTIFICATES & SKILLS      │   │         ANALYTICS           │
+│   (Templates, Generation,     │   │   (Dashboards, Trends,      │
+│    Passport, Stamps)          │   │    Missing Learners)        │
+└───────────────────────────────┘   └─────────────────────────────┘
+                    │                           │
+                    └───────────┬───────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        AI FEATURES                               │
+│      (Smart Coach, Quiz Generator, Style Analysis)               │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         SETTINGS                                 │
+│         (Brand, Certificates, Glossary, Localization)            │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+  <hr>
+
+  <h2>Data Models (Q2 Additions)</h2>
+  <p>Additional entities introduced in Q2:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Entity</th>
+        <th>Key Fields</th>
+        <th>Relationships</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Course</strong></td>
+        <td>id, title, description, lessons[], policy, linkedTrainingId, status</td>
+        <td>Has many Lessons; Links to Training</td>
+      </tr>
+      <tr>
+        <td><strong>Lesson</strong></td>
+        <td>id, title, resources[], quizId, order</td>
+        <td>Belongs to Course; Has many Resources; Has one Quiz</td>
+      </tr>
+      <tr>
+        <td><strong>Resource</strong></td>
+        <td>id, type, title, content/url, order</td>
+        <td>Belongs to Lesson</td>
+      </tr>
+      <tr>
+        <td><strong>Quiz</strong></td>
+        <td>id, questions[], passingScore, config</td>
+        <td>Belongs to Lesson; Has many Questions</td>
+      </tr>
+      <tr>
+        <td><strong>Question</strong></td>
+        <td>id, type, prompt, options[], explanation</td>
+        <td>Belongs to Quiz</td>
+      </tr>
+      <tr>
+        <td><strong>Progress</strong></td>
+        <td>id, lessonId, userId, status, completedAt, quizScore</td>
+        <td>Links User to Lesson</td>
+      </tr>
+      <tr>
+        <td><strong>Certificate</strong></td>
+        <td>id, templateId, userId, courseId, issuedAt, data</td>
+        <td>Links User to Course completion</td>
+      </tr>
+      <tr>
+        <td><strong>CertificateTemplate</strong></td>
+        <td>id, name, layout, fields[], styling</td>
+        <td>Has many Certificates</td>
+      </tr>
+      <tr>
+        <td><strong>Skill</strong></td>
+        <td>id, name, description, badgeUrl, category</td>
+        <td>Earned by Users via Course completion</td>
+      </tr>
+      <tr>
+        <td><strong>GlossaryTerm</strong></td>
+        <td>id, term, definition, category</td>
+        <td>Used in Style Guide</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Resource Types</h4>
+  <ul>
+    <li><strong>text</strong> — Rich text content with formatting</li>
+    <li><strong>video</strong> — Embedded video with progress tracking</li>
+    <li><strong>pdf</strong> — Embedded PDF viewer</li>
+    <li><strong>image</strong> — Image with optional caption</li>
+    <li><strong>link</strong> — External link resource</li>
+    <li><strong>file</strong> — Downloadable file attachment</li>
+  </ul>
+
+  <h4>Question Types</h4>
+  <ul>
+    <li><strong>mcq</strong> — Multiple choice (single answer)</li>
+    <li><strong>true_false</strong> — True/False</li>
+    <li><strong>multiselect</strong> — Multiple choice (multiple answers)</li>
+  </ul>
+
+  <hr>
+
+  <h2>Module Details</h2>
+
+  <div class="module-card">
+    <h3>Module 7: Course Builder</h3>
+    <p class="objective">Create, edit, and manage training course content with a powerful authoring interface.</p>
+    
+    <h4>Course Management</h4>
+    <ul>
+      <li>Create, edit, duplicate, and archive courses</li>
+      <li>Link courses to training requirements</li>
+      <li>Set course status (Draft, Published, Archived)</li>
+      <li>Course metadata (description, estimated time, thumbnail)</li>
+    </ul>
+    
+    <h4>Lesson Builder</h4>
+    <ul>
+      <li>Stepper interface for lesson creation</li>
+      <li>Drag-and-drop lesson reordering</li>
+      <li>Focused view for detailed editing</li>
+      <li>Lesson preview modal</li>
+    </ul>
+    
+    <h4>Resource Editor</h4>
+    <ul>
+      <li>Six resource types: Text, Video, PDF, Image, Link, File</li>
+      <li>Rich text editor with formatting toolbar</li>
+      <li>Media upload with drag-and-drop</li>
+      <li>Resource reordering within lessons</li>
+    </ul>
+    
+    <h4>Course Policies</h4>
+    <ul>
+      <li>Progression mode (Linear vs Free navigation)</li>
+      <li>Minimum video watch percentage</li>
+      <li>Minimum time on lesson</li>
+      <li>Quiz pass requirement per lesson</li>
+    </ul>
+    
+    <h4>Preview Mode</h4>
+    <ul>
+      <li>Full course preview as learner would see it</li>
+      <li>Policy indicators displayed</li>
+      <li>Quiz testing functionality</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/courses</span> <span class="feature-tag">/admin/courses/[id]/edit</span> <span class="feature-tag">/admin/courses/[id]/preview</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 8: Learner Experience</h3>
+    <p class="objective">Deliver engaging course content to learners with progress tracking and interactive quizzes.</p>
+    
+    <h4>Course Player</h4>
+    <ul>
+      <li>Sidebar navigation with lesson list</li>
+      <li>Progress indicators per lesson</li>
+      <li>Header with course title and exit button</li>
+      <li>Footer navigation (Previous/Next)</li>
+    </ul>
+    
+    <h4>Content Rendering</h4>
+    <ul>
+      <li>Text content with rich formatting</li>
+      <li>Video player with progress tracking</li>
+      <li>Embedded PDF viewer</li>
+      <li>Image gallery support</li>
+      <li>External link handling</li>
+    </ul>
+    
+    <h4>Video Progress Tracking</h4>
+    <ul>
+      <li>Track watch percentage in real-time</li>
+      <li>Enforce minimum watch requirement</li>
+      <li>Resume from last position</li>
+      <li>Prevent skipping (when policy requires)</li>
+    </ul>
+    
+    <h4>Quiz System</h4>
+    <ul>
+      <li>Question rendering (MCQ, True/False, Multi-select)</li>
+      <li>Instant feedback on answers</li>
+      <li>Score calculation and pass/fail</li>
+      <li>Rationale display for learning</li>
+      <li>Retry functionality</li>
+    </ul>
+    
+    <h4>Progress Persistence</h4>
+    <ul>
+      <li>Save progress on each action</li>
+      <li>Resume from last lesson</li>
+      <li>"Continue where you left off" card</li>
+      <li>Completion status tracking</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/learner/courses</span> <span class="feature-tag">/learner/courses/[id]</span> <span class="feature-tag">/learner/courses/[id]/lessons/[id]</span> <span class="feature-tag">/learner/completed</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 9: Certificates & Skills</h3>
+    <p class="objective">Recognize learner achievements with customizable certificates and skill badges.</p>
+    
+    <h4>Certificate Generation</h4>
+    <ul>
+      <li>Automatic generation on course completion</li>
+      <li>Template-based rendering</li>
+      <li>Dynamic field population (name, date, course)</li>
+      <li>Download as PDF</li>
+    </ul>
+    
+    <h4>Certificate Templates</h4>
+    <ul>
+      <li>Multiple template designs</li>
+      <li>Customizable fields and layout</li>
+      <li>Logo and branding integration</li>
+      <li>Preview before publishing</li>
+    </ul>
+    
+    <h4>Skills Passport</h4>
+    <ul>
+      <li>Visual skill stamps/badges</li>
+      <li>Skills earned from course completion</li>
+      <li>Passport view showing all achievements</li>
+      <li>Skill categories and organization</li>
+    </ul>
+    
+    <h4>Learner Profile</h4>
+    <ul>
+      <li>Personal information display</li>
+      <li>Training history</li>
+      <li>Certificates earned</li>
+      <li>Skills acquired</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/learner/certificates</span> <span class="feature-tag">/learner/passport</span> <span class="feature-tag">/learner/profile</span> <span class="feature-tag">/admin/settings/certificates</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 10: Analytics Dashboard</h3>
+    <p class="objective">Visualize compliance data and identify training gaps with interactive dashboards.</p>
+    
+    <h4>Compliance Metrics</h4>
+    <ul>
+      <li>Overall compliance rate</li>
+      <li>Overdue count and trends</li>
+      <li>Due soon alerts</li>
+      <li>Completion velocity</li>
+    </ul>
+    
+    <h4>Visualizations</h4>
+    <ul>
+      <li>Sparkline trend charts</li>
+      <li>Progress bars and gauges</li>
+      <li>Status distribution charts</li>
+      <li>Time-based comparisons</li>
+    </ul>
+    
+    <h4>Missing Learners</h4>
+    <ul>
+      <li>Identify users without required training</li>
+      <li>Drawer view with details</li>
+      <li>Quick action to assign training</li>
+      <li>Filter by site/department</li>
+    </ul>
+    
+    <h4>Drill-Down Reports</h4>
+    <ul>
+      <li>Click through to detailed views</li>
+      <li>Filter by multiple dimensions</li>
+      <li>Export filtered data</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/analytics</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 11: AI Features</h3>
+    <p class="objective">Leverage AI to provide intelligent insights, generate content, and improve quality.</p>
+    
+    <h4>Smart Compliance Coach</h4>
+    <ul>
+      <li>Proactive compliance insights</li>
+      <li>Risk identification and alerts</li>
+      <li>Recommended actions</li>
+      <li>Audience-aware messaging (Admin vs Manager view)</li>
+    </ul>
+    
+    <h4>AI Quiz Generator</h4>
+    <ul>
+      <li>Generate quizzes from course content</li>
+      <li>Multiple question types</li>
+      <li>Configurable difficulty</li>
+      <li>Edit and refine generated questions</li>
+    </ul>
+    
+    <h4>Content Suggestions</h4>
+    <ul>
+      <li>AI-generated course metadata</li>
+      <li>Description suggestions</li>
+      <li>Learning objective recommendations</li>
+    </ul>
+    
+    <h4>Style Analysis</h4>
+    <ul>
+      <li>Tone and readability meter</li>
+      <li>Style linting for consistency</li>
+      <li>Glossary term suggestions</li>
+      <li>Writing improvement tips</li>
+    </ul>
+    
+    <h4>Components</h4>
+    <p><span class="feature-tag">SmartComplianceCoach</span> <span class="feature-tag">AIQuizGeneratorModal</span> <span class="feature-tag">AIInsightPanel</span> <span class="feature-tag">ToneReadabilityMeter</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 12: Settings & Configuration</h3>
+    <p class="objective">Customize the LMS to match organizational branding and preferences.</p>
+    
+    <h4>Brand Settings</h4>
+    <ul>
+      <li>Logo upload and display</li>
+      <li>Primary color customization</li>
+      <li>Organization name</li>
+      <li>Footer customization</li>
+    </ul>
+    
+    <h4>Certificate Templates</h4>
+    <ul>
+      <li>Create and edit templates</li>
+      <li>Field configuration</li>
+      <li>Layout customization</li>
+      <li>Default template selection</li>
+    </ul>
+    
+    <h4>Style Guide / Glossary</h4>
+    <ul>
+      <li>Define approved terminology</li>
+      <li>Glossary term management</li>
+      <li>Auto-suggestions in editor</li>
+      <li>Inline term addition</li>
+    </ul>
+    
+    <h4>Notification Rules</h4>
+    <ul>
+      <li>Configure reminder timing</li>
+      <li>Enable/disable rule types</li>
+      <li>Escalation settings</li>
+      <li>Template customization</li>
+    </ul>
+    
+    <h4>Localization</h4>
+    <ul>
+      <li>Date format preferences</li>
+      <li>Timezone settings</li>
+      <li>Language preparation (i18n ready)</li>
+    </ul>
+    
+    <h4>Demo Controls</h4>
+    <ul>
+      <li>Reset demo data</li>
+      <li>Seed sample content</li>
+      <li>Toggle feature flags</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/settings/brand</span> <span class="feature-tag">/admin/settings/certificates</span> <span class="feature-tag">/admin/settings/style-guide</span> <span class="feature-tag">/admin/settings/notifications</span> <span class="feature-tag">/admin/settings/localization</span> <span class="feature-tag">/admin/settings/demo</span></p>
+  </div>
+
+  <hr>
+
+  <h2>Q2 UI Pages Summary</h2>
+  
+  <h3>Admin Pages</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Route</th>
+        <th>Purpose</th>
+        <th>Key Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/admin/courses</code></td>
+        <td>Course list</td>
+        <td>Grid view, filters, create new</td>
+      </tr>
+      <tr>
+        <td><code>/admin/courses/[id]/edit</code></td>
+        <td>Course builder</td>
+        <td>Lesson stepper, resource editor, quiz tab</td>
+      </tr>
+      <tr>
+        <td><code>/admin/courses/[id]/preview</code></td>
+        <td>Course preview</td>
+        <td>Learner view simulation, policy display</td>
+      </tr>
+      <tr>
+        <td><code>/admin/analytics</code></td>
+        <td>Analytics dashboard</td>
+        <td>Metrics, charts, missing learners</td>
+      </tr>
+      <tr>
+        <td><code>/admin/settings/brand</code></td>
+        <td>Brand settings</td>
+        <td>Logo, colors, organization name</td>
+      </tr>
+      <tr>
+        <td><code>/admin/settings/certificates</code></td>
+        <td>Certificate templates</td>
+        <td>Template CRUD, field config</td>
+      </tr>
+      <tr>
+        <td><code>/admin/settings/style-guide</code></td>
+        <td>Glossary management</td>
+        <td>Term CRUD, categories</td>
+      </tr>
+      <tr>
+        <td><code>/admin/settings/localization</code></td>
+        <td>Localization</td>
+        <td>Date format, timezone</td>
+      </tr>
+      <tr>
+        <td><code>/admin/settings/demo</code></td>
+        <td>Demo controls</td>
+        <td>Reset data, seed content</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Learner Pages</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Route</th>
+        <th>Purpose</th>
+        <th>Key Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/learner/courses</code></td>
+        <td>Available courses</td>
+        <td>Course cards, filters, progress</td>
+      </tr>
+      <tr>
+        <td><code>/learner/courses/[id]</code></td>
+        <td>Course overview</td>
+        <td>Description, lessons list, start button</td>
+      </tr>
+      <tr>
+        <td><code>/learner/courses/[id]/lessons/[id]</code></td>
+        <td>Lesson player</td>
+        <td>Content renderer, progress, navigation</td>
+      </tr>
+      <tr>
+        <td><code>/learner/certificates</code></td>
+        <td>My certificates</td>
+        <td>Certificate list, download, view</td>
+      </tr>
+      <tr>
+        <td><code>/learner/completed</code></td>
+        <td>Completed courses</td>
+        <td>History, certificates, retake</td>
+      </tr>
+      <tr>
+        <td><code>/learner/passport</code></td>
+        <td>Skills passport</td>
+        <td>Skill stamps, badges, progress</td>
+      </tr>
+      <tr>
+        <td><code>/learner/profile</code></td>
+        <td>My profile</td>
+        <td>Personal info, preferences</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <div class="dependencies">
+    <h3>Key Dependencies</h3>
+    <ol>
+      <li><strong>Q1 must be complete</strong> — Q2 builds on Users, Trainings, and Compliance</li>
+      <li><strong>Course Builder before Learner Experience</strong> — Content must exist before it can be consumed</li>
+      <li><strong>Learner Experience before Certificates</strong> — Completion triggers certificate generation</li>
+      <li><strong>Analytics can parallel Certificates</strong> — Both depend on completion data</li>
+      <li><strong>AI Features enhance all modules</strong> — Can be integrated incrementally</li>
+      <li><strong>Settings is independent</strong> — Can be built anytime after Q1</li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <div class="success-criteria">
+    <h3>Success Criteria</h3>
+    <p>Q2 is complete when:</p>
+    <ul>
+      <li>Admin can create courses with lessons and multiple resource types</li>
+      <li>Admin can configure course policies (progression, video requirements)</li>
+      <li>Learner can navigate through course content in the player</li>
+      <li>Video progress is tracked and minimum watch is enforced</li>
+      <li>Quizzes function with scoring and pass/fail logic</li>
+      <li>Certificates are generated on course completion</li>
+      <li>Skills passport displays earned achievements</li>
+      <li>Analytics dashboard shows compliance metrics</li>
+      <li>AI coach provides relevant insights</li>
+      <li>AI can generate quiz questions from content</li>
+      <li>Brand settings are reflected throughout the app</li>
+      <li>Glossary terms are suggested in the editor</li>
+    </ul>
+  </div>
+
+  <hr>
+
+  <h2>Glossary (Q2 Additions)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>Definition</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Lesson</strong></td>
+        <td>A unit of learning within a course, containing one or more resources</td>
+      </tr>
+      <tr>
+        <td><strong>Resource</strong></td>
+        <td>A single piece of content (text, video, PDF, image, link, or file)</td>
+      </tr>
+      <tr>
+        <td><strong>Course Policy</strong></td>
+        <td>Rules governing how learners progress through a course (linear mode, video requirements)</td>
+      </tr>
+      <tr>
+        <td><strong>Progression Mode</strong></td>
+        <td>Linear (must complete in order) or Free (can skip around)</td>
+      </tr>
+      <tr>
+        <td><strong>Quiz</strong></td>
+        <td>Assessment attached to a lesson with questions and a passing score</td>
+      </tr>
+      <tr>
+        <td><strong>Passing Score</strong></td>
+        <td>Minimum percentage required to pass a quiz</td>
+      </tr>
+      <tr>
+        <td><strong>Progress</strong></td>
+        <td>Record of a learner's advancement through a course</td>
+      </tr>
+      <tr>
+        <td><strong>Certificate Template</strong></td>
+        <td>Reusable design for generating completion certificates</td>
+      </tr>
+      <tr>
+        <td><strong>Skill Stamp</strong></td>
+        <td>Visual badge earned when completing specific training</td>
+      </tr>
+      <tr>
+        <td><strong>Smart Coach</strong></td>
+        <td>AI-powered assistant providing compliance insights and recommendations</td>
+      </tr>
+    </tbody>
+  </table>
+
+  </div><!-- End Phase 2 -->
+
   <hr>
 
   <h2>Document History</h2>
@@ -1117,10 +1850,31 @@ npm run dev</div>
         <td>1.0</td>
         <td>Jan 5, 2026</td>
         <td>—</td>
-        <td>Initial plan</td>
+        <td>Initial plan (Q1 Foundation)</td>
+      </tr>
+      <tr>
+        <td>2.0</td>
+        <td>Jan 5, 2026</td>
+        <td>—</td>
+        <td>Added Q2: Advanced Features</td>
       </tr>
     </tbody>
   </table>
+
+  <script>
+    function switchTab(tabId) {
+      // Remove active class from all tabs and content
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      // Add active class to selected tab and content
+      document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+      
+      // Scroll to top of content
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
 
 </body>
 </html>
