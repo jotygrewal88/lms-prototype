@@ -385,7 +385,6 @@
   <div class="meta">
     <p><strong>Version:</strong> 1.0</p>
     <p><strong>Created:</strong> January 5, 2026</p>
-    <p><strong>Target:</strong> Q1 2026</p>
     <p><strong>Status:</strong> Planning</p>
   </div>
 
@@ -397,6 +396,51 @@
     Foundation → Users & Permissions → Trainings → Compliance → Library → Notifications
   </div>
   <p>This sequence ensures each module has its dependencies ready before development begins.</p>
+
+  <hr>
+
+  <h2>Tech Stack</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Technology</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Framework</strong></td>
+        <td>Next.js 14 (App Router)</td>
+        <td>React-based with file-system routing</td>
+      </tr>
+      <tr>
+        <td><strong>Language</strong></td>
+        <td>TypeScript</td>
+        <td>Strict mode enabled</td>
+      </tr>
+      <tr>
+        <td><strong>Styling</strong></td>
+        <td>TailwindCSS</td>
+        <td>Utility-first CSS framework</td>
+      </tr>
+      <tr>
+        <td><strong>State Management</strong></td>
+        <td>Zustand</td>
+        <td>Lightweight in-memory store with persistence</td>
+      </tr>
+      <tr>
+        <td><strong>Icons</strong></td>
+        <td>Lucide React</td>
+        <td>Consistent icon library</td>
+      </tr>
+      <tr>
+        <td><strong>Storage</strong></td>
+        <td>In-memory (prototype)</td>
+        <td>No database required for demo</td>
+      </tr>
+    </tbody>
+  </table>
 
   <hr>
 
@@ -472,69 +516,73 @@
 
   <hr>
 
-  <h2>Timeline</h2>
+  <h2>Data Models</h2>
+  <p>Core entities and their relationships:</p>
   <table>
     <thead>
       <tr>
-        <th>Week</th>
-        <th>Phase</th>
-        <th>Focus Area</th>
-        <th>Deliverables</th>
+        <th>Entity</th>
+        <th>Key Fields</th>
+        <th>Relationships</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><strong>1-2</strong></td>
-        <td>Foundation</td>
-        <td>Project Setup</td>
-        <td>Data models, Store architecture, Base UI components</td>
+        <td><strong>User</strong></td>
+        <td>id, firstName, lastName, email, role, siteId, departmentId</td>
+        <td>Belongs to Site, Department; Has many Completions</td>
       </tr>
       <tr>
-        <td><strong>3-4</strong></td>
-        <td>Users</td>
-        <td>User Management</td>
-        <td>User CRUD, Role-based permissions, Org hierarchy (Sites/Depts)</td>
+        <td><strong>Site</strong></td>
+        <td>id, name, orgId</td>
+        <td>Belongs to Organization; Has many Departments, Users</td>
       </tr>
       <tr>
-        <td><strong>5-6</strong></td>
-        <td>Trainings</td>
-        <td>Requirements</td>
-        <td>Training CRUD, Assignment rules engine</td>
+        <td><strong>Department</strong></td>
+        <td>id, name, siteId</td>
+        <td>Belongs to Site; Has many Users</td>
       </tr>
       <tr>
-        <td><strong>7-9</strong></td>
-        <td>Compliance</td>
-        <td>Core Tracking</td>
-        <td>Compliance dashboard, Reports, Historic data import</td>
+        <td><strong>Training</strong></td>
+        <td>id, name, description, retrainIntervalDays, assignmentRules</td>
+        <td>Has many Completions; Links to Courses</td>
       </tr>
       <tr>
-        <td><strong>10-11</strong></td>
-        <td>Library</td>
-        <td>Content Repository</td>
-        <td>File uploads, Search, SDS Library feature</td>
+        <td><strong>Course</strong></td>
+        <td>id, title, description, lessons[], policy</td>
+        <td>Has many Lessons; Linked to Training</td>
       </tr>
       <tr>
-        <td><strong>12-13</strong></td>
-        <td>Notifications</td>
-        <td>Communication</td>
-        <td>Reminder rules, Escalation logic, Notification composer</td>
+        <td><strong>Completion</strong></td>
+        <td>id, userId, trainingId, status, dueAt, completedAt</td>
+        <td>Belongs to User, Training</td>
       </tr>
       <tr>
-        <td><strong>14</strong></td>
-        <td>Polish</td>
-        <td>Integration</td>
-        <td>Testing, UX refinement, Bug fixes</td>
+        <td><strong>Notification</strong></td>
+        <td>id, subject, body, recipients[], sentAt, status</td>
+        <td>Has many Recipients (Users)</td>
+      </tr>
+      <tr>
+        <td><strong>LibraryItem</strong></td>
+        <td>id, title, type, url, tags[], siteId</td>
+        <td>Scoped to Site (optional)</td>
       </tr>
     </tbody>
   </table>
-  <p><strong>Total Duration:</strong> ~14 weeks</p>
+
+  <h4>Status Enums</h4>
+  <ul>
+    <li><strong>Completion Status:</strong> ASSIGNED, IN_PROGRESS, COMPLETED, OVERDUE, EXEMPT</li>
+    <li><strong>User Role:</strong> Admin, Manager, Learner</li>
+    <li><strong>Notification Status:</strong> DRAFT, SENT, SCHEDULED</li>
+  </ul>
 
   <hr>
 
   <h2>Module Details</h2>
 
   <div class="module-card">
-    <h3>Module 1: Foundation (Week 1-2)</h3>
+    <h3>Module 1: Foundation</h3>
     <p class="objective">Establish the technical foundation for the entire system.</p>
     <h4>Deliverables</h4>
     <ul>
@@ -548,7 +596,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 2: Users & Permissions (Week 3-4)</h3>
+    <h3>Module 2: Users & Permissions</h3>
     <p class="objective">Enable management of users, roles, and organizational structure.</p>
     
     <h4>User Management</h4>
@@ -575,14 +623,10 @@
     <h4>UI Pages</h4>
     <p><span class="feature-tag">/admin/users</span> <span class="feature-tag">/admin/users/[id]</span></p>
     
-    <div class="q1-feature">
-      <strong>Q1 Feature: Permissions Hierarchy</strong><br>
-      Rebuild flat hierarchy; custom notifications for specific roles. Align with CMMS multi-site access model.
-    </div>
   </div>
 
   <div class="module-card">
-    <h3>Module 3: Trainings (Week 5-6)</h3>
+    <h3>Module 3: Trainings</h3>
     <p class="objective">Define what training requirements exist and who needs to complete them.</p>
     
     <h4>Training Requirements</h4>
@@ -606,7 +650,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 4: Compliance (Week 7-9)</h3>
+    <h3>Module 4: Compliance</h3>
     <p class="objective">Track completion status and surface compliance gaps. This is the core value of the system.</p>
     
     <h4>Completion Tracking</h4>
@@ -641,15 +685,10 @@
     <h4>UI Pages</h4>
     <p><span class="feature-tag">/admin/compliance</span> <span class="feature-tag">/admin/reports/audits</span></p>
     
-    <div class="q1-feature">
-      <strong>Q1 Features:</strong><br>
-      • <strong>Custom Safety Reports</strong> - Admins create bespoke reporting templates<br>
-      • <strong>Form Visibility Toggle</strong> - "Show All Fields" option for manual data entry
-    </div>
   </div>
 
   <div class="module-card">
-    <h3>Module 5: Library (Week 10-11)</h3>
+    <h3>Module 5: Library</h3>
     <p class="objective">Centralized repository for training materials and safety documents.</p>
     
     <h4>Document Management</h4>
@@ -671,14 +710,10 @@
     <h4>UI Pages</h4>
     <p><span class="feature-tag">/admin/library</span> <span class="feature-tag">Upload modal</span></p>
     
-    <div class="q1-feature">
-      <strong>Q1 Feature: SDS Library</strong><br>
-      Full Safety Data Sheet library for chemical compliance. Special category with chemical-specific metadata and search.
-    </div>
   </div>
 
   <div class="module-card">
-    <h3>Module 6: Notifications (Week 12-13)</h3>
+    <h3>Module 6: Notifications</h3>
     <p class="objective">Automated and manual communication to keep training on track.</p>
     
     <h4>Reminder Rules</h4>
@@ -707,65 +742,6 @@
     <h4>UI Pages</h4>
     <p><span class="feature-tag">/admin/notifications</span> <span class="feature-tag">/admin/settings/notifications</span></p>
   </div>
-
-  <hr>
-
-  <h2>Q1 Feature Roadmap</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Feature</th>
-        <th>Module</th>
-        <th>Priority</th>
-        <th>Status</th>
-        <th>Notes</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Custom Safety Reports</td>
-        <td>Compliance</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>Audit snapshots with saved filters</td>
-      </tr>
-      <tr>
-        <td>Permissions Hierarchy</td>
-        <td>Users</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>Multi-site access, role permissions</td>
-      </tr>
-      <tr>
-        <td>SDS Library</td>
-        <td>Library</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>Safety Data Sheet repository</td>
-      </tr>
-      <tr>
-        <td>Form Visibility Toggle</td>
-        <td>Compliance</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>"Show All Fields" for manual entry</td>
-      </tr>
-      <tr>
-        <td>UX Simplification</td>
-        <td>All</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>Reduce steps, condense CTAs</td>
-      </tr>
-      <tr>
-        <td>Location Hierarchy</td>
-        <td>Users</td>
-        <td>Q1</td>
-        <td>Not Started</td>
-        <td>Align with CMMS (6 levels)</td>
-      </tr>
-    </tbody>
-  </table>
 
   <hr>
 
@@ -920,6 +896,73 @@
 
   <hr>
 
+  <h2>Out of Scope</h2>
+  <p>The following are explicitly <strong>not included</strong> in this prototype:</p>
+  <ul>
+    <li><strong>Real database</strong> — Using in-memory store for demo purposes</li>
+    <li><strong>Authentication/SSO</strong> — Role switching via UI selector instead</li>
+    <li><strong>Email delivery</strong> — Notifications are in-app only</li>
+    <li><strong>Mobile app</strong> — Web-only, though responsive design is included</li>
+    <li><strong>Multi-language (i18n)</strong> — English only</li>
+    <li><strong>Real file storage</strong> — Files stored locally in /public/uploads</li>
+    <li><strong>Production deployment</strong> — Local development environment only</li>
+    <li><strong>SCORM/xAPI integration</strong> — No external LMS content standards</li>
+  </ul>
+
+  <hr>
+
+  <h2>Environment Setup</h2>
+  <div class="module-card">
+    <h4>Prerequisites</h4>
+    <ul>
+      <li>Node.js 18+ installed</li>
+      <li>npm or yarn package manager</li>
+    </ul>
+    
+    <h4>Installation</h4>
+    <div class="diagram">cd "LMS Prototype"
+npm install
+npm run dev</div>
+    
+    <h4>Access</h4>
+    <ul>
+      <li><strong>Local URL:</strong> http://localhost:3000</li>
+      <li><strong>Admin Dashboard:</strong> /admin</li>
+      <li><strong>Learner Portal:</strong> /learner</li>
+    </ul>
+    
+    <h4>Demo Credentials</h4>
+    <p>No login required — use the role selector in the header to switch between Admin, Manager, and Learner views.</p>
+  </div>
+
+  <hr>
+
+  <h2>API Routes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Endpoint</th>
+        <th>Method</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/api/upload</code></td>
+        <td>POST</td>
+        <td>File uploads (images, documents, videos)</td>
+      </tr>
+      <tr>
+        <td><code>/api/ai/generate-quiz</code></td>
+        <td>POST</td>
+        <td>AI-powered quiz generation from course content</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><em>Note: Most data operations use the in-memory Zustand store directly, not API routes.</em></p>
+
+  <hr>
+
   <h2>Demo Data Requirements</h2>
   
   <h4>Organization Structure</h4>
@@ -962,9 +1005,90 @@
       <li>Admin can mark completions, set exemptions, and run reports</li>
       <li>Library allows upload, search, and organization of documents</li>
       <li>Reminder system can identify and notify about upcoming/overdue trainings</li>
-      <li>All Q1 roadmap features are implemented</li>
     </ul>
   </div>
+
+  <hr>
+
+  <h2>Testing Strategy</h2>
+  <div class="module-card">
+    <h4>Manual Testing Checklist</h4>
+    <ul>
+      <li>Role switching works correctly (Admin → Manager → Learner)</li>
+      <li>Scope filtering shows appropriate data per site/department</li>
+      <li>CRUD operations persist across page refreshes</li>
+      <li>Compliance status calculations are accurate</li>
+      <li>File uploads work for supported formats</li>
+      <li>Notifications appear in recipient's inbox</li>
+      <li>CSV export downloads valid files</li>
+    </ul>
+    
+    <h4>Key User Flows to Verify</h4>
+    <ol>
+      <li><strong>Admin creates training</strong> → Assigns to department → Users see it in their dashboard</li>
+      <li><strong>Admin marks completion</strong> → Status updates → Compliance rate changes</li>
+      <li><strong>Manager sends reminder</strong> → Notification appears in learner's inbox</li>
+      <li><strong>Learner completes course</strong> → Progress tracked → Certificate available</li>
+      <li><strong>Admin imports CSV</strong> → Historic records created → Audit log updated</li>
+    </ol>
+    
+    <h4>Browser Support</h4>
+    <p>Tested on latest versions of Chrome, Safari, Firefox, and Edge.</p>
+  </div>
+
+  <hr>
+
+  <h2>Glossary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>Definition</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Training</strong></td>
+        <td>A compliance requirement that users must complete (e.g., "Forklift Safety Certification")</td>
+      </tr>
+      <tr>
+        <td><strong>Course</strong></td>
+        <td>The actual content — lessons, quizzes, videos — that fulfills a training requirement</td>
+      </tr>
+      <tr>
+        <td><strong>Completion</strong></td>
+        <td>A record linking a user to a training, tracking their status and due date</td>
+      </tr>
+      <tr>
+        <td><strong>Exemption</strong></td>
+        <td>Formal exclusion from a training requirement with documented reason</td>
+      </tr>
+      <tr>
+        <td><strong>Compliance Rate</strong></td>
+        <td>Percentage of assigned trainings that are completed (not overdue)</td>
+      </tr>
+      <tr>
+        <td><strong>Retrain Interval</strong></td>
+        <td>How often a training must be renewed (e.g., annually)</td>
+      </tr>
+      <tr>
+        <td><strong>Scope</strong></td>
+        <td>Filter that limits data visibility by site or department</td>
+      </tr>
+      <tr>
+        <td><strong>Assignment Rule</strong></td>
+        <td>Logic that automatically assigns training to users (by role, site, department, or individual)</td>
+      </tr>
+      <tr>
+        <td><strong>Escalation</strong></td>
+        <td>Automatic notification to manager when a learner is overdue</td>
+      </tr>
+      <tr>
+        <td><strong>SDS</strong></td>
+        <td>Safety Data Sheet — standardized document for chemical hazard information</td>
+      </tr>
+    </tbody>
+  </table>
 
   <hr>
 
@@ -972,8 +1096,8 @@
   <ol>
     <li><strong>Finalize</strong> this plan with stakeholder review</li>
     <li><strong>Set up</strong> project repository and development environment</li>
-    <li><strong>Begin</strong> Foundation phase (Week 1)</li>
-    <li><strong>Schedule</strong> weekly check-ins to track progress</li>
+    <li><strong>Begin</strong> Foundation phase</li>
+    <li><strong>Schedule</strong> regular check-ins to track progress</li>
   </ol>
 
   <hr>

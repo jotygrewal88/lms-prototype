@@ -2,7 +2,6 @@
 
 > **Version:** 1.0  
 > **Created:** January 5, 2026  
-> **Target:** Q1 2026  
 > **Status:** Planning
 
 ---
@@ -18,6 +17,19 @@ Foundation → Users & Permissions → Trainings → Compliance → Library → 
 ```
 
 This sequence ensures each module has its dependencies ready before development begins.
+
+---
+
+## Tech Stack
+
+| Category | Technology | Notes |
+|----------|------------|-------|
+| **Framework** | Next.js 14 (App Router) | React-based with file-system routing |
+| **Language** | TypeScript | Strict mode enabled |
+| **Styling** | TailwindCSS | Utility-first CSS framework |
+| **State Management** | Zustand | Lightweight in-memory store with persistence |
+| **Icons** | Lucide React | Consistent icon library |
+| **Storage** | In-memory (prototype) | No database required for demo |
 
 ---
 
@@ -68,25 +80,31 @@ This sequence ensures each module has its dependencies ready before development 
 
 ---
 
-## Timeline
+## Data Models
 
-| Week | Phase | Focus Area | Deliverables |
-|------|-------|------------|--------------|
-| **1-2** | Foundation | Project Setup | Data models, Store architecture, Base UI components |
-| **3-4** | Users | User Management | User CRUD, Role-based permissions, Org hierarchy (Sites/Depts) |
-| **5-6** | Trainings | Requirements | Training CRUD, Assignment rules engine |
-| **7-9** | Compliance | Core Tracking | Compliance dashboard, Reports, Historic data import |
-| **10-11** | Library | Content Repository | File uploads, Search, SDS Library feature |
-| **12-13** | Notifications | Communication | Reminder rules, Escalation logic, Notification composer |
-| **14** | Polish | Integration | Testing, UX refinement, Bug fixes |
+Core entities and their relationships:
 
-**Total Duration:** ~14 weeks
+| Entity | Key Fields | Relationships |
+|--------|------------|---------------|
+| **User** | id, firstName, lastName, email, role, siteId, departmentId | Belongs to Site, Department; Has many Completions |
+| **Site** | id, name, orgId | Belongs to Organization; Has many Departments, Users |
+| **Department** | id, name, siteId | Belongs to Site; Has many Users |
+| **Training** | id, name, description, retrainIntervalDays, assignmentRules | Has many Completions; Links to Courses |
+| **Course** | id, title, description, lessons[], policy | Has many Lessons; Linked to Training |
+| **Completion** | id, userId, trainingId, status, dueAt, completedAt | Belongs to User, Training |
+| **Notification** | id, subject, body, recipients[], sentAt, status | Has many Recipients (Users) |
+| **LibraryItem** | id, title, type, url, tags[], siteId | Scoped to Site (optional) |
+
+**Status Enums:**
+- **Completion Status:** ASSIGNED, IN_PROGRESS, COMPLETED, OVERDUE, EXEMPT
+- **User Role:** Admin, Manager, Learner
+- **Notification Status:** DRAFT, SENT, SCHEDULED
 
 ---
 
 ## Module Details
 
-### Module 1: Foundation (Week 1-2)
+### Module 1: Foundation
 
 **Objective:** Establish the technical foundation for the entire system.
 
@@ -100,7 +118,7 @@ This sequence ensures each module has its dependencies ready before development 
 
 ---
 
-### Module 2: Users & Permissions (Week 3-4)
+### Module 2: Users & Permissions
 
 **Objective:** Enable management of users, roles, and organizational structure.
 
@@ -124,12 +142,9 @@ This sequence ensures each module has its dependencies ready before development 
 - `/admin/users` - User list
 - `/admin/users/[id]` - User detail/edit
 
-**Q1 Feature:** Permissions Hierarchy
-> Rebuild flat hierarchy; custom notifications for specific roles. Align with CMMS multi-site access model.
-
 ---
 
-### Module 3: Trainings (Week 5-6)
+### Module 3: Trainings
 
 **Objective:** Define what training requirements exist and who needs to complete them.
 
@@ -152,7 +167,7 @@ This sequence ensures each module has its dependencies ready before development 
 
 ---
 
-### Module 4: Compliance (Week 7-9)
+### Module 4: Compliance
 
 **Objective:** Track completion status and surface compliance gaps. This is the core value of the system.
 
@@ -182,13 +197,9 @@ This sequence ensures each module has its dependencies ready before development 
 - `/admin/compliance` - Main compliance dashboard
 - `/admin/reports/audits` - Saved audit snapshots
 
-**Q1 Features:**
-- **Custom Safety Reports** - Admins create bespoke reporting templates
-- **Form Visibility Toggle** - "Show All Fields" option for manual data entry
-
 ---
 
-### Module 5: Library (Week 10-11)
+### Module 5: Library
 
 **Objective:** Centralized repository for training materials and safety documents.
 
@@ -209,12 +220,9 @@ This sequence ensures each module has its dependencies ready before development 
 - `/admin/library` - Library browser with grid/list view
 - Upload modal with drag-and-drop
 
-**Q1 Feature:** SDS Library
-> Full Safety Data Sheet library for chemical compliance. Special category with chemical-specific metadata and search.
-
 ---
 
-### Module 6: Notifications (Week 12-13)
+### Module 6: Notifications
 
 **Objective:** Automated and manual communication to keep training on track.
 
@@ -244,19 +252,6 @@ This sequence ensures each module has its dependencies ready before development 
 - `/admin/notifications` - Notification history
 - `/admin/settings/notifications` - Reminder rule configuration
 - Notification composer modal
-
----
-
-## Q1 Feature Roadmap Alignment
-
-| Feature | Module | Priority | Status | Notes |
-|---------|--------|----------|--------|-------|
-| Custom Safety Reports | Compliance | Q1 | Not Started | Audit snapshots with saved filters |
-| Permissions Hierarchy | Users | Q1 | Not Started | Multi-site access, role permissions |
-| SDS Library | Library | Q1 | Not Started | Safety Data Sheet repository |
-| Form Visibility Toggle | Compliance | Q1 | Not Started | "Show All Fields" for manual entry |
-| UX Simplification | All | Q1 | Not Started | Reduce steps, condense CTAs |
-| Location Hierarchy | Users | Q1 | Not Started | Align with CMMS (6 levels) |
 
 ---
 
@@ -303,6 +298,55 @@ This sequence ensures each module has its dependencies ready before development 
 
 ---
 
+## Out of Scope
+
+The following are explicitly **not included** in this prototype:
+
+- **Real database** — Using in-memory store for demo purposes
+- **Authentication/SSO** — Role switching via UI selector instead
+- **Email delivery** — Notifications are in-app only
+- **Mobile app** — Web-only, though responsive design is included
+- **Multi-language (i18n)** — English only
+- **Real file storage** — Files stored locally in /public/uploads
+- **Production deployment** — Local development environment only
+- **SCORM/xAPI integration** — No external LMS content standards
+
+---
+
+## Environment Setup
+
+### Prerequisites
+- Node.js 18+ installed
+- npm or yarn package manager
+
+### Installation
+```bash
+cd "LMS Prototype"
+npm install
+npm run dev
+```
+
+### Access
+- **Local URL:** http://localhost:3000
+- **Admin Dashboard:** /admin
+- **Learner Portal:** /learner
+
+### Demo Credentials
+No login required — use the role selector in the header to switch between Admin, Manager, and Learner views.
+
+---
+
+## API Routes
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/upload` | POST | File uploads (images, documents, videos) |
+| `/api/ai/generate-quiz` | POST | AI-powered quiz generation from course content |
+
+*Note: Most data operations use the in-memory Zustand store directly, not API routes.*
+
+---
+
 ## Demo Data Requirements
 
 To enable realistic testing and demonstrations:
@@ -339,7 +383,46 @@ Phase 1 is complete when:
 - [ ] Admin can mark completions, set exemptions, and run reports
 - [ ] Library allows upload, search, and organization of documents
 - [ ] Reminder system can identify and notify about upcoming/overdue trainings
-- [ ] All Q1 roadmap features are implemented
+
+---
+
+## Testing Strategy
+
+### Manual Testing Checklist
+- [ ] Role switching works correctly (Admin → Manager → Learner)
+- [ ] Scope filtering shows appropriate data per site/department
+- [ ] CRUD operations persist across page refreshes
+- [ ] Compliance status calculations are accurate
+- [ ] File uploads work for supported formats
+- [ ] Notifications appear in recipient's inbox
+- [ ] CSV export downloads valid files
+
+### Key User Flows to Verify
+1. **Admin creates training** → Assigns to department → Users see it in their dashboard
+2. **Admin marks completion** → Status updates → Compliance rate changes
+3. **Manager sends reminder** → Notification appears in learner's inbox
+4. **Learner completes course** → Progress tracked → Certificate available
+5. **Admin imports CSV** → Historic records created → Audit log updated
+
+### Browser Support
+Tested on latest versions of Chrome, Safari, Firefox, and Edge.
+
+---
+
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Training** | A compliance requirement that users must complete (e.g., "Forklift Safety Certification") |
+| **Course** | The actual content — lessons, quizzes, videos — that fulfills a training requirement |
+| **Completion** | A record linking a user to a training, tracking their status and due date |
+| **Exemption** | Formal exclusion from a training requirement with documented reason |
+| **Compliance Rate** | Percentage of assigned trainings that are completed (not overdue) |
+| **Retrain Interval** | How often a training must be renewed (e.g., annually) |
+| **Scope** | Filter that limits data visibility by site or department |
+| **Assignment Rule** | Logic that automatically assigns training to users (by role, site, department, or individual) |
+| **Escalation** | Automatic notification to manager when a learner is overdue |
+| **SDS** | Safety Data Sheet — standardized document for chemical hazard information |
 
 ---
 
@@ -347,8 +430,8 @@ Phase 1 is complete when:
 
 1. **Finalize** this plan with stakeholder review
 2. **Set up** project repository and development environment
-3. **Begin** Foundation phase (Week 1)
-4. **Schedule** weekly check-ins to track progress
+3. **Begin** Foundation phase
+4. **Schedule** regular check-ins to track progress
 
 ---
 
