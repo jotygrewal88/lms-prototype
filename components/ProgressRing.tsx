@@ -46,12 +46,20 @@ export default function ProgressRing({
           className="transition-all duration-500 ease-in-out"
         />
       </svg>
-      {/* Percentage text */}
+      {/* Percentage text - scale based on ring size */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold" style={{ color: "var(--primary-color)" }}>
+        <span 
+          className="font-bold" 
+          style={{ 
+            color: "var(--primary-color)",
+            fontSize: size <= 48 ? '0.75rem' : size <= 80 ? '1.25rem' : '1.875rem',
+          }}
+        >
           {Math.round(progress)}%
         </span>
-        <span className="text-xs text-gray-500 mt-1">Complete</span>
+        {size > 60 && (
+          <span className="text-xs text-gray-500 mt-1">Complete</span>
+        )}
       </div>
     </div>
   );

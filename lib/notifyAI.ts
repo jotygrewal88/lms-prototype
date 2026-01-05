@@ -680,3 +680,218 @@ Thank you for your immediate attention to this matter.`;
   };
 }
 
+// ============================================================================
+// TEMPLATE VARIABLE SYSTEM FOR PERSONALIZED NOTIFICATIONS
+// ============================================================================
+
+/**
+ * Available template variables for personalized notifications
+ */
+export const TEMPLATE_VARIABLES = [
+  { key: "firstName", label: "First Name", example: "Marcus" },
+  { key: "fullName", label: "Full Name", example: "Marcus Johnson" },
+  { key: "overdueCount", label: "Overdue Count", example: "3" },
+  { key: "dueSoonCount", label: "Due Soon Count", example: "2" },
+  { key: "completedCount", label: "Completed Count", example: "5" },
+  { key: "assignedCount", label: "Assigned Count", example: "10" },
+  { key: "nearestDueDate", label: "Next Due Date", example: "Jan 15, 2026" },
+  { key: "topOverdueTraining", label: "Top Overdue Training", example: "Forklift Safety" },
+] as const;
+
+export type TemplateVariableKey = typeof TEMPLATE_VARIABLES[number]["key"];
+
+/**
+ * Context for a single recipient with their personal training stats
+ */
+export interface RecipientContext {
+  userId: string;
+  firstName: string;
+  fullName: string;
+  email: string;
+  role: string;
+  overdueCount: number;
+  dueSoonCount: number;
+  completedCount: number;
+  assignedCount: number;
+  nearestDueDate: string;
+  topOverdueTraining: string;
+}
+
+/**
+ * Build context for a single recipient by calculating their personal stats
+ */
+export function buildRecipientContext(userId: string): RecipientContext | null {
+  const user = getUser(userId);
+  if (!user) return null;
+
+  // Get all completions for this user
+  const { getCompletionsByUserId, getTrainings } = require("./store");
+  const completions = getCompletionsByUserId(userId);
+  const trainings = getTrainings();
+
+  // Calculate personal stats
+  let overdueCount = 0;
+  let dueSoonCount = 0;
+  let completedCount = 0;
+  let assignedCount = 0;
+  let nearestDueDate: string | undefined;
+  let topOverdueTraining: string | undefined;
+
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const pendingItems: Array<{ dueAt: string; trainingId: string }> = [];
+
+  for (const c of completions) {
+    if (c.status === "COMPLETED") {
+      completedCount++;
+    } else if (c.status === "EXEMPT") {
+      // Don't count exempt
+    } else if (c.status === "OVERDUE") {
+      overdueCount++;
+      assignedCount++;
+      pendingItems.push({ dueAt: c.dueAt, trainingId: c.trainingId });
+      // Track top overdue training
+      if (!topOverdueTraining) {
+        const training = trainings.find((t: { id: string }) => t.id === c.trainingId);
+        if (training) topOverdueTraining = training.title;
+      }
+    } else if (c.status === "ASSIGNED") {
+      assignedCount++;
+      const dueDate = new Date(c.dueAt);
+      if (dueDate <= sevenDaysFromNow) {
+        dueSoonCount++;
+      }
+      pendingItems.push({ dueAt: c.dueAt, trainingId: c.trainingId });
+    }
+  }
+
+  // Find nearest due date
+  if (pendingItems.length > 0) {
+    pendingItems.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+    nearestDueDate = formatDate(pendingItems[0].dueAt);
+  }
+
+  return {
+    userId: user.id,
+    firstName: user.firstName,
+    fullName: getFullName(user),
+    email: user.email,
+    role: user.role,
+    overdueCount,
+    dueSoonCount,
+    completedCount,
+    assignedCount,
+    nearestDueDate: nearestDueDate || "No pending trainings",
+    topOverdueTraining: topOverdueTraining || "None",
+  };
+}
+
+/**
+ * Resolve all {{variable}} placeholders in a template string
+ */
+export function resolveTemplate(template: string, ctx: RecipientContext): string {
+  let result = template;
+  
+  // Replace each variable
+  result = result.replace(/\{\{firstName\}\}/g, ctx.firstName);
+  result = result.replace(/\{\{fullName\}\}/g, ctx.fullName);
+  result = result.replace(/\{\{overdueCount\}\}/g, String(ctx.overdueCount));
+  result = result.replace(/\{\{dueSoonCount\}\}/g, String(ctx.dueSoonCount));
+  result = result.replace(/\{\{completedCount\}\}/g, String(ctx.completedCount));
+  result = result.replace(/\{\{assignedCount\}\}/g, String(ctx.assignedCount));
+  result = result.replace(/\{\{nearestDueDate\}\}/g, ctx.nearestDueDate);
+  result = result.replace(/\{\{topOverdueTraining\}\}/g, ctx.topOverdueTraining);
+  
+  return result;
+}
+
+/**
+ * Generate a personalized template suggestion that uses template variables
+ */
+export function generatePersonalizedTemplate(tone: ToneVariant): { subject: string; body: string } {
+  const templates: Record<ToneVariant, { subject: string; body: string }> = {
+    friendly: {
+      subject: "Quick Training Reminder, {{firstName}}!",
+      body: `Hi {{firstName}},
+
+Just a friendly heads-up about your training assignments!
+
+Here's where you stand:
+- Overdue: {{overdueCount}}
+- Due soon: {{dueSoonCount}}
+- Completed: {{completedCount}}
+
+{{overdueCount}} overdue trainings need your attention. {{topOverdueTraining}} is the most urgent one.
+
+Your next deadline is {{nearestDueDate}}. Set aside some time this week to knock these out - you've got this!
+
+If you're running into any issues, just let me know.
+
+Thanks!`,
+    },
+    direct: {
+      subject: "Action Required: {{overdueCount}} Overdue Trainings - {{firstName}}",
+      body: `{{fullName}},
+
+Your current training status requires attention:
+
+- OVERDUE: {{overdueCount}} assignments
+- Due within 7 days: {{dueSoonCount}}
+- Completed: {{completedCount}} of {{assignedCount}}
+
+Priority Training: {{topOverdueTraining}}
+Next Deadline: {{nearestDueDate}}
+
+Please complete your overdue trainings immediately. Log in to the LMS and:
+
+1. Review your pending assignments
+2. Complete {{topOverdueTraining}} first
+3. Schedule time for remaining trainings before {{nearestDueDate}}
+
+Contact your manager if you need an extension.`,
+    },
+    escalation: {
+      subject: "URGENT: {{overdueCount}} Overdue Trainings Require Immediate Action",
+      body: `ATTENTION: {{fullName}}
+
+This is an urgent compliance notice. You have {{overdueCount}} OVERDUE training assignments.
+
+Current Status:
+- OVERDUE: {{overdueCount}} (IMMEDIATE ACTION REQUIRED)
+- Due soon: {{dueSoonCount}}
+- Completed: {{completedCount}}
+
+Most Critical: {{topOverdueTraining}}
+Deadline Passed: Please complete immediately
+
+Continued non-compliance may result in:
+- Escalation to your manager
+- Documented compliance violation
+- Restricted system access
+
+Log in NOW and complete your overdue trainings. This is a formal compliance notice.`,
+    },
+    praise: {
+      subject: "Great Work on Your Training, {{firstName}}!",
+      body: `Congratulations, {{firstName}}!
+
+I wanted to recognize your excellent progress on training completion.
+
+Your Stats:
+- Completed: {{completedCount}} trainings
+- Remaining: {{assignedCount}} - {{completedCount}} to go
+${`{{dueSoonCount}}` !== "0" ? `- Coming up: {{dueSoonCount}} due soon` : ""}
+
+${`{{overdueCount}}` === "0" ? "You have no overdue trainings - fantastic work staying on top of things!" : "Just {{overdueCount}} more to wrap up and you'll be fully compliant!"}
+
+${`{{nearestDueDate}}` !== "No pending trainings" ? `Next deadline: {{nearestDueDate}}` : ""}
+
+Keep up the great work! Your commitment to professional development makes a real difference.
+
+Thank you!`,
+    },
+  };
+
+  return templates[tone];
+}
+

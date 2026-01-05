@@ -25,8 +25,9 @@ const defaultPolicy: CoursePolicy = {
   retakeCooldownMin: 60,
 };
 
-// 4 Courses (3 published, 1 draft)
+// Courses with scopes for assignment
 export const courses: Course[] = [
+  // ==================== COMPANY-WIDE COURSES ====================
   {
     id: "crs_001",
     title: "Workplace Safety Fundamentals",
@@ -41,8 +42,8 @@ export const courses: Course[] = [
     ownerUserId: "usr_admin_1",
     lessonIds: ["lsn_001_01", "lsn_001_02", "lsn_001_03"],
     quizId: "qz_001",
+    scope: { type: "company-wide" }, // Required for all employees
     metadata: {
-      // Incomplete objectives for AI fill demo
       objectives: ["Understand workplace safety basics"],
       tags: ["OSHA", "Safety", "Fundamentals"],
       difficulty: "beginner",
@@ -51,23 +52,6 @@ export const courses: Course[] = [
     },
     createdAt: daysAgo(45),
     updatedAt: daysAgo(10),
-  },
-  {
-    id: "crs_002",
-    title: "Forklift Operation Certification",
-    description: "Complete forklift training covering pre-operation inspection, safe driving techniques, load handling, and OSHA compliance.",
-    category: "Equipment",
-    estimatedMinutes: 90,
-    status: "published",
-    tags: ["Forklift", "Equipment", "Certification"],
-    standards: ["OSHA 1910.178"],
-    skills: ["skl_002"], // Phase II — 1M.1: Forklift Safety
-    policy: { ...defaultPolicy, minVideoWatchPct: 90, maxQuizAttempts: 2 },
-    ownerUserId: "usr_admin_1",
-    lessonIds: ["lsn_002_01", "lsn_002_02", "lsn_002_03"],
-    quizId: "qz_002",
-    createdAt: daysAgo(40),
-    updatedAt: daysAgo(5),
   },
   {
     id: "crs_003",
@@ -83,25 +67,229 @@ export const courses: Course[] = [
     ownerUserId: "usr_admin_1",
     lessonIds: ["lsn_003_01", "lsn_003_02"],
     quizId: "qz_003",
+    scope: { type: "company-wide" }, // Required for all employees
     createdAt: daysAgo(35),
     updatedAt: daysAgo(15),
   },
+  {
+    id: "crs_cw_001",
+    title: "Code of Conduct & Ethics",
+    description: "Essential training on company values, professional behavior, anti-harassment policies, and ethical workplace conduct.",
+    category: "Compliance",
+    estimatedMinutes: 30,
+    status: "published",
+    tags: ["Ethics", "Conduct", "HR"],
+    skills: ["skl_013"], // Environmental Regulations
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" }, // Required for all employees
+    createdAt: daysAgo(60),
+    updatedAt: daysAgo(30),
+  },
+  
+  // ==================== SITE-SPECIFIC COURSES ====================
   {
     id: "crs_004",
     title: "Emergency Response & Evacuation",
     description: "Prepare for workplace emergencies including fire, chemical spills, and natural disasters. Learn evacuation routes and first response protocols.",
     category: "Emergency",
     estimatedMinutes: 30,
-    status: "published", // Published to match Fire Safety training
+    status: "published",
     tags: ["Emergency", "Evacuation", "Fire Safety"],
     standards: ["OSHA 1910 Subpart E"],
-    skills: ["skl_005", "skl_007"], // Phase II — 1M.1: Fire Safety, Emergency Response
+    skills: ["skl_005", "skl_007", "skl_015"], // Fire Safety, Emergency Response, Evacuation Procedures
     policy: { ...defaultPolicy, progression: "free", lockNextUntilPrevious: false },
     ownerUserId: "usr_admin_1",
     lessonIds: ["lsn_004_01", "lsn_004_02"],
-    quizId: "qz_004_course", // Course-level quiz for Emergency Response
+    quizId: "qz_004_course",
+    scope: { type: "site", siteIds: ["site_planta", "site_plantb"] }, // Both sites
     createdAt: daysAgo(10),
     updatedAt: daysAgo(2),
+  },
+  {
+    id: "crs_site_planta_001",
+    title: "Plant A Orientation",
+    description: "Site-specific orientation for Plant A employees. Covers facility layout, parking, cafeteria, break areas, and site-specific policies.",
+    category: "Onboarding",
+    estimatedMinutes: 25,
+    status: "published",
+    tags: ["Orientation", "Plant A", "Onboarding"],
+    skills: [],
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "site", siteIds: ["site_planta"] }, // Plant A only
+    createdAt: daysAgo(50),
+    updatedAt: daysAgo(20),
+  },
+  {
+    id: "crs_site_plantb_001",
+    title: "Plant B Orientation",
+    description: "Site-specific orientation for Plant B employees. Covers facility layout, parking, cafeteria, break areas, and site-specific policies.",
+    category: "Onboarding",
+    estimatedMinutes: 25,
+    status: "published",
+    tags: ["Orientation", "Plant B", "Onboarding"],
+    skills: [],
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "site", siteIds: ["site_plantb"] }, // Plant B only
+    createdAt: daysAgo(50),
+    updatedAt: daysAgo(20),
+  },
+  {
+    id: "crs_site_planta_002",
+    title: "Plant A Security Protocols",
+    description: "Learn about Plant A's specific security procedures, badge access, visitor policies, and restricted areas.",
+    category: "Security",
+    estimatedMinutes: 20,
+    status: "published",
+    tags: ["Security", "Plant A", "Access Control"],
+    skills: [],
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "site", siteIds: ["site_planta"] }, // Plant A only
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(15),
+  },
+  
+  // ==================== DEPARTMENT-SPECIFIC COURSES ====================
+  {
+    id: "crs_002",
+    title: "Forklift Operation Certification",
+    description: "Complete forklift training covering pre-operation inspection, safe driving techniques, load handling, and OSHA compliance.",
+    category: "Equipment",
+    estimatedMinutes: 90,
+    status: "published",
+    tags: ["Forklift", "Equipment", "Certification"],
+    standards: ["OSHA 1910.178"],
+    skills: ["skl_002"], // Phase II — 1M.1: Forklift Safety
+    policy: { ...defaultPolicy, minVideoWatchPct: 90, maxQuizAttempts: 2 },
+    ownerUserId: "usr_admin_1",
+    lessonIds: ["lsn_002_01", "lsn_002_02", "lsn_002_03"],
+    quizId: "qz_002",
+    scope: { type: "department", departmentIds: ["dept_warehouse_a", "dept_warehouse_b"] }, // Warehouse departments
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "crs_dept_packaging_001",
+    title: "Packaging Line Safety",
+    description: "Essential safety training for packaging line operators. Covers machine guarding, lockout/tagout, and packaging equipment operation.",
+    category: "Safety",
+    estimatedMinutes: 45,
+    status: "published",
+    tags: ["Packaging", "Safety", "Equipment"],
+    skills: ["skl_001", "skl_011"], // Lockout/Tagout, Heavy Machinery
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "department", departmentIds: ["dept_packaging_a", "dept_packaging_b"] }, // Packaging departments
+    createdAt: daysAgo(55),
+    updatedAt: daysAgo(25),
+  },
+  {
+    id: "crs_dept_packaging_002",
+    title: "Quality Control Basics",
+    description: "Learn quality inspection procedures, defect identification, and documentation requirements for packaging operations.",
+    category: "Quality",
+    estimatedMinutes: 35,
+    status: "published",
+    tags: ["Quality", "Packaging", "Inspection"],
+    skills: ["skl_014", "skl_020", "skl_021", "skl_022"], // Quality Standards, Quality Inspection, Defect Identification, Documentation
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "department", departmentIds: ["dept_packaging_a", "dept_packaging_b"] }, // Packaging departments
+    createdAt: daysAgo(48),
+    updatedAt: daysAgo(18),
+  },
+  {
+    id: "crs_dept_maintenance_001",
+    title: "Lockout/Tagout (LOTO) Certification",
+    description: "Comprehensive LOTO training for maintenance personnel. Covers energy control procedures, locks and tags, and group lockout protocols.",
+    category: "Safety",
+    estimatedMinutes: 60,
+    status: "published",
+    tags: ["LOTO", "Safety", "Maintenance"],
+    standards: ["OSHA 1910.147"],
+    skills: ["skl_001", "skl_012"], // Lockout/Tagout, Power Tools
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "department", departmentIds: ["dept_maintenance_a", "dept_maintenance_b"] }, // Maintenance departments
+    createdAt: daysAgo(65),
+    updatedAt: daysAgo(35),
+  },
+  {
+    id: "crs_dept_maintenance_002",
+    title: "Electrical Safety for Maintenance",
+    description: "Electrical safety procedures for maintenance technicians. Covers arc flash hazards, PPE requirements, and safe work practices.",
+    category: "Safety",
+    estimatedMinutes: 55,
+    status: "published",
+    tags: ["Electrical", "Safety", "Maintenance"],
+    standards: ["NFPA 70E"],
+    skills: ["skl_010", "skl_008"], // Electrical Safety, Personal Protective Equipment
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "department", departmentIds: ["dept_maintenance_a", "dept_maintenance_b"] }, // Maintenance departments
+    createdAt: daysAgo(60),
+    updatedAt: daysAgo(30),
+  },
+  {
+    id: "crs_dept_warehouse_001",
+    title: "Warehouse Safety & Ergonomics",
+    description: "Safe lifting techniques, material handling procedures, and ergonomic practices for warehouse workers.",
+    category: "Safety",
+    estimatedMinutes: 40,
+    status: "published",
+    tags: ["Warehouse", "Safety", "Ergonomics"],
+    skills: ["skl_009", "skl_008"], // Ergonomics, Personal Protective Equipment
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "department", departmentIds: ["dept_warehouse_a", "dept_warehouse_b"] }, // Warehouse departments
+    createdAt: daysAgo(52),
+    updatedAt: daysAgo(22),
+  },
+  
+  // ==================== NO SCOPE (MANUAL ASSIGNMENT) ====================
+  {
+    id: "crs_advanced_001",
+    title: "Advanced Leadership Training",
+    description: "Leadership development course for supervisors and team leads. Covers communication, conflict resolution, and team management.",
+    category: "Leadership",
+    estimatedMinutes: 120,
+    status: "published",
+    tags: ["Leadership", "Management", "Supervisors"],
+    skills: ["skl_017", "skl_018", "skl_019"], // Team Leadership, Conflict Resolution, Performance Management
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    // No scope - manual assignment only
+    createdAt: daysAgo(70),
+    updatedAt: daysAgo(40),
+  },
+  {
+    id: "crs_advanced_002",
+    title: "First Aid & CPR Certification",
+    description: "Comprehensive first aid and CPR training. Optional certification for interested employees.",
+    category: "Safety",
+    estimatedMinutes: 180,
+    status: "published",
+    tags: ["First Aid", "CPR", "Emergency"],
+    skills: ["skl_004", "skl_016"], // First Aid, CPR & AED
+    policy: defaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    // No scope - manual assignment only
+    createdAt: daysAgo(75),
+    updatedAt: daysAgo(45),
   },
 ];
 
@@ -1453,9 +1641,9 @@ export const assignments: CourseAssignment[] = [
   },
 ];
 
-// 8 ProgressCourse records
+// ProgressCourse records
 export const progressCourses: ProgressCourse[] = [
-  // Completed courses
+  // === MARCUS JOHNSON (usr_lrn_a_pkg_1) - Multiple completed courses for Skill Passport showcase ===
   {
     id: "pc_001",
     userId: "usr_lrn_a_pkg_1",
@@ -1469,6 +1657,77 @@ export const progressCourses: ProgressCourse[] = [
     createdAt: daysAgo(20),
     updatedAt: daysAgo(5),
   },
+  // Marcus - Hazard Communication (HazCom) - Completed
+  {
+    id: "pc_marcus_hazcom",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_003",
+    status: "completed",
+    lessonDoneCount: 2,
+    lessonTotal: 2,
+    scorePct: 95,
+    attempts: 1,
+    completedAt: daysAgo(15),
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(15),
+  },
+  // Marcus - Emergency Response & Evacuation - Completed
+  {
+    id: "pc_marcus_emergency",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_004",
+    status: "completed",
+    lessonDoneCount: 2,
+    lessonTotal: 2,
+    scorePct: 100,
+    attempts: 1,
+    completedAt: daysAgo(25),
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(25),
+  },
+  // Marcus - Packaging Line Safety - Completed
+  {
+    id: "pc_marcus_packaging",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_dept_packaging_001",
+    status: "completed",
+    lessonDoneCount: 3,
+    lessonTotal: 3,
+    scorePct: 88,
+    attempts: 1,
+    completedAt: daysAgo(35),
+    createdAt: daysAgo(50),
+    updatedAt: daysAgo(35),
+  },
+  // Marcus - Quality Control Basics - Completed
+  {
+    id: "pc_marcus_quality",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_dept_packaging_002",
+    status: "completed",
+    lessonDoneCount: 2,
+    lessonTotal: 2,
+    scorePct: 90,
+    attempts: 1,
+    completedAt: daysAgo(20),
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(20),
+  },
+  // Marcus - First Aid & CPR Certification - Completed
+  {
+    id: "pc_marcus_firstaid",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_advanced_002",
+    status: "completed",
+    lessonDoneCount: 4,
+    lessonTotal: 4,
+    scorePct: 96,
+    attempts: 1,
+    completedAt: daysAgo(10),
+    createdAt: daysAgo(25),
+    updatedAt: daysAgo(10),
+  },
+  // === Other users ===
   {
     id: "pc_002",
     userId: "usr_lrn_a_pkg_2",
@@ -1684,8 +1943,9 @@ export const progressLessons: ProgressLesson[] = [
   },
 ];
 
-// 2 Certificates
+// Certificates - Marcus Johnson has multiple for Skill Passport showcase
 export const certificates: Certificate[] = [
+  // === MARCUS JOHNSON (usr_lrn_a_pkg_1) - Multiple certificates ===
   {
     id: "cert_001",
     userId: "usr_lrn_a_pkg_1",
@@ -1696,6 +1956,62 @@ export const certificates: Certificate[] = [
     createdAt: daysAgo(5),
     updatedAt: daysAgo(5),
   },
+  // Marcus - Hazard Communication Certificate
+  {
+    id: "cert_marcus_hazcom",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_003",
+    issuedAt: daysAgo(15),
+    expiresAt: daysFromNow(350),
+    serial: "HC-2025-001-MJ",
+    createdAt: daysAgo(15),
+    updatedAt: daysAgo(15),
+  },
+  // Marcus - Emergency Response Certificate
+  {
+    id: "cert_marcus_emergency",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_004",
+    issuedAt: daysAgo(25),
+    expiresAt: daysFromNow(340),
+    serial: "ER-2025-001-MJ",
+    createdAt: daysAgo(25),
+    updatedAt: daysAgo(25),
+  },
+  // Marcus - Packaging Line Safety Certificate
+  {
+    id: "cert_marcus_packaging",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_dept_packaging_001",
+    issuedAt: daysAgo(35),
+    expiresAt: daysFromNow(330),
+    serial: "PLS-2025-001-MJ",
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(35),
+  },
+  // Marcus - Quality Control Certificate
+  {
+    id: "cert_marcus_quality",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_dept_packaging_002",
+    issuedAt: daysAgo(20),
+    expiresAt: daysFromNow(345),
+    serial: "QC-2025-001-MJ",
+    createdAt: daysAgo(20),
+    updatedAt: daysAgo(20),
+  },
+  // Marcus - First Aid & CPR Certificate
+  {
+    id: "cert_marcus_firstaid",
+    userId: "usr_lrn_a_pkg_1",
+    courseId: "crs_advanced_002",
+    issuedAt: daysAgo(10),
+    expiresAt: daysFromNow(355),
+    serial: "FA-2025-001-MJ",
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(10),
+  },
+  // === Other users ===
   {
     id: "cert_002",
     userId: "usr_lrn_a_pkg_2",

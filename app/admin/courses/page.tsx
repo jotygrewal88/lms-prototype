@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Plus, Calendar, Clock, Trash2, Sparkles } from "lucide-react";
+import { BookOpen, Plus, Calendar, Clock, Trash2, Sparkles, Search, X, ChevronDown } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -36,6 +36,16 @@ export default function CoursesPage() {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newCourseDescription, setNewCourseDescription] = useState("");
+  
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"" | "draft" | "published">("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterDuration, setFilterDuration] = useState<"" | "short" | "medium" | "long" | "extended">("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
+  
   const currentUser = getCurrentUser();
   const isManager = currentUser.role === "MANAGER";
 
@@ -139,6 +149,91 @@ export default function CoursesPage() {
     });
   };
 
+  // Extract unique categories from courses
+  const uniqueCategories = Array.from(
+    new Set(courses.map(c => c.category).filter(Boolean))
+  ).sort() as string[];
+
+  // Filter courses based on search and filters
+  const getFilteredCourses = (): Course[] => {
+    return courses.filter((course) => {
+      // Search filter - matches title or category
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesTitle = course.title.toLowerCase().includes(query);
+        const matchesCategory = course.category?.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesCategory) return false;
+      }
+
+      // Status filter
+      if (filterStatus && course.status !== filterStatus) return false;
+
+      // Category filter
+      if (filterCategory && course.category !== filterCategory) return false;
+
+      // Duration filter
+      if (filterDuration && course.estimatedMinutes) {
+        const mins = course.estimatedMinutes;
+        switch (filterDuration) {
+          case "short":
+            if (mins > 30) return false;
+            break;
+          case "medium":
+            if (mins <= 30 || mins > 60) return false;
+            break;
+          case "long":
+            if (mins <= 60 || mins > 120) return false;
+            break;
+          case "extended":
+            if (mins <= 120) return false;
+            break;
+        }
+      } else if (filterDuration && !course.estimatedMinutes) {
+        // If duration filter is set but course has no duration, exclude it
+        return false;
+      }
+
+      // Date range filter (parse YYYY-MM-DD without timezone issues)
+      if (filterDateFrom || filterDateTo) {
+        const createdDate = new Date(course.createdAt);
+        if (filterDateFrom) {
+          const [year, month, day] = filterDateFrom.split('-').map(Number);
+          const fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+          if (createdDate < fromDate) return false;
+        }
+        if (filterDateTo) {
+          const [year, month, day] = filterDateTo.split('-').map(Number);
+          const toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+          if (createdDate > toDate) return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  const filteredCourses = getFilteredCourses();
+
+  // Check if any filters are active
+  const hasActiveFilters = searchQuery || filterStatus || filterCategory || filterDuration || filterDateFrom || filterDateTo;
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterStatus("");
+    setFilterCategory("");
+    setFilterDuration("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+  };
+
+  // Format date for display (parse YYYY-MM-DD without timezone issues)
+  const formatDateShort = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
   return (
     <RouteGuard allowedRoles={["ADMIN", "MANAGER"]}>
       <AdminLayout>
@@ -170,6 +265,196 @@ export default function CoursesPage() {
             </div>
           )}
 
+          {/* Search and Filters */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6 space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by title or category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Filter Dropdowns */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Status Filter */}
+              <div className="relative">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value as "" | "draft" | "published")}
+                  className="w-full appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition-colors cursor-pointer"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+
+              {/* Category Filter */}
+              <div className="relative">
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="w-full appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition-colors cursor-pointer"
+                >
+                  <option value="">All Categories</option>
+                  {uniqueCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+
+              {/* Duration Filter */}
+              <div className="relative">
+                <select
+                  value={filterDuration}
+                  onChange={(e) => setFilterDuration(e.target.value as "" | "short" | "medium" | "long" | "extended")}
+                  className="w-full appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition-colors cursor-pointer"
+                >
+                  <option value="">All Durations</option>
+                  <option value="short">Short (0-30 min)</option>
+                  <option value="medium">Medium (30-60 min)</option>
+                  <option value="long">Long (60-120 min)</option>
+                  <option value="extended">Extended (120+ min)</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsDateRangeOpen(!isDateRangeOpen)}
+                  className={`w-full flex items-center justify-between pl-4 pr-3 py-2.5 border rounded-lg text-sm transition-colors cursor-pointer ${
+                    filterDateFrom || filterDateTo
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <span className={filterDateFrom || filterDateTo ? "text-green-700" : "text-gray-500"}>
+                      {filterDateFrom || filterDateTo
+                        ? `${filterDateFrom ? formatDateShort(filterDateFrom) : "Any"} - ${filterDateTo ? formatDateShort(filterDateTo) : "Any"}`
+                        : "Date Range"}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isDateRangeOpen ? "rotate-180" : ""}`} />
+                </button>
+                
+                {/* Date Range Dropdown */}
+                {isDateRangeOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 p-4 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+                        <input
+                          type="date"
+                          value={filterDateFrom}
+                          onChange={(e) => setFilterDateFrom(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+                        <input
+                          type="date"
+                          value={filterDateTo}
+                          onChange={(e) => setFilterDateTo(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-2 border-t border-gray-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterDateFrom("");
+                            setFilterDateTo("");
+                          }}
+                          className="flex-1 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-md transition-colors"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsDateRangeOpen(false)}
+                          className="flex-1 px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Active Filter Pills */}
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                <div className="flex flex-wrap gap-2">
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
+                      Search: "{searchQuery}"
+                      <button onClick={() => setSearchQuery("")} className="hover:text-green-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filterStatus && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
+                      Status: {filterStatus === "published" ? "Published" : "Draft"}
+                      <button onClick={() => setFilterStatus("")} className="hover:text-green-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filterCategory && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
+                      Category: {filterCategory}
+                      <button onClick={() => setFilterCategory("")} className="hover:text-green-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filterDuration && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
+                      Duration: {filterDuration === "short" ? "0-30 min" : filterDuration === "medium" ? "30-60 min" : filterDuration === "long" ? "60-120 min" : "120+ min"}
+                      <button onClick={() => setFilterDuration("")} className="hover:text-green-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {(filterDateFrom || filterDateTo) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
+                      Date: {filterDateFrom ? formatDateShort(filterDateFrom) : "Any"} – {filterDateTo ? formatDateShort(filterDateTo) : "Any"}
+                      <button onClick={() => { setFilterDateFrom(""); setFilterDateTo(""); }} className="hover:text-green-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-green-600 hover:text-green-800 font-medium"
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
+
+            {/* Results count */}
+            <div className="text-sm text-gray-500">
+              Showing {filteredCourses.length} of {courses.length} course{courses.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+
           {courses.length === 0 ? (
             <Card>
               <div className="text-center py-12">
@@ -188,9 +473,24 @@ export default function CoursesPage() {
                 )}
               </div>
             </Card>
+          ) : filteredCourses.length === 0 ? (
+            <Card>
+              <div className="text-center py-12">
+                <Search className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-semibold text-gray-900">No courses match your filters</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Try adjusting your search or filter criteria.
+                </p>
+                <div className="mt-6">
+                  <Button variant="secondary" onClick={clearFilters}>
+                    Clear All Filters
+                  </Button>
+                </div>
+              </div>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {courses.map((course) => {
+              {filteredCourses.map((course) => {
                 const stats = getCourseStats(course);
 
                 return (

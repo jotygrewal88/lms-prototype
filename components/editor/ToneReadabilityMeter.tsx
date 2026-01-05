@@ -97,7 +97,7 @@ export default function ToneReadabilityMeter({
           ) : (
             <AlertCircle className="w-3.5 h-3.5" />
           )}
-          <span>Tone: {toneStatus.match ? 'OK' : 'Off-brand'}</span>
+          <span>Tone: {toneStatus.match ? 'On-brand' : 'Off-brand'}</span>
         </button>
 
         {/* Tone Popover */}

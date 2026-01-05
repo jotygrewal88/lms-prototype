@@ -66,11 +66,16 @@ export function detectTone(
   }
   
   // Casual/friendly indicators
-  const casualIndicators = ['hey', 'guys', 'gonna', 'wanna', 'y\'all', 'awesome', 'cool', 'great', '!'];
+  const casualIndicators = ['hey', 'guys', 'gonna', 'wanna', 'y\'all', 'awesome', 'cool', 'lol', 'omg'];
   const casualCount = casualIndicators.filter(ind => text.includes(ind)).length;
   
-  // Formal/professional indicators
-  const formalIndicators = ['shall', 'must', 'hereby', 'pursuant', 'hereinafter', 'whereas', 'therefore', 'furthermore'];
+  // Formal/professional indicators (expanded for training content)
+  const formalIndicators = [
+    'shall', 'must', 'hereby', 'pursuant', 'hereinafter', 'whereas', 'therefore', 'furthermore',
+    'ensure', 'comply', 'compliance', 'procedure', 'protocol', 'requirement', 'safety',
+    'training', 'objective', 'identify', 'demonstrate', 'implement', 'maintain', 'hazard',
+    'equipment', 'workplace', 'operational', 'regulatory', 'standards', 'certification'
+  ];
   const formalCount = formalIndicators.filter(ind => text.includes(ind)).length;
   
   // Plain indicators (neutral, simple language)

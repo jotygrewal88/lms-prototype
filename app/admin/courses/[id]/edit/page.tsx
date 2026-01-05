@@ -114,7 +114,7 @@ import StyleAuditPanel from "./_components/StyleAuditPanel";
 import Toast from "@/components/Toast";
 import { getFileAccept, formatFileSize } from "@/lib/uploads";
 import { logChange } from "@/lib/changeLog"; // Phase II 1I.2: ChangeLog for AI generation
-import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType, Quiz, Question, QuestionType, CourseStandards, StyleAuditIssue } from "@/types";
+import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType, Quiz, Question, QuestionType, CourseStandards, StyleAuditIssue, CourseScope } from "@/types";
 import HistoryDrawer from "@/components/history/HistoryDrawer";
 import CourseAssignmentModal from "@/components/admin/courses/CourseAssignmentModal";
 import AssignmentResolveModal from "@/components/admin/courses/AssignmentResolveModal";
@@ -232,6 +232,11 @@ export default function CourseEditPage() {
     issueCertificateOnComplete: true,
   });
 
+  // Course scope state (for new user assignment)
+  const [scope, setScope] = useState<CourseScope>({ type: "custom" });
+  const allSites = getSites();
+  const allDepartments = getDepartments();
+
   useEffect(() => {
     const loadData = () => {
       try {
@@ -268,6 +273,12 @@ export default function CourseEditPage() {
         setSelectedSkills(loadedCourse.skills || []);
         if (loadedCourse.policy) {
           setPolicy(loadedCourse.policy);
+        }
+        // Load scope for new user assignment
+        if (loadedCourse.scope) {
+          setScope(loadedCourse.scope);
+        } else {
+          setScope({ type: "custom" });
         }
 
         setLessons(getLessonsByCourseId(courseId));
@@ -354,6 +365,7 @@ export default function CourseEditPage() {
       standards,
       skills: selectedSkills, // Phase II — 1M.1: Save skills
       policy,
+      scope, // Assignment scope for new user onboarding
       // Epic 1G.7: Save metadata
       metadata: {
         objectives,
@@ -1471,7 +1483,7 @@ export default function CourseEditPage() {
 
                 <Button
                   variant="secondary"
-                  onClick={() => alert('Preview as Learner feature coming soon! This will show the course from a learner\'s perspective.')}
+                  onClick={() => router.push(`/admin/courses/${courseId}/preview`)}
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   Preview as Learner
@@ -2298,20 +2310,69 @@ export default function CourseEditPage() {
                     </div>
                   </div>
                   <div className="p-6">
-                    <select
-                      value={policy.progression}
-                      onChange={(e) => {
-                        setPolicy({ ...policy, progression: e.target.value as "linear" | "free" });
-                        setHasChanges(true);
-                      }}
-                      disabled={isManager}
-                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm font-medium hover:border-gray-300 ${
-                        isManager ? 'bg-gray-50 cursor-not-allowed text-gray-600' : 'bg-white text-gray-900'
-                      }`}
-                    >
-                      <option value="linear">Linear — Learners must complete lessons in order</option>
-                      <option value="free">Free — Learners can access any lesson</option>
-                    </select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          policy.progression === 'linear' 
+                            ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' 
+                            : 'border-gray-200 hover:border-indigo-300 hover:shadow-sm'
+                        } ${isManager ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center h-5">
+                          <input
+                            type="radio"
+                            name="progression"
+                            value="linear"
+                            checked={policy.progression === 'linear'}
+                            onChange={() => {
+                              setPolicy({ ...policy, progression: "linear" });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="ml-3">
+                          <span className={`block text-sm font-bold ${policy.progression === 'linear' ? 'text-indigo-900' : 'text-gray-900'}`}>
+                            Linear Progression
+                          </span>
+                          <span className={`block text-xs mt-1 ${policy.progression === 'linear' ? 'text-indigo-700' : 'text-gray-500'}`}>
+                            Learners must complete lessons in sequential order.
+                          </span>
+                        </div>
+                      </label>
+
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          policy.progression === 'free' 
+                            ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' 
+                            : 'border-gray-200 hover:border-indigo-300 hover:shadow-sm'
+                        } ${isManager ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center h-5">
+                          <input
+                            type="radio"
+                            name="progression"
+                            value="free"
+                            checked={policy.progression === 'free'}
+                            onChange={() => {
+                              setPolicy({ ...policy, progression: "free" });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="ml-3">
+                          <span className={`block text-sm font-bold ${policy.progression === 'free' ? 'text-indigo-900' : 'text-gray-900'}`}>
+                            Free Navigation
+                          </span>
+                          <span className={`block text-xs mt-1 ${policy.progression === 'free' ? 'text-indigo-700' : 'text-gray-500'}`}>
+                            Learners can access any lesson in any order.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -2484,6 +2545,194 @@ export default function CourseEditPage() {
                   </div>
                 </div>
 
+                {/* Reminder Cadence Settings */}
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-cyan-50 to-blue-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-cyan-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Reminder Cadence</h3>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">Configure retraining intervals and reminder schedules</p>
+                  </div>
+                  <div className="p-6 space-y-6">
+                    {/* Retraining Interval */}
+                    <div className="space-y-4">
+                      <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">Require periodic retraining</p>
+                          <p className="text-xs text-gray-600 mt-1">Learners must retake this course after a set period</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={!!policy.retrainIntervalDays}
+                          onChange={(e) => {
+                            setPolicy({ 
+                              ...policy, 
+                              retrainIntervalDays: e.target.checked ? 365 : undefined,
+                              reminderEnabled: e.target.checked ? true : false,
+                              reminderDaysBefore: e.target.checked ? [30, 7] : undefined
+                            });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="w-5 h-5 text-cyan-600 rounded border-2 border-gray-300 focus:ring-cyan-500 focus:ring-2 disabled:opacity-50"
+                        />
+                      </label>
+
+                      {policy.retrainIntervalDays && (
+                        <div className="p-4 bg-gradient-to-r from-cyan-50/50 to-blue-50/50 rounded-xl border-2 border-cyan-100">
+                          <label className="block text-sm font-semibold text-gray-700 mb-3">
+                            Retraining Interval
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {[
+                              { value: 30, label: "30 days" },
+                              { value: 90, label: "90 days" },
+                              { value: 180, label: "6 months" },
+                              { value: 365, label: "1 year" },
+                              { value: 730, label: "2 years" },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => {
+                                  setPolicy({ ...policy, retrainIntervalDays: option.value });
+                                  setHasChanges(true);
+                                }}
+                                disabled={isManager}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                  policy.retrainIntervalDays === option.value
+                                    ? "bg-cyan-600 text-white shadow-md"
+                                    : "bg-white text-gray-700 border-2 border-gray-200 hover:border-cyan-300 hover:bg-cyan-50"
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="1"
+                                max="1825"
+                                value={![30, 90, 180, 365, 730].includes(policy.retrainIntervalDays) ? policy.retrainIntervalDays : ""}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value, 10);
+                                  if (value > 0) {
+                                    setPolicy({ ...policy, retrainIntervalDays: value });
+                                    setHasChanges(true);
+                                  }
+                                }}
+                                disabled={isManager}
+                                placeholder="Custom"
+                                className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                                  ![30, 90, 180, 365, 730].includes(policy.retrainIntervalDays)
+                                    ? "border-cyan-600 bg-cyan-50"
+                                    : "border-gray-200 bg-white"
+                                } focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">days</span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-3">
+                            Learners must retake this course {policy.retrainIntervalDays} days after completion
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reminder Schedule */}
+                    {policy.retrainIntervalDays && (
+                      <div className="space-y-4">
+                        <label className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-200 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">Enable reminder notifications</p>
+                            <p className="text-xs text-gray-600 mt-1">Send reminders before certification expires</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={policy.reminderEnabled ?? false}
+                            onChange={(e) => {
+                              setPolicy({ 
+                                ...policy, 
+                                reminderEnabled: e.target.checked,
+                                reminderDaysBefore: e.target.checked ? [30, 7] : undefined
+                              });
+                              setHasChanges(true);
+                            }}
+                            disabled={isManager}
+                            className="w-5 h-5 text-cyan-600 rounded border-2 border-gray-300 focus:ring-cyan-500 focus:ring-2 disabled:opacity-50"
+                          />
+                        </label>
+
+                        {policy.reminderEnabled && (
+                          <div className="p-4 bg-gradient-to-r from-cyan-50/50 to-blue-50/50 rounded-xl border-2 border-cyan-100">
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                              Reminder Schedule
+                            </label>
+                            <p className="text-xs text-gray-600 mb-4">
+                              Select when to notify learners before their certification expires
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                              {[
+                                { value: 30, label: "30 days before" },
+                                { value: 15, label: "15 days before" },
+                                { value: 7, label: "7 days before" },
+                                { value: 3, label: "3 days before" },
+                                { value: 1, label: "1 day before" },
+                              ].map((option) => {
+                                const isSelected = policy.reminderDaysBefore?.includes(option.value) ?? false;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = policy.reminderDaysBefore || [];
+                                      const updated = isSelected
+                                        ? current.filter(d => d !== option.value)
+                                        : [...current, option.value].sort((a, b) => b - a);
+                                      setPolicy({ ...policy, reminderDaysBefore: updated.length > 0 ? updated : undefined });
+                                      setHasChanges(true);
+                                    }}
+                                    disabled={isManager}
+                                    className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                                      isSelected
+                                        ? "bg-cyan-600 text-white shadow-md"
+                                        : "bg-white text-gray-700 border-2 border-gray-200 hover:border-cyan-300 hover:bg-cyan-50"
+                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Visual Timeline */}
+                            {policy.reminderDaysBefore && policy.reminderDaysBefore.length > 0 && (
+                              <div className="mt-4 p-3 bg-white rounded-lg border border-gray-200">
+                                <p className="text-xs font-medium text-gray-700 mb-2">Reminder Timeline</p>
+                                <div className="relative h-8">
+                                  <div className="absolute inset-x-0 top-1/2 h-1 bg-gray-200 rounded-full -translate-y-1/2"></div>
+                                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-sm"></div>
+                                  <span className="absolute right-0 top-full mt-1 text-[10px] font-medium text-red-600 -translate-x-1/2">Expires</span>
+                                  {policy.reminderDaysBefore.map((day) => {
+                                    const position = Math.min((day / Math.max(...policy.reminderDaysBefore!, 30)) * 80, 80);
+                                    return (
+                                      <div key={day} className="absolute top-1/2 -translate-y-1/2" style={{ right: `${100 - position}%` }}>
+                                        <div className="w-2.5 h-2.5 bg-cyan-500 rounded-full border-2 border-white shadow-sm"></div>
+                                        <span className="absolute top-full mt-1 text-[10px] font-medium text-cyan-600 whitespace-nowrap -translate-x-1/2">{day}d</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Quiz Behavior */}
                 <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-200">
@@ -2632,6 +2881,247 @@ export default function CourseEditPage() {
                         <p className="text-xs text-gray-600 mt-2">Minimum seconds required on each lesson</p>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Assignment Scope */}
+                <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-teal-50 to-emerald-50 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-6 bg-teal-600 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-gray-900">Assignment Scope</h3>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">Define who should be automatically assigned this course when onboarding new users</p>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          scope.type === "company-wide" 
+                            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="scope"
+                          checked={scope.type === "company-wide"}
+                          onChange={() => {
+                            setScope({ type: "company-wide" });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${
+                              scope.type === "company-wide" ? 'border-teal-500 bg-teal-500' : 'border-gray-300'
+                            }`}>
+                              {scope.type === "company-wide" && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                                  <path d="M3.707 5.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 00-1.414-1.414L5 6.586 3.707 5.293z"/>
+                                </svg>
+                              )}
+                            </span>
+                            <span className="font-semibold text-gray-900">Company-wide</span>
+                            <span className="px-2 py-0.5 text-xs font-bold bg-teal-100 text-teal-700 rounded-full">Required</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 ml-7">
+                            All new employees will be automatically assigned this training
+                          </p>
+                        </div>
+                      </label>
+
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          scope.type === "custom" 
+                            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="scope"
+                          checked={scope.type === "custom"}
+                          onChange={() => {
+                            setScope({ type: "custom" });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${
+                              scope.type === "custom" ? 'border-teal-500 bg-teal-500' : 'border-gray-300'
+                            }`}>
+                              {scope.type === "custom" && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                                  <path d="M3.707 5.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 00-1.414-1.414L5 6.586 3.707 5.293z"/>
+                                </svg>
+                              )}
+                            </span>
+                            <span className="font-semibold text-gray-900">Manual Only</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 ml-7">
+                            Must be manually assigned to users (not auto-assigned on onboarding)
+                          </p>
+                        </div>
+                      </label>
+
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          scope.type === "site" 
+                            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="scope"
+                          checked={scope.type === "site"}
+                          onChange={() => {
+                            setScope({ type: "site", siteIds: [] });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${
+                              scope.type === "site" ? 'border-teal-500 bg-teal-500' : 'border-gray-300'
+                            }`}>
+                              {scope.type === "site" && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                                  <path d="M3.707 5.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 00-1.414-1.414L5 6.586 3.707 5.293z"/>
+                                </svg>
+                              )}
+                            </span>
+                            <span className="font-semibold text-gray-900">Site-specific</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 ml-7">
+                            Auto-assign to new users at selected sites
+                          </p>
+                        </div>
+                      </label>
+
+                      <label 
+                        className={`relative flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          scope.type === "department" 
+                            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="scope"
+                          checked={scope.type === "department"}
+                          onChange={() => {
+                            setScope({ type: "department", departmentIds: [] });
+                            setHasChanges(true);
+                          }}
+                          disabled={isManager}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${
+                              scope.type === "department" ? 'border-teal-500 bg-teal-500' : 'border-gray-300'
+                            }`}>
+                              {scope.type === "department" && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                                  <path d="M3.707 5.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 00-1.414-1.414L5 6.586 3.707 5.293z"/>
+                                </svg>
+                              )}
+                            </span>
+                            <span className="font-semibold text-gray-900">Department-specific</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 ml-7">
+                            Auto-assign to new users in selected departments
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Site Selection */}
+                    {scope.type === "site" && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Sites</label>
+                        <div className="flex flex-wrap gap-2">
+                          {allSites.map((site) => (
+                            <label
+                              key={site.id}
+                              className={`inline-flex items-center px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
+                                scope.siteIds?.includes(site.id)
+                                  ? 'bg-teal-100 border-teal-500 text-teal-800'
+                                  : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={scope.siteIds?.includes(site.id) || false}
+                                onChange={(e) => {
+                                  const newSiteIds = e.target.checked
+                                    ? [...(scope.siteIds || []), site.id]
+                                    : (scope.siteIds || []).filter(id => id !== site.id);
+                                  setScope({ ...scope, siteIds: newSiteIds });
+                                  setHasChanges(true);
+                                }}
+                                disabled={isManager}
+                                className="sr-only"
+                              />
+                              <span className="text-sm font-medium">{site.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {(scope.siteIds?.length || 0) === 0 && (
+                          <p className="text-xs text-amber-600 mt-2">Select at least one site for auto-assignment</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Department Selection */}
+                    {scope.type === "department" && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Departments</label>
+                        <div className="flex flex-wrap gap-2">
+                          {allDepartments.map((dept) => {
+                            const site = allSites.find(s => s.id === dept.siteId);
+                            return (
+                              <label
+                                key={dept.id}
+                                className={`inline-flex items-center px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
+                                  scope.departmentIds?.includes(dept.id)
+                                    ? 'bg-teal-100 border-teal-500 text-teal-800'
+                                    : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={scope.departmentIds?.includes(dept.id) || false}
+                                  onChange={(e) => {
+                                    const newDeptIds = e.target.checked
+                                      ? [...(scope.departmentIds || []), dept.id]
+                                      : (scope.departmentIds || []).filter(id => id !== dept.id);
+                                    setScope({ ...scope, departmentIds: newDeptIds });
+                                    setHasChanges(true);
+                                  }}
+                                  disabled={isManager}
+                                  className="sr-only"
+                                />
+                                <span className="text-sm font-medium">{dept.name}</span>
+                                {site && <span className="text-xs text-gray-500 ml-1">({site.name})</span>}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {(scope.departmentIds?.length || 0) === 0 && (
+                          <p className="text-xs text-amber-600 mt-2">Select at least one department for auto-assignment</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

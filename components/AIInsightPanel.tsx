@@ -105,13 +105,6 @@ export default function AIInsightPanel({ insights }: AIInsightPanelProps) {
           </ul>
         </div>
       </Card>
-
-      {/* Info Note */}
-      <div className="p-3 bg-purple-50 border border-purple-100 rounded-lg">
-        <p className="text-xs text-purple-900">
-          <strong>💡 Tip:</strong> Use section actions (Regenerate, Simplify, Expand) to refine content before accepting.
-        </p>
-      </div>
     </div>
   );
 }

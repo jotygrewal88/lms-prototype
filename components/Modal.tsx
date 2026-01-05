@@ -5,7 +5,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
-  size?: "small" | "medium" | "large";
+  size?: "small" | "medium" | "large" | "xl";
   children: React.ReactNode;
 }
 
@@ -16,6 +16,7 @@ export default function Modal({ isOpen, onClose, title, size = "medium", childre
     small: "max-w-md",
     medium: "max-w-lg",
     large: "max-w-3xl",
+    xl: "max-w-5xl",
   };
 
   return (
@@ -39,7 +40,7 @@ export default function Modal({ isOpen, onClose, title, size = "medium", childre
             </div>
           )}
           
-          <div className={title ? "" : ""}>
+          <div className="p-6">
             {children}
           </div>
         </div>

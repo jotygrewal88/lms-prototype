@@ -1,15 +1,22 @@
-// Phase I AI Uplift - Unified: Learner Notifications Inbox
+// Learner Notifications Page - Polished UI
 "use client";
 
 import React, { useState, useEffect } from "react";
 import LearnerLayout from "@/components/layouts/LearnerLayout";
 import RouteGuard from "@/components/RouteGuard";
-import Card from "@/components/Card";
 import Badge from "@/components/Badge";
 import { getCurrentUser, getReceivedNotifications, subscribe, getUser } from "@/lib/store";
 import { Notification, getFullName } from "@/types";
 import { formatDate } from "@/lib/utils";
-import { X, Mail } from "lucide-react";
+import { 
+  X, 
+  Mail, 
+  Bell, 
+  Calendar,
+  User,
+  MessageSquare,
+  Inbox
+} from "lucide-react";
 
 export default function LearnerNotificationsPage() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
@@ -19,133 +26,189 @@ export default function LearnerNotificationsPage() {
   useEffect(() => {
     const updateNotifications = () => {
       setCurrentUser(getCurrentUser());
-      setNotifications(getReceivedNotifications(getCurrentUser().id));
+      const notifs = getReceivedNotifications(getCurrentUser().id);
+      // Sort by date (most recent first)
+      notifs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+      setNotifications(notifs);
     };
     updateNotifications();
     return subscribe(updateNotifications);
   }, []);
 
+  const getSourceColor = (source: string) => {
+    switch (source) {
+      case "Compliance":
+        return { bg: "bg-purple-100", text: "text-purple-700", icon: "text-purple-600" };
+      case "Training":
+        return { bg: "bg-blue-100", text: "text-blue-700", icon: "text-blue-600" };
+      case "Reminder":
+        return { bg: "bg-amber-100", text: "text-amber-700", icon: "text-amber-600" };
+      default:
+        return { bg: "bg-gray-100", text: "text-gray-700", icon: "text-gray-600" };
+    }
+  };
+
   return (
-    <RouteGuard>
+    <RouteGuard allowedRoles={["LEARNER"]}>
       <LearnerLayout>
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">My Notifications</h1>
-          
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Received At
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      From
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Subject
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Source
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {notifications.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500">
-                        No notifications yet
-                      </td>
-                    </tr>
-                  ) : (
-                    notifications.map(n => {
-                      const sender = getUser(n.senderId);
-                      return (
-                        <tr 
-                          key={n.id} 
-                          onClick={() => setSelectedNotification(n)} 
-                          className="cursor-pointer hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-4 py-3 text-sm text-gray-900">{formatDate(n.sentAt)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {sender ? getFullName(sender) : "System"}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{n.subject}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <Badge variant={n.source === "Compliance" ? "info" : "default"}>
-                              {n.source}
-                            </Badge>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+        <div className="space-y-6">
+          {/* Page Header */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Bell className="w-6 h-6 text-emerald-600" />
+              <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+              {notifications.length > 0 && (
+                <span className="bg-emerald-100 text-emerald-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                  {notifications.length}
+                </span>
+              )}
             </div>
-          </Card>
+            <p className="text-gray-600">
+              Messages from your training administrators and system updates
+            </p>
+          </div>
+
+          {/* Notifications List */}
+          {notifications.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <Inbox className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No notifications yet
+              </h3>
+              <p className="text-gray-500 max-w-md mx-auto">
+                You'll see messages here when your administrator sends updates or reminders.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {notifications.map(n => {
+                const sender = getUser(n.senderId);
+                const sourceColor = getSourceColor(n.source);
+                
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => setSelectedNotification(n)}
+                    className="bg-white rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Avatar/Icon */}
+                      <div className={`w-10 h-10 rounded-full ${sourceColor.bg} flex items-center justify-center flex-shrink-0`}>
+                        <MessageSquare className={`w-5 h-5 ${sourceColor.icon}`} />
+                      </div>
+                      
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-4 mb-1">
+                          <h3 className="font-semibold text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
+                            {n.subject}
+                          </h3>
+                          <span className="text-xs text-gray-500 flex-shrink-0">
+                            {formatDate(n.sentAt)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+                          {n.body}
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {sender ? getFullName(sender) : "System"}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sourceColor.bg} ${sourceColor.text}`}>
+                            {n.source}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Detail Modal */}
         {selectedNotification && (
-          <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => setSelectedNotification(null)}>
+          <div 
+            className="fixed inset-0 z-50 overflow-y-auto" 
+            onClick={() => setSelectedNotification(null)}
+          >
             <div className="flex min-h-screen items-center justify-center p-4">
-              <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" />
               <div 
-                className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" 
+                className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden" 
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-5 h-5 text-blue-600" />
-                    <h2 className="text-lg font-semibold text-gray-900">Message</h2>
+                {/* Modal Header */}
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4 border-b border-emerald-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-gray-900">Message Details</h2>
+                        <p className="text-xs text-gray-500">
+                          {formatDate(selectedNotification.sentAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedNotification(null)} 
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                  <button onClick={() => setSelectedNotification(null)} className="text-gray-400 hover:text-gray-600">
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
                 
-                <div className="space-y-4">
-                  <div className="pb-3 border-b border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-medium text-gray-500">From:</span>
-                      <span className="text-sm text-gray-900">
-                        {getUser(selectedNotification.senderId) 
-                          ? getFullName(getUser(selectedNotification.senderId)!) 
-                          : "System"}
-                      </span>
+                {/* Modal Content */}
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                  <div className="space-y-4">
+                    {/* Meta Info */}
+                    <div className="flex flex-wrap gap-4 pb-4 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-600">
+                          <span className="text-gray-400">From:</span>{" "}
+                          <span className="font-medium text-gray-900">
+                            {getUser(selectedNotification.senderId) 
+                              ? getFullName(getUser(selectedNotification.senderId)!) 
+                              : "System"}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={selectedNotification.source === "Compliance" ? "info" : "default"}>
+                          {selectedNotification.source}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-medium text-gray-500">Sent:</span>
-                      <span className="text-sm text-gray-900">{formatDate(selectedNotification.sentAt)}</span>
+                    
+                    {/* Subject */}
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                        {selectedNotification.subject}
+                      </h3>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-500">Source:</span>
-                      <Badge variant={selectedNotification.source === "Compliance" ? "info" : "default"}>
-                        {selectedNotification.source}
-                      </Badge>
+                    
+                    {/* Body */}
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <pre className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-sans">
+                        {selectedNotification.body}
+                      </pre>
                     </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject:</label>
-                    <div className="px-3 py-2 bg-gray-50 rounded text-sm text-gray-900">
-                      {selectedNotification.subject}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Message:</label>
-                    <pre className="px-3 py-2 bg-gray-50 rounded text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
-                      {selectedNotification.body}
-                    </pre>
                   </div>
                 </div>
 
-                <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
+                {/* Modal Footer */}
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
                   <button 
                     onClick={() => setSelectedNotification(null)} 
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors"
                   >
                     Close
                   </button>
@@ -158,4 +221,3 @@ export default function LearnerNotificationsPage() {
     </RouteGuard>
   );
 }
-

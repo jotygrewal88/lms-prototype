@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LMS Prototype - Phase 1 Build Plan</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --bg: #ffffff;
+      --bg-alt: #f8fafc;
+      --success: #22c55e;
+      --warning: #f59e0b;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+    
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--primary);
+    }
+    
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 48px 0 24px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--primary);
+    }
+    
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 32px 0 16px;
+      color: var(--text);
+    }
+    
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 24px 0 12px;
+      color: var(--text-muted);
+    }
+    
+    p {
+      margin-bottom: 16px;
+    }
+    
+    .meta {
+      background: var(--bg-alt);
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .meta p {
+      margin: 4px 0;
+      font-size: 0.9rem;
+    }
+    
+    .meta strong {
+      color: var(--text-muted);
+      min-width: 80px;
+      display: inline-block;
+    }
+    
+    .build-order {
+      background: linear-gradient(135deg, var(--primary), #1d4ed8);
+      color: white;
+      padding: 24px 32px;
+      border-radius: 12px;
+      margin: 24px 0;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 1rem;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0 32px;
+      font-size: 0.9rem;
+    }
+    
+    th {
+      background: var(--primary);
+      color: white;
+      text-align: left;
+      padding: 12px 16px;
+      font-weight: 600;
+    }
+    
+    th:first-child {
+      border-radius: 8px 0 0 0;
+    }
+    
+    th:last-child {
+      border-radius: 0 8px 0 0;
+    }
+    
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    
+    tr:nth-child(even) {
+      background: var(--bg-alt);
+    }
+    
+    tr:last-child td:first-child {
+      border-radius: 0 0 0 8px;
+    }
+    
+    tr:last-child td:last-child {
+      border-radius: 0 0 8px 0;
+    }
+    
+    .check {
+      color: var(--success);
+      font-weight: bold;
+    }
+    
+    .cross {
+      color: #ef4444;
+    }
+    
+    .partial {
+      color: var(--warning);
+      font-size: 0.8rem;
+    }
+    
+    ul, ol {
+      margin: 16px 0;
+      padding-left: 24px;
+    }
+    
+    li {
+      margin-bottom: 8px;
+    }
+    
+    li ul, li ol {
+      margin: 8px 0;
+    }
+    
+    .diagram {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    
+    .module-card {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    
+    .module-card h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+    
+    .module-card .objective {
+      font-style: italic;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .feature-tag {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      margin: 4px 4px 4px 0;
+    }
+    
+    .q1-feature {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      border-left: 4px solid var(--warning);
+      padding: 16px 20px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .q1-feature strong {
+      color: #b45309;
+    }
+    
+    blockquote {
+      background: var(--bg-alt);
+      border-left: 4px solid var(--text-muted);
+      padding: 12px 20px;
+      margin: 16px 0;
+      font-style: italic;
+      color: var(--text-muted);
+    }
+    
+    .success-criteria {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    
+    .success-criteria h3 {
+      color: #16a34a;
+      margin-top: 0;
+    }
+    
+    .success-criteria li {
+      list-style: none;
+      position: relative;
+      padding-left: 28px;
+    }
+    
+    .success-criteria li::before {
+      content: "☐";
+      position: absolute;
+      left: 0;
+      color: #16a34a;
+    }
+    
+    .dependencies {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    
+    .dependencies h3 {
+      color: #dc2626;
+      margin-top: 0;
+    }
+    
+    hr {
+      border: none;
+      height: 1px;
+      background: var(--border);
+      margin: 48px 0;
+    }
+    
+    .print-header {
+      display: none;
+    }
+    
+    .download-btn {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: linear-gradient(135deg, var(--primary), #1d4ed8);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+      z-index: 1000;
+    }
+    
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+    }
+    
+    .download-btn:active {
+      transform: translateY(0);
+    }
+    
+    .download-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+    
+    @media print {
+      .download-btn {
+        display: none;
+      }
+      body {
+        padding: 0;
+        max-width: none;
+      }
+      
+      .print-header {
+        display: block;
+        text-align: right;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 24px;
+      }
+      
+      h2 {
+        break-after: avoid;
+      }
+      
+      .module-card, table, .diagram {
+        break-inside: avoid;
+      }
+    }
+    
+    @media (max-width: 600px) {
+      body {
+        padding: 24px 16px;
+      }
+      
+      h1 {
+        font-size: 1.75rem;
+      }
+      
+      h2 {
+        font-size: 1.25rem;
+      }
+      
+      table {
+        font-size: 0.8rem;
+      }
+      
+      th, td {
+        padding: 8px 10px;
+      }
+      
+      .diagram {
+        font-size: 0.65rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="download-btn" onclick="window.print()">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+    Download PDF
+  </button>
+  
+  <div class="print-header">
+    LMS Build Plan v1.0 | January 2026
+  </div>
+
+  <h1>LMS Prototype - Phase 1 Build Plan</h1>
+  
+  <div class="meta">
+    <p><strong>Version:</strong> 1.0</p>
+    <p><strong>Created:</strong> January 5, 2026</p>
+    <p><strong>Target:</strong> Q1 2026</p>
+    <p><strong>Status:</strong> Planning</p>
+  </div>
+
+  <h2>Executive Summary</h2>
+  <p>This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on five core modules that form the foundation of the system: <strong>Users, Trainings, Compliance, Library, and Notifications</strong>.</p>
+  
+  <h3>Recommended Build Order</h3>
+  <div class="build-order">
+    Foundation → Users & Permissions → Trainings → Compliance → Library → Notifications
+  </div>
+  <p>This sequence ensures each module has its dependencies ready before development begins.</p>
+
+  <hr>
+
+  <h2>Module Overview</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Module</th>
+        <th>Purpose</th>
+        <th>Key Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Users</strong></td>
+        <td>Manage employees, roles, and organizational structure</td>
+        <td>User CRUD, Roles (Admin/Manager/Learner), Sites & Departments, Permissions</td>
+      </tr>
+      <tr>
+        <td><strong>Trainings</strong></td>
+        <td>Define training requirements and who needs them</td>
+        <td>Training requirements, Assignment rules, Retrain intervals</td>
+      </tr>
+      <tr>
+        <td><strong>Compliance</strong></td>
+        <td>Track who completed what and surface gaps</td>
+        <td>Completion tracking, Status calculations, Dashboards, Reports</td>
+      </tr>
+      <tr>
+        <td><strong>Library</strong></td>
+        <td>Store and organize training materials</td>
+        <td>Document repository, SDS sheets, Search & tagging</td>
+      </tr>
+      <tr>
+        <td><strong>Notifications</strong></td>
+        <td>Communicate reminders and escalations</td>
+        <td>Automated reminders, Escalation rules, Personalized messaging</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <h2>Architecture Diagram</h2>
+  <div class="diagram">┌─────────────────────────────────────────────────────────────────┐
+│                         FOUNDATION                               │
+│                (Project Setup, Data Models, Store)               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    USERS & PERMISSIONS                           │
+│         (User Management, Roles, Org Hierarchy)                  │
+└─────────────────────────────────────────────────────────────────┘
+                    │                           │
+                    ▼                           ▼
+┌───────────────────────────────┐   ┌─────────────────────────────┐
+│          TRAININGS            │   │          LIBRARY            │
+│   (Requirements, Assignments) │   │   (Documents, SDS Sheets)   │
+└───────────────────────────────┘   └─────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        COMPLIANCE                                │
+│       (Completion Tracking, Status, Reports, Dashboard)          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       NOTIFICATIONS                              │
+│           (Reminders, Escalations, Composer)                     │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+  <hr>
+
+  <h2>Timeline</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Week</th>
+        <th>Phase</th>
+        <th>Focus Area</th>
+        <th>Deliverables</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1-2</strong></td>
+        <td>Foundation</td>
+        <td>Project Setup</td>
+        <td>Data models, Store architecture, Base UI components</td>
+      </tr>
+      <tr>
+        <td><strong>3-4</strong></td>
+        <td>Users</td>
+        <td>User Management</td>
+        <td>User CRUD, Role-based permissions, Org hierarchy (Sites/Depts)</td>
+      </tr>
+      <tr>
+        <td><strong>5-6</strong></td>
+        <td>Trainings</td>
+        <td>Requirements</td>
+        <td>Training CRUD, Assignment rules engine</td>
+      </tr>
+      <tr>
+        <td><strong>7-9</strong></td>
+        <td>Compliance</td>
+        <td>Core Tracking</td>
+        <td>Compliance dashboard, Reports, Historic data import</td>
+      </tr>
+      <tr>
+        <td><strong>10-11</strong></td>
+        <td>Library</td>
+        <td>Content Repository</td>
+        <td>File uploads, Search, SDS Library feature</td>
+      </tr>
+      <tr>
+        <td><strong>12-13</strong></td>
+        <td>Notifications</td>
+        <td>Communication</td>
+        <td>Reminder rules, Escalation logic, Notification composer</td>
+      </tr>
+      <tr>
+        <td><strong>14</strong></td>
+        <td>Polish</td>
+        <td>Integration</td>
+        <td>Testing, UX refinement, Bug fixes</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Total Duration:</strong> ~14 weeks</p>
+
+  <hr>
+
+  <h2>Module Details</h2>
+
+  <div class="module-card">
+    <h3>Module 1: Foundation (Week 1-2)</h3>
+    <p class="objective">Establish the technical foundation for the entire system.</p>
+    <h4>Deliverables</h4>
+    <ul>
+      <li>Project setup (Next.js, TypeScript, TailwindCSS)</li>
+      <li>Core data models and type definitions</li>
+      <li>In-memory data store with reactive updates</li>
+      <li>Base UI component library (Buttons, Cards, Tables, Modals)</li>
+      <li>Admin and Learner layout templates</li>
+      <li>Demo seed data</li>
+    </ul>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 2: Users & Permissions (Week 3-4)</h3>
+    <p class="objective">Enable management of users, roles, and organizational structure.</p>
+    
+    <h4>User Management</h4>
+    <ul>
+      <li>Create, edit, view, deactivate users</li>
+      <li>Search and filter by role, site, department</li>
+      <li>User profile pages</li>
+    </ul>
+    
+    <h4>Roles & Permissions</h4>
+    <ul>
+      <li>Three roles: Admin, Manager, Learner</li>
+      <li>Role-based access control</li>
+      <li>Permission checks throughout the system</li>
+    </ul>
+    
+    <h4>Organization Hierarchy</h4>
+    <ul>
+      <li>Organization → Sites → Departments</li>
+      <li>Scope filtering (view data by site/department)</li>
+      <li>Manager-to-team relationships</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/users</span> <span class="feature-tag">/admin/users/[id]</span></p>
+    
+    <div class="q1-feature">
+      <strong>Q1 Feature: Permissions Hierarchy</strong><br>
+      Rebuild flat hierarchy; custom notifications for specific roles. Align with CMMS multi-site access model.
+    </div>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 3: Trainings (Week 5-6)</h3>
+    <p class="objective">Define what training requirements exist and who needs to complete them.</p>
+    
+    <h4>Training Requirements</h4>
+    <ul>
+      <li>Create and manage training definitions</li>
+      <li>Link to regulatory standards (OSHA references)</li>
+      <li>Set retrain intervals (e.g., annual recertification)</li>
+      <li>Assign owner/responsible manager</li>
+    </ul>
+    
+    <h4>Assignment Rules</h4>
+    <ul>
+      <li>Assign by role (all Learners, all Managers)</li>
+      <li>Assign by site (Plant A employees)</li>
+      <li>Assign by department (Maintenance team)</li>
+      <li>Assign to specific individuals</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/trainings</span> <span class="feature-tag">Training create/edit modal</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 4: Compliance (Week 7-9)</h3>
+    <p class="objective">Track completion status and surface compliance gaps. This is the core value of the system.</p>
+    
+    <h4>Completion Tracking</h4>
+    <ul>
+      <li>Status: Assigned, Completed, Overdue, Exempt</li>
+      <li>Due dates and overdue calculations</li>
+      <li>Proof of completion (file upload)</li>
+      <li>Exemption management with attestation</li>
+    </ul>
+    
+    <h4>Compliance Dashboard</h4>
+    <ul>
+      <li>Filterable table (Site, Department, Training, Status)</li>
+      <li>Search by employee name</li>
+      <li>Compliance metrics (rate, overdue count, due soon)</li>
+      <li>Bulk actions (Mark Complete, Set Exempt, Send Reminder)</li>
+    </ul>
+    
+    <h4>Reporting</h4>
+    <ul>
+      <li>Export to CSV</li>
+      <li>Audit snapshots (save current view for records)</li>
+      <li>Change history log</li>
+    </ul>
+    
+    <h4>Historic Data Import</h4>
+    <ul>
+      <li>CSV upload for legacy completion records</li>
+      <li>Validation and error reporting</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/compliance</span> <span class="feature-tag">/admin/reports/audits</span></p>
+    
+    <div class="q1-feature">
+      <strong>Q1 Features:</strong><br>
+      • <strong>Custom Safety Reports</strong> - Admins create bespoke reporting templates<br>
+      • <strong>Form Visibility Toggle</strong> - "Show All Fields" option for manual data entry
+    </div>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 5: Library (Week 10-11)</h3>
+    <p class="objective">Centralized repository for training materials and safety documents.</p>
+    
+    <h4>Document Management</h4>
+    <ul>
+      <li>Upload files (PDF, PPT, DOC, images, videos)</li>
+      <li>Add external links (YouTube, SharePoint, etc.)</li>
+      <li>Tag and categorize items</li>
+      <li>Search and filter</li>
+    </ul>
+    
+    <h4>Organization</h4>
+    <ul>
+      <li>Categories and tags</li>
+      <li>Scope by site/department</li>
+      <li>Version tracking</li>
+      <li>Archive functionality</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/library</span> <span class="feature-tag">Upload modal</span></p>
+    
+    <div class="q1-feature">
+      <strong>Q1 Feature: SDS Library</strong><br>
+      Full Safety Data Sheet library for chemical compliance. Special category with chemical-specific metadata and search.
+    </div>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 6: Notifications (Week 12-13)</h3>
+    <p class="objective">Automated and manual communication to keep training on track.</p>
+    
+    <h4>Reminder Rules</h4>
+    <ul>
+      <li>Upcoming due reminders (e.g., 7 days before)</li>
+      <li>Overdue reminders</li>
+      <li>Retraining reminders (before expiration)</li>
+      <li>Enable/disable individual rules</li>
+    </ul>
+    
+    <h4>Escalation</h4>
+    <ul>
+      <li>Auto-escalate to manager after X days overdue</li>
+      <li>Escalation logging</li>
+    </ul>
+    
+    <h4>Notification Composer</h4>
+    <ul>
+      <li>Search and select recipients</li>
+      <li>Template variables for personalization (name, overdue count, etc.)</li>
+      <li>Tone presets (Friendly, Direct, Escalation, Praise)</li>
+      <li>Live preview per recipient</li>
+      <li>Bulk send</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/notifications</span> <span class="feature-tag">/admin/settings/notifications</span></p>
+  </div>
+
+  <hr>
+
+  <h2>Q1 Feature Roadmap</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Module</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Custom Safety Reports</td>
+        <td>Compliance</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>Audit snapshots with saved filters</td>
+      </tr>
+      <tr>
+        <td>Permissions Hierarchy</td>
+        <td>Users</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>Multi-site access, role permissions</td>
+      </tr>
+      <tr>
+        <td>SDS Library</td>
+        <td>Library</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>Safety Data Sheet repository</td>
+      </tr>
+      <tr>
+        <td>Form Visibility Toggle</td>
+        <td>Compliance</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>"Show All Fields" for manual entry</td>
+      </tr>
+      <tr>
+        <td>UX Simplification</td>
+        <td>All</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>Reduce steps, condense CTAs</td>
+      </tr>
+      <tr>
+        <td>Location Hierarchy</td>
+        <td>Users</td>
+        <td>Q1</td>
+        <td>Not Started</td>
+        <td>Align with CMMS (6 levels)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <h2>Roles & Permissions Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th style="text-align: center;">Admin</th>
+        <th style="text-align: center;">Manager</th>
+        <th style="text-align: center;">Learner</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="4"><strong>Users</strong></td>
+      </tr>
+      <tr>
+        <td>View all users</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;"><span class="check">✓</span> <span class="partial">(team only)</span></td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Create/edit users</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Deactivate users</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Trainings</strong></td>
+      </tr>
+      <tr>
+        <td>View trainings</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;"><span class="check">✓</span> <span class="partial">(assigned)</span></td>
+      </tr>
+      <tr>
+        <td>Create/edit trainings</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Compliance</strong></td>
+      </tr>
+      <tr>
+        <td>View all compliance</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>View team compliance</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>View own compliance</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+      </tr>
+      <tr>
+        <td>Mark complete</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;"><span class="check">✓</span> <span class="partial">(team)</span></td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Set exemptions</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Library</strong></td>
+      </tr>
+      <tr>
+        <td>View library</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+      </tr>
+      <tr>
+        <td>Upload/manage</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Notifications</strong></td>
+      </tr>
+      <tr>
+        <td>Send notifications</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Configure rules</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Reports</strong></td>
+      </tr>
+      <tr>
+        <td>Run reports</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Export data</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Settings</strong></td>
+      </tr>
+      <tr>
+        <td>Manage settings</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <div class="dependencies">
+    <h3>Key Dependencies</h3>
+    <ol>
+      <li><strong>Users must be built first</strong> — All other modules reference users for ownership, assignments, and permissions</li>
+      <li><strong>Trainings before Compliance</strong> — Completion records reference training requirements</li>
+      <li><strong>Compliance before Notifications</strong> — Reminders are triggered by compliance status (upcoming, overdue)</li>
+      <li><strong>Library is independent</strong> — Can be developed in parallel with Compliance</li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>Demo Data Requirements</h2>
+  
+  <h4>Organization Structure</h4>
+  <ul>
+    <li>1 Organization</li>
+    <li>2 Sites (Plant A, Plant B)</li>
+    <li>3 Departments per site (Warehouse, Packaging, Maintenance)</li>
+  </ul>
+  
+  <h4>Users</h4>
+  <ul>
+    <li>1 Admin</li>
+    <li>5-6 Managers (mix of site-level and department-level)</li>
+    <li>15-20 Learners distributed across sites and departments</li>
+  </ul>
+  
+  <h4>Training Requirements</h4>
+  <ul>
+    <li>4-6 trainings (Forklift Safety, PPE Basics, Lockout/Tagout, Fire Safety)</li>
+    <li>Various assignment rules demonstrating role, site, and department targeting</li>
+  </ul>
+  
+  <h4>Completion Records</h4>
+  <ul>
+    <li>Mix of all statuses (Assigned, Completed, Overdue, Exempt)</li>
+    <li>Various due dates (past, upcoming, future)</li>
+    <li>Some with proof files, some with exemptions</li>
+  </ul>
+
+  <hr>
+
+  <div class="success-criteria">
+    <h3>Success Criteria</h3>
+    <p>Phase 1 is complete when:</p>
+    <ul>
+      <li>Admin can manage users with role-based permissions</li>
+      <li>Admin can create training requirements with assignment rules</li>
+      <li>System correctly assigns trainings to users based on rules</li>
+      <li>Compliance dashboard shows accurate status for all completions</li>
+      <li>Admin can mark completions, set exemptions, and run reports</li>
+      <li>Library allows upload, search, and organization of documents</li>
+      <li>Reminder system can identify and notify about upcoming/overdue trainings</li>
+      <li>All Q1 roadmap features are implemented</li>
+    </ul>
+  </div>
+
+  <hr>
+
+  <h2>Next Steps</h2>
+  <ol>
+    <li><strong>Finalize</strong> this plan with stakeholder review</li>
+    <li><strong>Set up</strong> project repository and development environment</li>
+    <li><strong>Begin</strong> Foundation phase (Week 1)</li>
+    <li><strong>Schedule</strong> weekly check-ins to track progress</li>
+  </ol>
+
+  <hr>
+
+  <h2>Document History</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Version</th>
+        <th>Date</th>
+        <th>Author</th>
+        <th>Changes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1.0</td>
+        <td>Jan 5, 2026</td>
+        <td>—</td>
+        <td>Initial plan</td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>
+

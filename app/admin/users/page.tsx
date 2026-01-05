@@ -5,22 +5,27 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import NewUserModal from "@/components/users/NewUserModal";
+import UserImportModal from "@/components/users/UserImportModal";
 import Toast from "@/components/Toast";
+import ComplianceBadge from "@/components/ComplianceBadge";
 import { getSites, getDepartments, getUsers, deactivateUser, reactivateUser, subscribe } from "@/lib/store";
 import { useScope } from "@/hooks/useScope";
 import { User, getFullName } from "@/types";
+import { Upload, ExternalLink } from "lucide-react";
 
 export default function UsersPage() {
   const { scope } = useScope();
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   
@@ -118,9 +123,15 @@ export default function UsersPage() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Users</h1>
-          <Button variant="primary" onClick={handleNewUser}>
-            New User
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" onClick={() => setIsImportModalOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Bulk Import
+            </Button>
+            <Button variant="primary" onClick={handleNewUser}>
+              New User
+            </Button>
+          </div>
         </div>
 
         <div className="mb-4 flex items-center gap-2">
@@ -170,8 +181,17 @@ export default function UsersPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {getFullName(user)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <ComplianceBadge userId={user.id} size="sm" />
+                        <Link 
+                          href={`/admin/users/${user.id}`}
+                          className="text-emerald-600 hover:text-emerald-700 hover:underline inline-flex items-center gap-1 group"
+                        >
+                          {getFullName(user)}
+                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </Link>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.email}
@@ -246,6 +266,14 @@ export default function UsersPage() {
           setEditUser(null);
         }}
         editUser={editUser}
+      />
+
+      <UserImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportComplete={() => {
+          setToast({ message: "Users imported successfully", type: "success" });
+        }}
       />
 
       {toast && (

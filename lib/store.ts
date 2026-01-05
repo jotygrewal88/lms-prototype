@@ -27,6 +27,7 @@ import {
 } from "@/data/seedCoursesV2";
 import { seedSkills } from "@/data/seedSkills";
 import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
+import { markdownToHtml } from "./markdownToHtml";
 
 // Re-export Scope type for convenience
 export type { Scope };
@@ -143,7 +144,7 @@ export function getUser(userId: string): User | undefined {
   return users.find(u => u.id === userId);
 }
 
-export function createUser(userData: Omit<User, 'id'>): void {
+export function createUser(userData: Omit<User, 'id'>): User {
   // Check email uniqueness
   const existingUser = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
   if (existingUser) {
@@ -167,6 +168,7 @@ export function createUser(userData: Omit<User, 'id'>): void {
   );
   
   notifyListeners();
+  return newUser;
 }
 
 export function updateUser(userId: string, patch: Partial<Omit<User, 'id'>>): void {
@@ -1588,6 +1590,170 @@ export function formatAssignmentTargetSummary(target: CourseAssignment['target']
 }
 
 /**
+ * Get courses categorized by scope for new user assignment
+ * Returns courses organized by company-wide, site-specific, department-specific, and other
+ */
+export function getCoursesForNewUserAssignment(
+  userSiteId?: string,
+  userDeptId?: string
+): {
+  companyWide: Course[];
+  siteSpecific: Course[];
+  deptSpecific: Course[];
+  other: Course[];
+} {
+  const publishedCourses = courses.filter(c => c.status === "published");
+  
+  const companyWide: Course[] = [];
+  const siteSpecific: Course[] = [];
+  const deptSpecific: Course[] = [];
+  const other: Course[] = [];
+
+  publishedCourses.forEach(course => {
+    const scope = course.scope;
+    
+    if (!scope || scope.type === "custom") {
+      other.push(course);
+    } else if (scope.type === "company-wide") {
+      companyWide.push(course);
+    } else if (scope.type === "site") {
+      // Check if user's site matches
+      if (userSiteId && scope.siteIds?.includes(userSiteId)) {
+        siteSpecific.push(course);
+      } else {
+        other.push(course);
+      }
+    } else if (scope.type === "department") {
+      // Check if user's department matches
+      if (userDeptId && scope.departmentIds?.includes(userDeptId)) {
+        deptSpecific.push(course);
+      } else {
+        other.push(course);
+      }
+    }
+  });
+
+  return { companyWide, siteSpecific, deptSpecific, other };
+}
+
+/**
+ * Get or create a Training record for a Course
+ * This allows course assignments to appear in the Compliance tab
+ */
+export function getOrCreateTrainingForCourse(courseId: string): Training | undefined {
+  const course = getCourseById(courseId);
+  if (!course) return undefined;
+  
+  // Check if a training already exists for this course
+  let training = trainings.find(t => t.courseId === courseId);
+  
+  if (!training) {
+    // Create a new training linked to the course
+    const now = timestamp();
+    training = {
+      id: `trn_course_${courseId}_${Date.now()}`,
+      title: course.title,
+      description: course.description,
+      standardRef: course.standards?.join(", "),
+      assignment: {
+        // Auto-assign based on course scope
+        sites: course.scope?.type === "site" ? course.scope.siteIds : undefined,
+        departments: course.scope?.type === "department" ? course.scope.departmentIds : undefined,
+      },
+      policy: "LMS-COURSE",
+      courseId: courseId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    trainings.push(training);
+  }
+  
+  return training;
+}
+
+/**
+ * Bulk assign multiple courses to a user
+ * Creates CourseAssignment records for each course
+ * Also creates TrainingCompletion records so the assignments appear in Compliance tab
+ * Supports per-course due dates via perCourseDueDates parameter
+ */
+export function assignCoursesToUser(
+  userId: string,
+  courseIds: string[],
+  assignerUserId: string,
+  dueAt?: string,
+  perCourseDueDates?: Array<{ courseId: string; dueAt: string }>
+): CourseAssignment[] {
+  const createdAssignments: CourseAssignment[] = [];
+  const user = users.find(u => u.id === userId);
+  
+  // Create a map of courseId -> dueAt for quick lookup
+  const dueDateMap = new Map<string, string>();
+  if (perCourseDueDates) {
+    perCourseDueDates.forEach(({ courseId, dueAt }) => {
+      dueDateMap.set(courseId, dueAt);
+    });
+  }
+  
+  // Process each course assignment
+  for (let i = 0; i < courseIds.length; i++) {
+    const courseId = courseIds[i];
+    
+    // Check if assignment already exists for this user and course
+    const existingAssignment = getAssignmentForUserAndCourse(userId, courseId);
+    if (existingAssignment) {
+      // Skip if already assigned
+      continue;
+    }
+    
+    // Use per-course due date if available, otherwise fall back to the global dueAt
+    const courseDueAt = dueDateMap.get(courseId) || dueAt;
+    
+    const assignment = createAssignment({
+      courseId,
+      target: { type: "user", userIds: [userId] },
+      dueAt: courseDueAt,
+      assignerUserId,
+    });
+    
+    createdAssignments.push(assignment);
+    
+    // Also create a TrainingCompletion record so this appears in Compliance tab
+    const training = getOrCreateTrainingForCourse(courseId);
+    
+    if (training && user) {
+      // Check if completion already exists (by courseId and userId for robustness)
+      const existingCompletion = completions.find(
+        c => c.courseId === courseId && c.userId === userId
+      );
+      
+      if (!existingCompletion) {
+        // Use index in unique ID to avoid potential timestamp collisions
+        const uniqueId = `comp_${userId}_${courseId}_${Date.now()}_${i}`;
+        const completion: TrainingCompletion = {
+          id: uniqueId,
+          trainingId: training.id,
+          userId: userId,
+          status: "ASSIGNED",
+          dueAt: courseDueAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          courseId: courseId,
+          assignedManagerId: assignerUserId,
+        };
+        completions.push(completion);
+        console.log(`[assignCoursesToUser] Created completion for user ${userId}, course ${courseId}, training ${training.id}`);
+      } else {
+        console.log(`[assignCoursesToUser] Skipped existing completion for user ${userId}, course ${courseId}`);
+      }
+    } else {
+      console.warn(`[assignCoursesToUser] Could not create completion - training: ${training?.id || 'null'}, user: ${user?.id || 'null'}`);
+    }
+  }
+  
+  notifyListeners();
+  return createdAssignments;
+}
+
+/**
  * Get assignment for a specific user and course
  * Returns the assignment if the user matches the assignment target
  */
@@ -2450,8 +2616,38 @@ export function resolveAssigneesForCourse(courseId: string): string[] {
 
 // Placeholder functions for AI course metadata/styling (stubs for now)
 export function collectCourseHtml(courseId: string): string {
-  // TODO: Implement course HTML collection
-  return "";
+  const course = courses.find(c => c.id === courseId);
+  if (!course) return "";
+  
+  let html = "";
+  
+  // Add course title and description
+  html += `<h1>${course.title}</h1>\n`;
+  if (course.description) {
+    html += `<p>${course.description}</p>\n`;
+  }
+  
+  // Add all lesson content
+  const courseLessons = getLessonsByCourseId(courseId);
+  for (const lesson of courseLessons) {
+    html += `<h2>${lesson.title}</h2>\n`;
+    if (lesson.description) {
+      html += `<p>${lesson.description}</p>\n`;
+    }
+    
+    // Add all resource content
+    const lessonResources = getResourcesByLessonId(lesson.id);
+    for (const resource of lessonResources) {
+      html += `<h3>${resource.title}</h3>\n`;
+      if (resource.type === 'text' && resource.content) {
+        html += `${resource.content}\n`;
+      } else if (resource.description) {
+        html += `<p>${resource.description}</p>\n`;
+      }
+    }
+  }
+  
+  return html;
 }
 
 export function applyCourseMetadata(courseId: string, metadata: CourseMetadata): void {
@@ -2488,7 +2684,8 @@ export function applyBulkStyleFixes(courseId: string, issues: StyleAuditIssue[])
  */
 export function createCourseFromAIDraft(
   draft: import("@/types").AICourseDraft, 
-  ownerUserId: string
+  ownerUserId: string,
+  options?: { contentIsHtml?: boolean }
 ): string {
   const now = timestamp();
   const courseId = `crs_ai_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -2545,7 +2742,7 @@ export function createCourseFromAIDraft(
         lessonId,
         type: "text",
         title: `Section ${sIdx + 1}`,
-        content: section.content,
+        content: options?.contentIsHtml ? section.content : markdownToHtml(section.content), // Convert markdown to HTML for TipTap editor (skip if already HTML)
         order: sIdx,
         createdAt: now,
         updatedAt: now,
@@ -2558,33 +2755,14 @@ export function createCourseFromAIDraft(
   // 3. Create quiz with questions if provided
   if (draft.quiz && draft.quiz.questions.length > 0) {
     const quizId = `qz_ai_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const quiz: Quiz = {
-      id: quizId,
-      courseId,
-      title: "Course Quiz",
-      questions: [],
-      config: {
-        passingScore: 70,
-        maxAttempts: 3,
-        shuffleQuestions: false,
-        shuffleOptions: false,
-        showRationales: true,
-      },
-      passingScorePct: 70,
-      maxAttempts: 3,
-      questionIds: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    quizzes.push(quiz);
-    course.quizId = quizId;
     
-    draft.quiz.questions.forEach((q, idx) => {
+    // Build questions array for the quiz
+    const quizQuestions: Question[] = draft.quiz.questions.map((q, idx) => {
       const questionId = `q_ai_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 9)}`;
-      const question: Question = {
+      return {
         id: questionId,
         quizId,
-        type: "mcq",
+        type: "mcq" as const,
         prompt: q.question,
         options: q.options.map((label, i) => ({
           id: `opt_${i}`,
@@ -2595,9 +2773,31 @@ export function createCourseFromAIDraft(
         createdAt: now,
         updatedAt: now,
       };
-      questions.push(question);
-      quiz.questionIds?.push(questionId);
     });
+    
+    const quiz: Quiz = {
+      id: quizId,
+      courseId,
+      title: "Course Quiz",
+      questions: quizQuestions, // Add questions directly to quiz
+      config: {
+        passingScore: 70,
+        maxAttempts: 3,
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        showRationales: true,
+      },
+      passingScorePct: 70,
+      maxAttempts: 3,
+      questionIds: quizQuestions.map(q => q.id), // Keep for backward compatibility
+      createdAt: now,
+      updatedAt: now,
+    };
+    quizzes.push(quiz);
+    course.quizId = quizId;
+    
+    // Also push to global questions array for backward compatibility
+    quizQuestions.forEach(q => questions.push(q));
   }
   
   // 4. Create changelog entry (using TrainingCompletion entity type for compatibility)

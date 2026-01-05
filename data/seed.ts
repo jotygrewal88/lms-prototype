@@ -326,6 +326,40 @@ export const users: User[] = [
     managerId: "usr_mgr_b_maint",
     active: true,
   },
+  // ⭐ Star Performers - Fully Compliant (Green Badge Demo)
+  {
+    id: "usr_star_1",
+    firstName: "Alex",
+    lastName: "Rivera",
+    email: "alex.rivera@upkeepdemo.co",
+    role: "LEARNER",
+    siteId: "site_a",
+    departmentId: "dept_a_packaging",
+    managerId: "usr_mgr_a_pkg",
+    active: true,
+  },
+  {
+    id: "usr_star_2",
+    firstName: "Jordan",
+    lastName: "Kim",
+    email: "jordan.kim@upkeepdemo.co",
+    role: "LEARNER",
+    siteId: "site_a",
+    departmentId: "dept_a_warehouse",
+    managerId: "usr_mgr_a_wh",
+    active: true,
+  },
+  {
+    id: "usr_star_3",
+    firstName: "Taylor",
+    lastName: "Nguyen",
+    email: "taylor.nguyen@upkeepdemo.co",
+    role: "LEARNER",
+    siteId: "site_b",
+    departmentId: "dept_b_maintenance",
+    managerId: "usr_mgr_b_maint",
+    active: true,
+  },
 ];
 
 // Phase I Epic 2: Trainings
@@ -472,6 +506,25 @@ export const completions: TrainingCompletion[] = [
   { id: "cmp_loto_007", trainingId: "tng_003", userId: "usr_lrn_a_maint_1", status: "COMPLETED", dueAt: addDays(today(), -180), completedAt: addDays(today(), -185), expiresAt: addDays(addDays(today(), -185), 730), proofUrl: "https://example.com/cert/loto7.pdf", assignedManagerId: "usr_mgr_a" },
   { id: "cmp_loto_008", trainingId: "tng_003", userId: "usr_lrn_b_maint_1", status: "COMPLETED", dueAt: addDays(today(), -120), completedAt: addDays(today(), -125), expiresAt: addDays(addDays(today(), -125), 730), assignedManagerId: "usr_mgr_b_maint" },
   { id: "cmp_loto_009", trainingId: "tng_003", userId: "usr_lrn_b_maint_2", status: "COMPLETED", dueAt: addDays(today(), -110), completedAt: addDays(today(), -113), expiresAt: addDays(addDays(today(), -113), 730), proofUrl: "https://example.com/cert/loto9.pdf", assignedManagerId: "usr_mgr_b_maint" },
+
+  // ⭐ STAR PERFORMERS - All trainings completed (Green Badge Demo)
+  // Alex Rivera - Packaging star (all 4 trainings complete)
+  { id: "cmp_star_1_a", trainingId: "tng_001", userId: "usr_star_1", status: "COMPLETED", dueAt: addDays(today(), -60), completedAt: addDays(today(), -65), expiresAt: addDays(today(), 300), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_002" },
+  { id: "cmp_star_1_b", trainingId: "tng_002", userId: "usr_star_1", status: "COMPLETED", dueAt: addDays(today(), -55), completedAt: addDays(today(), -58), expiresAt: addDays(today(), 307), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_001" },
+  { id: "cmp_star_1_c", trainingId: "tng_003", userId: "usr_star_1", status: "COMPLETED", dueAt: addDays(today(), -50), completedAt: addDays(today(), -52), expiresAt: addDays(today(), 678), assignedManagerId: "usr_mgr_a_pkg" },
+  { id: "cmp_star_1_d", trainingId: "tng_004", userId: "usr_star_1", status: "COMPLETED", dueAt: addDays(today(), -45), completedAt: addDays(today(), -47), expiresAt: addDays(today(), 318), assignedManagerId: "usr_mgr_a_pkg", courseId: "crs_004" },
+  
+  // Jordan Kim - Warehouse star (all 4 trainings complete)
+  { id: "cmp_star_2_a", trainingId: "tng_001", userId: "usr_star_2", status: "COMPLETED", dueAt: addDays(today(), -70), completedAt: addDays(today(), -72), expiresAt: addDays(today(), 293), proofUrl: "https://example.com/cert/star2a.pdf", assignedManagerId: "usr_mgr_a_wh", courseId: "crs_002" },
+  { id: "cmp_star_2_b", trainingId: "tng_002", userId: "usr_star_2", status: "COMPLETED", dueAt: addDays(today(), -65), completedAt: addDays(today(), -67), expiresAt: addDays(today(), 298), assignedManagerId: "usr_mgr_a_wh", courseId: "crs_001" },
+  { id: "cmp_star_2_c", trainingId: "tng_003", userId: "usr_star_2", status: "COMPLETED", dueAt: addDays(today(), -60), completedAt: addDays(today(), -62), expiresAt: addDays(today(), 668), proofUrl: "https://example.com/cert/star2c.pdf", assignedManagerId: "usr_mgr_a_wh" },
+  { id: "cmp_star_2_d", trainingId: "tng_004", userId: "usr_star_2", status: "COMPLETED", dueAt: addDays(today(), -55), completedAt: addDays(today(), -57), expiresAt: addDays(today(), 308), assignedManagerId: "usr_mgr_a_wh", courseId: "crs_004" },
+  
+  // Taylor Nguyen - Maintenance star (all 4 trainings complete)
+  { id: "cmp_star_3_a", trainingId: "tng_001", userId: "usr_star_3", status: "COMPLETED", dueAt: addDays(today(), -80), completedAt: addDays(today(), -82), expiresAt: addDays(today(), 283), assignedManagerId: "usr_mgr_b_maint", courseId: "crs_002" },
+  { id: "cmp_star_3_b", trainingId: "tng_002", userId: "usr_star_3", status: "COMPLETED", dueAt: addDays(today(), -75), completedAt: addDays(today(), -77), expiresAt: addDays(today(), 288), proofUrl: "https://example.com/cert/star3b.pdf", assignedManagerId: "usr_mgr_b_maint", courseId: "crs_001" },
+  { id: "cmp_star_3_c", trainingId: "tng_003", userId: "usr_star_3", status: "COMPLETED", dueAt: addDays(today(), -70), completedAt: addDays(today(), -72), expiresAt: addDays(today(), 658), assignedManagerId: "usr_mgr_b_maint" },
+  { id: "cmp_star_3_d", trainingId: "tng_004", userId: "usr_star_3", status: "COMPLETED", dueAt: addDays(today(), -65), completedAt: addDays(today(), -67), expiresAt: addDays(today(), 298), proofUrl: "https://example.com/cert/star3d.pdf", assignedManagerId: "usr_mgr_b_maint", courseId: "crs_004" },
 ];
 
 // Phase I Epic 3: Reminder Rules

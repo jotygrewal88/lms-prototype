@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Paperclip, FileText, Camera, Bell, Upload } from "lucide-react";
+import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -22,10 +22,12 @@ import Badge from "@/components/Badge";
 import CompletionModal from "@/components/CompletionModal";
 import Toast from "@/components/Toast";
 import CSVImportModal from "@/components/CSVImportModal";
+import HistoricImportModal from "@/components/HistoricImportModal";
 import ExemptionModal from "@/components/ExemptionModal";
 import BulkActionModal from "@/components/BulkActionModal";
 import ChangeHistoryDrawer from "@/components/ChangeHistoryDrawer";
-import NotificationComposeButton from "@/components/NotificationComposeButton";
+import NotificationComposeModal from "@/components/NotificationComposeModal";
+import DropdownMenu from "@/components/DropdownMenu";
 import {
   getSites,
   getDepartments,
@@ -35,6 +37,7 @@ import {
   createAuditSnapshot,
   getUser as getUserById,
   subscribe,
+  getCourseById,
 } from "@/lib/store";
 import { TrainingCompletion, CompletionStatus, getFullName } from "@/types";
 import { formatDate } from "@/lib/utils";
@@ -63,6 +66,8 @@ export default function CompliancePage() {
 
   // Polish Pack: New modals and states
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
+  const [isHistoricImportOpen, setIsHistoricImportOpen] = useState(false);
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
   const [isExemptionModalOpen, setIsExemptionModalOpen] = useState(false);
   const [isBulkActionModalOpen, setIsBulkActionModalOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<"edit_due_date" | "add_note">("edit_due_date");
@@ -278,14 +283,25 @@ export default function CompliancePage() {
     return completions.filter((completion) => {
       const training = getTraining(completion.trainingId);
       const user = getUser(completion.userId);
-
-      if (!training || !user) return false;
+      
+      // If user doesn't exist, filter out
+      if (!user) return false;
+      
+      // Get training title from training or fallback to course
+      let trainingTitle = training?.title;
+      if (!trainingTitle && completion.courseId) {
+        const course = getCourseById(completion.courseId);
+        trainingTitle = course?.title;
+      }
+      
+      // If we can't find a title (no training AND no course), filter out
+      if (!trainingTitle) return false;
 
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchesUser = getFullName(user).toLowerCase().includes(query);
-        const matchesTraining = training.title.toLowerCase().includes(query);
+        const matchesTraining = trainingTitle.toLowerCase().includes(query);
         if (!matchesUser && !matchesTraining) return false;
       }
 
@@ -345,42 +361,77 @@ export default function CompliancePage() {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Compliance</h1>
-            <div className="flex gap-3">
-              <Button variant="secondary" onClick={() => setIsCSVImportOpen(true)}>
-                <Upload className="w-4 h-4" />
-                Import CSV
-              </Button>
-              <Button variant="secondary" onClick={handleCreateSnapshot}>
-                <Camera className="w-4 h-4" />
-                Create Snapshot
-              </Button>
+            <div className="flex gap-2">
+              {/* Import Dropdown */}
+              <DropdownMenu
+                label="Import"
+                icon={<Upload className="w-4 h-4" />}
+                variant="secondary"
+                items={[
+                  {
+                    label: "Bulk Assign Trainings",
+                    icon: <Upload className="w-4 h-4" />,
+                    onClick: () => setIsCSVImportOpen(true),
+                  },
+                  {
+                    label: "Bulk Import History",
+                    icon: <FileText className="w-4 h-4" />,
+                    onClick: () => setIsHistoricImportOpen(true),
+                  },
+                ]}
+              />
+
+              {/* Reminders Dropdown */}
               {currentUser.role === "ADMIN" && (
-                <>
-                  <Button variant="secondary" onClick={handleRunReminders}>
-                    <Bell className="w-4 h-4" />
-                    Run Reminders Now
-                  </Button>
-                  <NotificationComposeButton
-                    source="Compliance"
-                    filters={{
-                      site: filterSite,
-                      department: filterDepartment,
-                      training: filterTraining,
-                      status: filterStatus,
-                    }}
-                    defaultRecipientMode="learners"
-                    variant="secondary"
-                    label="Suggest Reminder"
-                  />
-                </>
+                <DropdownMenu
+                  label="Reminders"
+                  icon={<Bell className="w-4 h-4" />}
+                  items={[
+                    {
+                      label: "Run Reminders Now",
+                      icon: <Bell className="w-4 h-4" />,
+                      onClick: handleRunReminders,
+                    },
+                    {
+                      label: "Suggest Reminder",
+                      icon: <Sparkles className="w-4 h-4" />,
+                      onClick: () => setIsComposeModalOpen(true),
+                    },
+                    {
+                      label: "Configure Rules",
+                      icon: <Settings className="w-4 h-4" />,
+                      onClick: () => router.push("/admin/settings/notifications"),
+                    },
+                    {
+                      label: "Notification History",
+                      icon: <Mail className="w-4 h-4" />,
+                      onClick: () => router.push("/admin/notifications"),
+                    },
+                  ]}
+                />
               )}
-              <Button variant="secondary" onClick={() => window.print()}>
-                <Printer className="w-4 h-4" />
-                Print
-              </Button>
-              <Button variant="primary" onClick={handleExportCSV}>
-                Export CSV
-              </Button>
+
+              {/* More Actions Dropdown */}
+              <DropdownMenu
+                variant="more"
+                items={[
+                  {
+                    label: "Create Snapshot",
+                    icon: <Camera className="w-4 h-4" />,
+                    onClick: handleCreateSnapshot,
+                  },
+                  {
+                    label: "Print",
+                    icon: <Printer className="w-4 h-4" />,
+                    onClick: () => window.print(),
+                  },
+                  {
+                    label: "Export CSV",
+                    icon: <Download className="w-4 h-4" />,
+                    onClick: handleExportCSV,
+                  },
+                ]}
+              />
             </div>
           </div>
 
@@ -579,6 +630,12 @@ export default function CompliancePage() {
                       const dept = getDepartment(user?.departmentId);
                       const canModify = canModifyCompletion(completion);
                       const isSelected = selectedCompletions.has(completion.id);
+                      
+                      // Get display title from training or fallback to course
+                      const course = completion.courseId ? getCourseById(completion.courseId) : null;
+                      const displayTitle = training?.title || course?.title || "Unknown Training";
+                      const displayCourseId = training?.courseId || completion.courseId;
+                      const isLMSCourse = training?.policy === 'LMS-COURSE' || !!displayCourseId;
 
                       return (
                         <tr key={completion.id} className="hover:bg-gray-50">
@@ -594,25 +651,25 @@ export default function CompliancePage() {
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             <div className="flex items-center gap-2">
-                              {training?.policy === 'LMS-COURSE' || training?.courseId ? (
+                              {isLMSCourse ? (
                                 <>
                                   <Badge variant="info" className="text-xs">Course</Badge>
-                                  {training?.courseId ? (
+                                  {displayCourseId ? (
                                     <a
-                                      href={`/admin/courses/${training.courseId}/edit`}
+                                      href={`/admin/courses/${displayCourseId}/edit`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-blue-600 hover:text-blue-800 hover:underline"
-                                      title={`Open course: ${training.title}`}
+                                      title={`Open course: ${displayTitle}`}
                                     >
-                                      {training.title}
+                                      {displayTitle}
                                     </a>
                                   ) : (
-                                    <span>{training?.title}</span>
+                                    <span>{displayTitle}</span>
                                   )}
                                 </>
                               ) : (
-                                <span>{training?.title}</span>
+                                <span>{displayTitle}</span>
                               )}
                             </div>
                             {training?.standardRef && <div className="text-xs text-gray-500 mt-1">{training.standardRef}</div>}
@@ -698,6 +755,35 @@ export default function CompliancePage() {
             isOpen={isCSVImportOpen}
             onClose={() => setIsCSVImportOpen(false)}
             onImportComplete={handleModalSave}
+          />
+
+          <HistoricImportModal
+            isOpen={isHistoricImportOpen}
+            onClose={() => setIsHistoricImportOpen(false)}
+            onImportComplete={(created, errors) => {
+              handleModalSave();
+              if (errors > 0) {
+                setToastMessage(`Imported ${created} historic records. ${errors} rows had errors.`);
+                setToastType("info");
+              } else {
+                setToastMessage(`Successfully imported ${created} historic completion records.`);
+                setToastType("success");
+              }
+            }}
+          />
+
+          <NotificationComposeModal
+            open={isComposeModalOpen}
+            onClose={() => setIsComposeModalOpen(false)}
+            filters={{
+              site: filterSite,
+              department: filterDepartment,
+              training: filterTraining,
+              status: filterStatus,
+            }}
+            initialTone="direct"
+            initialSource="Compliance"
+            defaultRecipientMode="learners"
           />
 
           <ExemptionModal

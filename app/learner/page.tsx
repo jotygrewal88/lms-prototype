@@ -2,14 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import LearnerLayout from "@/components/layouts/LearnerLayout";
 import RouteGuard from "@/components/RouteGuard";
 import CourseCard from "@/components/learner/CourseCard";
-import ResumeCard from "@/components/learner/ResumeCard";
-import DueSoonPanel from "@/components/learner/DueSoonPanel";
-import OverduePanel from "@/components/learner/OverduePanel";
-import CertificatesMiniCard from "@/components/learner/CertificatesMiniCard";
-import SkillPassportPlaceholder from "@/components/learner/SkillPassportPlaceholder";
 import {
   getCurrentUser,
   getAssignedCoursesForUser,
@@ -17,14 +13,20 @@ import {
   getAssignmentForUserAndCourse,
   getDueSoonForUser,
   getOverdueForUser,
-  getCertificatesByUserId,
   getResumePointer,
-  getEarnedSkillsByUser,
+  getCourseById,
+  getLessonById,
   subscribe,
 } from "@/lib/store";
 import { Course, ProgressCourse, CourseAssignment } from "@/types";
-
-type TabType = "all" | "in_progress" | "completed";
+import { 
+  Play, 
+  AlertTriangle, 
+  Clock, 
+  ArrowRight,
+  BookOpen,
+  Sparkles
+} from "lucide-react";
 
 export default function LearnerDashboard() {
   const router = useRouter();
@@ -32,12 +34,9 @@ export default function LearnerDashboard() {
   const [assignedCourses, setAssignedCourses] = useState<Course[]>([]);
   const [progressMap, setProgressMap] = useState<Record<string, ProgressCourse>>({});
   const [assignmentsMap, setAssignmentsMap] = useState<Record<string, CourseAssignment>>({});
-  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [resumePointer, setResumePointer] = useState<{ courseId: string; lessonId: string } | null>(null);
   const [dueSoonCourses, setDueSoonCourses] = useState<Array<{ course: Course; assignment: CourseAssignment }>>([]);
   const [overdueCourses, setOverdueCourses] = useState<Array<{ course: Course; assignment: CourseAssignment; daysOverdue: number }>>([]);
-  const [certificatesCount, setCertificatesCount] = useState(0);
-  const [skillCount, setSkillCount] = useState(0);
 
   useEffect(() => {
     const loadData = () => {
@@ -77,14 +76,6 @@ export default function LearnerDashboard() {
 
       const overdue = getOverdueForUser(user.id);
       setOverdueCourses(overdue);
-
-      // Load certificates count
-      const certificates = getCertificatesByUserId(user.id);
-      setCertificatesCount(certificates.length);
-
-      // Load earned skills count
-      const earnedSkills = getEarnedSkillsByUser(user.id);
-      setSkillCount(earnedSkills.length);
     };
 
     loadData();
@@ -96,35 +87,31 @@ export default function LearnerDashboard() {
     return unsubscribe;
   }, []);
 
-  // Filter courses by tab
-  const getFilteredCourses = (): Course[] => {
-    if (activeTab === "all") {
-      return assignedCourses;
-    }
+  // Get active courses (not completed)
+  const activeCourses = assignedCourses.filter((course) => {
+    const progress = progressMap[course.id];
+    return !progress || progress.status !== "completed";
+  });
 
-    return assignedCourses.filter((course) => {
-      const progress = progressMap[course.id];
-      if (!progress) return false;
-
-      if (activeTab === "in_progress") {
-        return progress.status === "in_progress";
-      }
-
-      if (activeTab === "completed") {
-        return progress.status === "completed";
-      }
-
-      return false;
-    });
-  };
-
-  // Sort courses: due date asc, then in-progress first, then title asc
+  // Sort courses: overdue first, then due soon, then by due date, then in-progress first
   const getSortedCourses = (courses: Course[]): Course[] => {
     return [...courses].sort((a, b) => {
       const assignmentA = assignmentsMap[a.id];
       const assignmentB = assignmentsMap[b.id];
       const progressA = progressMap[a.id];
       const progressB = progressMap[b.id];
+
+      // Check if overdue
+      const isOverdueA = overdueCourses.some(o => o.course.id === a.id);
+      const isOverdueB = overdueCourses.some(o => o.course.id === b.id);
+      if (isOverdueA && !isOverdueB) return -1;
+      if (!isOverdueA && isOverdueB) return 1;
+
+      // Check if due soon
+      const isDueSoonA = dueSoonCourses.some(d => d.course.id === a.id);
+      const isDueSoonB = dueSoonCourses.some(d => d.course.id === b.id);
+      if (isDueSoonA && !isDueSoonB) return -1;
+      if (!isDueSoonA && isDueSoonB) return 1;
 
       // Sort by due date asc (if exists)
       if (assignmentA?.dueAt && assignmentB?.dueAt) {
@@ -150,8 +137,7 @@ export default function LearnerDashboard() {
     });
   };
 
-  const filteredCourses = getFilteredCourses();
-  const sortedCourses = getSortedCourses(filteredCourses);
+  const sortedActiveCourses = getSortedCourses(activeCourses);
 
   const handleCourseClick = (courseId: string) => {
     router.push(`/learner/courses/${courseId}`);
@@ -161,132 +147,190 @@ export default function LearnerDashboard() {
     router.push(`/learner/courses/${courseId}/lessons/${lessonId}`);
   };
 
-  const handleViewAllCertificates = () => {
-    // Placeholder - will be implemented in future epic
-  };
+  // Get resume course/lesson info
+  const resumeCourse = resumePointer ? getCourseById(resumePointer.courseId) : null;
+  const resumeLesson = resumePointer ? getLessonById(resumePointer.lessonId) : null;
 
-  const getEmptyStateMessage = (tab: TabType): string => {
-    switch (tab) {
-      case "in_progress":
-        return "No courses in progress. Start a course to begin learning!";
-      case "completed":
-        return "No completed courses yet. Keep learning to earn certificates!";
-      default:
-        return "No courses assigned yet. Contact your administrator for access.";
-    }
-  };
+  // Stats
+  const inProgressCount = activeCourses.filter(c => progressMap[c.id]?.status === "in_progress").length;
+  const notStartedCount = activeCourses.filter(c => !progressMap[c.id] || progressMap[c.id]?.status === "not_started").length;
 
   return (
     <RouteGuard allowedRoles={["LEARNER"]}>
       <LearnerLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">My Learning</h1>
-            <p className="text-gray-600">
-              Welcome back, {currentUser.firstName}. Resume where you left off.
-            </p>
+        <div className="space-y-6">
+          {/* Hero Section */}
+          <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 rounded-2xl p-6 md:p-8 text-white relative overflow-hidden">
+            {/* Background decoration */}
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
+            </div>
+            
+            <div className="relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-5 h-5 text-emerald-200" />
+                    <span className="text-emerald-100 text-sm font-medium">Welcome back</span>
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-bold mb-2">
+                    Hi, {currentUser.firstName}!
+                  </h1>
+                  <p className="text-emerald-100 text-sm md:text-base max-w-md">
+                    {activeCourses.length === 0 
+                      ? "You're all caught up! Check back soon for new training assignments."
+                      : `You have ${activeCourses.length} active course${activeCourses.length !== 1 ? 's' : ''} to complete.`}
+                  </p>
+                  
+                  {/* Quick stats */}
+                  <div className="flex gap-4 mt-4">
+                    <div className="bg-white/15 backdrop-blur-sm rounded-lg px-4 py-2">
+                      <p className="text-2xl font-bold">{inProgressCount}</p>
+                      <p className="text-xs text-emerald-100">In Progress</p>
+                    </div>
+                    <div className="bg-white/15 backdrop-blur-sm rounded-lg px-4 py-2">
+                      <p className="text-2xl font-bold">{notStartedCount}</p>
+                      <p className="text-xs text-emerald-100">Not Started</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resume Card */}
+                {resumeCourse && resumeLesson && (
+                  <div className="bg-white rounded-xl p-4 shadow-lg min-w-[280px] max-w-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <Play className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide mb-1">Continue Learning</p>
+                        <h3 className="text-sm font-semibold text-gray-900 truncate mb-0.5">
+                          {resumeCourse.title}
+                        </h3>
+                        <p className="text-xs text-gray-500 truncate">
+                          {resumeLesson.title}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleResume(resumePointer!.courseId, resumePointer!.lessonId)}
+                      className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      Resume
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Resume Card */}
-          {resumePointer && (
-            <ResumeCard
-              courseId={resumePointer.courseId}
-              lessonId={resumePointer.lessonId}
-              onResume={() => handleCourseClick(resumePointer.courseId)}
-            />
-          )}
-
-          {/* Main Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column: Courses Grid */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Tabs */}
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setActiveTab("all")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === "all"
-                      ? "bg-[#2563EB] text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
-                  }`}
-                >
-                  All ({assignedCourses.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("in_progress")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === "in_progress"
-                      ? "bg-blue-500 text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
-                  }`}
-                >
-                  In Progress ({sortedCourses.filter(c => progressMap[c.id]?.status === "in_progress").length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("completed")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === "completed"
-                      ? "bg-green-500 text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
-                  }`}
-                >
-                  Completed ({sortedCourses.filter(c => progressMap[c.id]?.status === "completed").length})
-                </button>
-              </div>
-
-              {/* Courses Grid */}
-              {sortedCourses.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400 mb-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+          {/* Alert Banners */}
+          {(overdueCourses.length > 0 || dueSoonCourses.length > 0) && (
+            <div className="space-y-3">
+              {/* Overdue Alert */}
+              {overdueCourses.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-red-800">
+                      {overdueCourses.length} Overdue Course{overdueCourses.length !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm text-red-600">
+                      {overdueCourses.map(o => o.course.title).join(', ')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCourseClick(overdueCourses[0].course.id)}
+                    className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    {getEmptyStateMessage(activeTab)}
-                  </h3>
+                    Start Now
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {sortedCourses.map((course) => (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      progress={progressMap[course.id]}
-                      assignment={assignmentsMap[course.id]}
-                      onOpen={() => handleCourseClick(course.id)}
-                      onResume={(lessonId) => handleResume(course.id, lessonId)}
-                    />
-                  ))}
+              )}
+
+              {/* Due Soon Alert */}
+              {dueSoonCourses.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-amber-800">
+                      {dueSoonCourses.length} Course{dueSoonCourses.length !== 1 ? 's' : ''} Due Soon
+                    </p>
+                    <p className="text-sm text-amber-600">
+                      {dueSoonCourses.map(d => d.course.title).join(', ')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCourseClick(dueSoonCourses[0].course.id)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    View
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               )}
             </div>
+          )}
 
-            {/* Right Column: Panels */}
-            <div className="space-y-4">
-              <DueSoonPanel
-                courses={dueSoonCourses}
-                onCourseClick={handleCourseClick}
-              />
-              <OverduePanel
-                courses={overdueCourses}
-                onCourseClick={handleCourseClick}
-              />
-              <CertificatesMiniCard
-                count={certificatesCount}
-                onViewAll={handleViewAllCertificates}
-              />
-              <SkillPassportPlaceholder skillCount={skillCount} />
+          {/* Active Courses Section */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold text-gray-900">My Courses</h2>
+                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                  {activeCourses.length}
+                </span>
+              </div>
+              <Link 
+                href="/learner/completed"
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+              >
+                View Completed
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
+
+            {sortedActiveCourses.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <BookOpen className="w-8 h-8 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  All caught up!
+                </h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  You don't have any active courses right now. Check back soon for new assignments or view your completed courses.
+                </p>
+                <Link
+                  href="/learner/completed"
+                  className="inline-flex items-center gap-2 mt-4 text-emerald-600 hover:text-emerald-700 font-medium"
+                >
+                  View Completed Courses
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {sortedActiveCourses.map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    progress={progressMap[course.id]}
+                    assignment={assignmentsMap[course.id]}
+                    onOpen={() => handleCourseClick(course.id)}
+                    onResume={(lessonId) => handleResume(course.id, lessonId)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </LearnerLayout>

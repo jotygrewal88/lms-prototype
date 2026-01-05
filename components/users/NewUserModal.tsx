@@ -5,13 +5,17 @@ import React, { useState, useEffect } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/Button";
 import Toast from "@/components/Toast";
+import AssignTrainingsModal from "@/components/users/AssignTrainingsModal";
 import { 
   createUser, 
   updateUser, 
   getCurrentUser, 
   getSites, 
   getDepartments,
-  getUsers 
+  getUsers,
+  getUser,
+  assignCoursesToUser,
+  createNotification
 } from "@/lib/store";
 import { User, Role } from "@/types";
 
@@ -44,6 +48,10 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
+  // Training assignment state
+  const [showAssignTrainings, setShowAssignTrainings] = useState(false);
+  const [newlyCreatedUser, setNewlyCreatedUser] = useState<User | null>(null);
+
   // Initialize form with edit data
   useEffect(() => {
     if (editUser) {
@@ -66,6 +74,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       setSendInvite(false);
     }
     setError(null);
+    setNewlyCreatedUser(null);
+    setShowAssignTrainings(false);
   }, [editUser, isOpen, currentUser]);
 
   // Filter departments based on selected site
@@ -128,30 +138,122 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       if (isEditing && editUser) {
         updateUser(editUser.id, userData);
         setToast({ message: "User updated successfully", type: "success" });
+        // Close modal after short delay for edits
+        setTimeout(() => {
+          onClose();
+          setToast(null);
+        }, 1500);
       } else {
-        createUser(userData);
-        setToast({ message: "User created successfully", type: "success" });
+        // Create new user
+        const newUser = createUser(userData);
+        setNewlyCreatedUser(newUser);
+        
+        // Show training assignment modal for new learners
+        if (role === "LEARNER") {
+          setShowAssignTrainings(true);
+        } else {
+          setToast({ message: "User created successfully", type: "success" });
+          setTimeout(() => {
+            onClose();
+            setToast(null);
+          }, 1500);
+        }
       }
-
-      // Close modal after short delay
-      setTimeout(() => {
-        onClose();
-        setToast(null);
-      }, 1500);
     } catch (err: any) {
       setError(err.message || "Failed to save user");
     }
   };
 
+  const handleAssignTrainings = (courseAssignments: Array<{ courseId: string; dueAt: string }>) => {
+    if (!newlyCreatedUser) return;
+
+    // Assign courses to the new user (each with its own due date)
+    const assignments = assignCoursesToUser(
+      newlyCreatedUser.id,
+      courseAssignments.map(a => a.courseId),
+      currentUser.id,
+      undefined, // No single dueAt - each assignment has its own
+      courseAssignments // Pass per-course due dates
+    );
+
+    // Create welcome notification for the new user
+    if (assignments.length > 0) {
+      const now = new Date().toISOString();
+      // Find the earliest due date for the notification
+      const earliestDue = courseAssignments.reduce((min, a) => 
+        !min || a.dueAt < min ? a.dueAt : min, ""
+      );
+      
+      createNotification({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        sentAt: now,
+        senderId: currentUser.id,
+        audience: "SPECIFIC",
+        subject: "Welcome! Your training has been assigned",
+        body: `You have been assigned ${assignments.length} training course${assignments.length !== 1 ? 's' : ''}. ${earliestDue ? `Your first deadline is ${new Date(earliestDue).toLocaleDateString()}.` : 'Get started today!'}`,
+        source: "MANUAL",
+        recipients: [{ 
+          userId: newlyCreatedUser.id, 
+          name: `${newlyCreatedUser.firstName} ${newlyCreatedUser.lastName}`,
+          email: newlyCreatedUser.email 
+        }],
+      });
+
+      // Notify the manager if applicable
+      if (newlyCreatedUser.managerId) {
+        const manager = getUser(newlyCreatedUser.managerId);
+        if (manager) {
+          createNotification({
+            id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            sentAt: now,
+            senderId: currentUser.id,
+            audience: "SPECIFIC",
+            subject: "New team member onboarded",
+            body: `${newlyCreatedUser.firstName} ${newlyCreatedUser.lastName} has been added to your team and assigned ${assignments.length} training course${assignments.length !== 1 ? 's' : ''}.`,
+            source: "MANUAL",
+            recipients: [{ 
+              userId: manager.id, 
+              name: `${manager.firstName} ${manager.lastName}`,
+              email: manager.email 
+            }],
+          });
+        }
+      }
+    }
+
+    setToast({ 
+      message: `User created and ${assignments.length} course${assignments.length !== 1 ? 's' : ''} assigned`, 
+      type: "success" 
+    });
+    setShowAssignTrainings(false);
+    
+    setTimeout(() => {
+      onClose();
+      setToast(null);
+    }, 1500);
+  };
+
+  const handleSkipAssignment = () => {
+    setShowAssignTrainings(false);
+    setToast({ message: "User created successfully", type: "success" });
+    
+    setTimeout(() => {
+      onClose();
+      setToast(null);
+    }, 1500);
+  };
+
   const handleClose = () => {
     setError(null);
     setToast(null);
+    setShowAssignTrainings(false);
+    setNewlyCreatedUser(null);
     onClose();
   };
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={handleClose} title={isEditing ? "Edit User" : "New User"}>
+      <Modal isOpen={isOpen && !showAssignTrainings} onClose={handleClose} title={isEditing ? "Edit User" : "New User"}>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -308,6 +410,16 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
         </form>
       </Modal>
 
+      {/* Training Assignment Modal - shown after creating a new learner */}
+      {showAssignTrainings && newlyCreatedUser && (
+        <AssignTrainingsModal
+          isOpen={showAssignTrainings}
+          onClose={handleSkipAssignment}
+          user={newlyCreatedUser}
+          onAssign={handleAssignTrainings}
+        />
+      )}
+
       {toast && (
         <Toast
           message={toast.message}
@@ -318,4 +430,3 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
     </>
   );
 }
-

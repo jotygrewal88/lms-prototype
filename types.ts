@@ -276,6 +276,17 @@ export interface CoursePolicy {
   passingScorePct?: number; // optional course-level override for quizzes
   issueCertificateOnComplete?: boolean; // default: true
   minScoreForCertificatePct?: number; // optional threshold
+  // Reminder Cadence Settings
+  retrainIntervalDays?: number;        // e.g., 365 (yearly), 180 (6 months) - how often course must be retaken
+  reminderEnabled?: boolean;           // Toggle reminders on/off
+  reminderDaysBefore?: number[];       // e.g., [30, 15, 7, 1] - days before expiration to send reminders
+}
+
+// Course Scope - defines who should be assigned this course
+export interface CourseScope {
+  type: "company-wide" | "site" | "department" | "custom";
+  siteIds?: string[];
+  departmentIds?: string[];
 }
 
 // Course entity
@@ -295,6 +306,7 @@ export interface Course extends Timestamped {
   quizId?: string;
   ai?: { source: "AI"; origin: "prompt" | "file" }; // Epic 1G: AI generation metadata
   metadata?: CourseMetadata; // Epic 1G.7: AI-enhanced metadata
+  scope?: CourseScope; // Assignment scope for new user onboarding
 }
 
 // Lesson entity
