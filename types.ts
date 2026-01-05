@@ -122,7 +122,7 @@ export interface EscalationLog {
 }
 
 export type NotificationType = "reminder" | "escalation";
-export type NotificationSource = "Compliance" | "Coach";
+export type NotificationSource = "Compliance" | "Coach" | "Manual";
 export type Audience = "MANAGERS" | "LEARNERS" | "SPECIFIC";
 
 export interface Notification {

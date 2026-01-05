@@ -24,9 +24,9 @@ export default function PreviewHeader({
 }: PreviewHeaderProps) {
   // Check if there are any active policies to display
   const hasActivePolicies = course.policy && (
-    course.policy.progressionMode === "linear" ||
+    course.policy.progression === "linear" ||
     (course.policy.minVideoWatchPct && course.policy.minVideoWatchPct > 0) ||
-    (course.policy.minSecondsInLesson && course.policy.minSecondsInLesson > 0) ||
+    (course.policy.minTimeOnLessonSec && course.policy.minTimeOnLessonSec > 0) ||
     course.policy.requireQuizPassToCompleteLesson
   );
 
@@ -124,7 +124,7 @@ export default function PreviewHeader({
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wide mr-2">
                 Course Requirements:
               </span>
-              {course.policy?.progressionMode === "linear" && (
+              {course.policy?.progression === "linear" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs text-slate-600">
                   <Lock className="w-3 h-3 text-slate-400" />
                   Sequential lessons
@@ -136,10 +136,10 @@ export default function PreviewHeader({
                   {course.policy.minVideoWatchPct}% video required
                 </span>
               )}
-              {course.policy?.minSecondsInLesson && course.policy.minSecondsInLesson > 0 && (
+              {course.policy?.minTimeOnLessonSec && course.policy.minTimeOnLessonSec > 0 && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs text-slate-600">
                   <Clock className="w-3 h-3 text-slate-400" />
-                  {Math.round(course.policy.minSecondsInLesson / 60)} min/lesson
+                  {Math.round(course.policy.minTimeOnLessonSec / 60)} min/lesson
                 </span>
               )}
               {course.policy?.requireQuizPassToCompleteLesson && (

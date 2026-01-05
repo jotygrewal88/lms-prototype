@@ -8,7 +8,7 @@ import NotificationComposeModal from "./NotificationComposeModal";
 import { ToneVariant } from "@/lib/notifyAI";
 import { CompletionStatus, NotificationSource } from "@/types";
 
-type RecipientMode = "managers" | "learners" | "specific";
+type RecipientMode = "managers" | "learners" | "custom";
 
 interface NotificationComposeButtonProps {
   source: NotificationSource;

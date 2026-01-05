@@ -191,7 +191,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
         audience: "SPECIFIC",
         subject: "Welcome! Your training has been assigned",
         body: `You have been assigned ${assignments.length} training course${assignments.length !== 1 ? 's' : ''}. ${earliestDue ? `Your first deadline is ${new Date(earliestDue).toLocaleDateString()}.` : 'Get started today!'}`,
-        source: "MANUAL",
+        source: "Manual",
+        status: "SENT",
         recipients: [{ 
           userId: newlyCreatedUser.id, 
           name: `${newlyCreatedUser.firstName} ${newlyCreatedUser.lastName}`,
@@ -210,7 +211,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
             audience: "SPECIFIC",
             subject: "New team member onboarded",
             body: `${newlyCreatedUser.firstName} ${newlyCreatedUser.lastName} has been added to your team and assigned ${assignments.length} training course${assignments.length !== 1 ? 's' : ''}.`,
-            source: "MANUAL",
+            source: "Manual",
+            status: "SENT",
             recipients: [{ 
               userId: manager.id, 
               name: `${manager.firstName} ${manager.lastName}`,

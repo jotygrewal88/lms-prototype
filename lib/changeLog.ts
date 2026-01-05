@@ -14,7 +14,7 @@ export function logChange(
   entityId: string,
   summary: string,
   metadata?: {
-    action?: "status_change" | "due_date_change" | "completion_logged" | "exempt" | "proof_added" | "bulk_op" | "user_create" | "user_update" | "user_deactivate" | "user_reactivate" | "quiz_submitted" | "quiz_passed" | "quiz_failed" | "ai_quiz_generate";
+    action?: "status_change" | "due_date_change" | "completion_logged" | "exempt" | "proof_added" | "bulk_op" | "user_create" | "user_update" | "user_deactivate" | "user_reactivate" | "quiz_submitted" | "quiz_passed" | "quiz_failed" | "ai_quiz_generate" | "historic_import";
     reason?: string;
     oldValue?: string;
     newValue?: string;

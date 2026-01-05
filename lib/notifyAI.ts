@@ -880,11 +880,11 @@ I wanted to recognize your excellent progress on training completion.
 Your Stats:
 - Completed: {{completedCount}} trainings
 - Remaining: {{assignedCount}} - {{completedCount}} to go
-${`{{dueSoonCount}}` !== "0" ? `- Coming up: {{dueSoonCount}} due soon` : ""}
+- Coming up: {{dueSoonCount}} due soon
 
-${`{{overdueCount}}` === "0" ? "You have no overdue trainings - fantastic work staying on top of things!" : "Just {{overdueCount}} more to wrap up and you'll be fully compliant!"}
+Keep pushing to stay ahead of your deadlines!
 
-${`{{nearestDueDate}}` !== "No pending trainings" ? `Next deadline: {{nearestDueDate}}` : ""}
+Next deadline: {{nearestDueDate}}
 
 Keep up the great work! Your commitment to professional development makes a real difference.
 

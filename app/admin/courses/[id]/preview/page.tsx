@@ -141,7 +141,7 @@ export default function CoursePreviewPage() {
     const status = mockProgress[lessonId] || "not_started";
     
     // Check if lesson would be locked in linear mode
-    const isLinearMode = course?.policy?.progressionMode === "linear";
+    const isLinearMode = course?.policy?.progression === "linear";
     const wouldBeLocked = isLinearMode && index > 0 && mockProgress[lessons[index - 1]?.id] !== "completed";
     
     if (wouldBeLocked) {

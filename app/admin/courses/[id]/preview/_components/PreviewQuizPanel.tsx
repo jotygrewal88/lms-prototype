@@ -52,19 +52,26 @@ export default function PreviewQuizPanel({
     questions.forEach(question => {
       const userAnswer = answers[question.id];
       let isCorrect = false;
+      let correctAnswer: string | string[] = "";
 
-      if (question.type === "MULTIPLE_CHOICE" || question.type === "TRUE_FALSE") {
-        isCorrect = userAnswer === question.correctAnswer;
-      } else if (question.type === "MULTI_SELECT") {
-        const correctSet = new Set(question.correctAnswer as string[]);
+      if (question.type === "mcq" || question.type === "scenario") {
+        const correctOption = question.options?.find(o => o.correct);
+        correctAnswer = correctOption?.text || "";
+        isCorrect = userAnswer === correctAnswer;
+      } else if (question.type === "true_false") {
+        correctAnswer = question.answer ? "True" : "False";
+        isCorrect = userAnswer === correctAnswer;
+      } else if (question.type === "multiselect") {
+        const correctOptions = question.options?.filter(o => o.correct).map(o => o.text) || [];
+        correctAnswer = correctOptions;
         const userSet = new Set((userAnswer as string[]) || []);
-        isCorrect = correctSet.size === userSet.size && 
-          [...correctSet].every(a => userSet.has(a));
+        isCorrect = correctOptions.length === userSet.size && 
+          correctOptions.every(a => userSet.has(a));
       }
 
       questionResults[question.id] = {
         correct: isCorrect,
-        correctAnswer: question.correctAnswer,
+        correctAnswer,
       };
 
       if (isCorrect) correctCount++;
@@ -181,7 +188,7 @@ export default function PreviewQuizPanel({
                   )}
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">
-                      {index + 1}. {question.text}
+                      {index + 1}. {question.prompt}
                     </p>
                     <div className="mt-2 text-sm">
                       <p className={result.correct ? "text-emerald-700" : "text-red-700"}>
@@ -193,7 +200,7 @@ export default function PreviewQuizPanel({
                         </p>
                       )}
                     </div>
-                    {question.explanation && quiz.config?.showExplanations && (
+                    {question.explanation && quiz.config?.showRationales && (
                       <p className="mt-2 text-sm text-gray-600 bg-white/50 rounded p-2">
                         <span className="font-medium">Explanation:</span> {question.explanation}
                       </p>
@@ -244,15 +251,41 @@ export default function PreviewQuizPanel({
           <div key={question.id} className="space-y-4">
             <p className="font-medium text-gray-900">
               <span className="text-indigo-600 mr-2">{index + 1}.</span>
-              {question.text}
+              {question.prompt}
             </p>
 
-            {/* Multiple Choice / True-False */}
-            {(question.type === "MULTIPLE_CHOICE" || question.type === "TRUE_FALSE") && (
+            {/* Multiple Choice / Scenario */}
+            {(question.type === "mcq" || question.type === "scenario") && (
               <div className="space-y-2 pl-6">
-                {question.options?.map((option, optIndex) => (
+                {question.options?.map((option) => (
                   <label
-                    key={optIndex}
+                    key={option.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                      answers[question.id] === option.text
+                        ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
+                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={question.id}
+                      value={option.text}
+                      checked={answers[question.id] === option.text}
+                      onChange={() => handleAnswerChange(question.id, option.text)}
+                      className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-700">{option.text}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* True/False */}
+            {question.type === "true_false" && (
+              <div className="space-y-2 pl-6">
+                {["True", "False"].map((option) => (
+                  <label
+                    key={option}
                     className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                       answers[question.id] === option
                         ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
@@ -274,16 +307,16 @@ export default function PreviewQuizPanel({
             )}
 
             {/* Multi-Select */}
-            {question.type === "MULTI_SELECT" && (
+            {question.type === "multiselect" && (
               <div className="space-y-2 pl-6">
                 <p className="text-xs text-gray-500 mb-2">Select all that apply</p>
-                {question.options?.map((option, optIndex) => {
+                {question.options?.map((option) => {
                   const selectedOptions = (answers[question.id] as string[]) || [];
-                  const isSelected = selectedOptions.includes(option);
+                  const isSelected = selectedOptions.includes(option.text);
                   
                   return (
                     <label
-                      key={optIndex}
+                      key={option.id}
                       className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                         isSelected
                           ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
@@ -295,13 +328,13 @@ export default function PreviewQuizPanel({
                         checked={isSelected}
                         onChange={() => {
                           const newValue = isSelected
-                            ? selectedOptions.filter(o => o !== option)
-                            : [...selectedOptions, option];
+                            ? selectedOptions.filter(o => o !== option.text)
+                            : [...selectedOptions, option.text];
                           handleAnswerChange(question.id, newValue);
                         }}
                         className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                       />
-                      <span className="text-gray-700">{option}</span>
+                      <span className="text-gray-700">{option.text}</span>
                     </label>
                   );
                 })}

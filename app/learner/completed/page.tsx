@@ -193,7 +193,7 @@ export default function CompletedCoursesPage() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Clock className="w-4 h-4 text-gray-400" />
-                        <span>{course.duration || 30} min</span>
+                        <span>{course.estimatedMinutes || 30} min</span>
                       </div>
                     </div>
 

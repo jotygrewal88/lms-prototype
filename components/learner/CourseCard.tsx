@@ -168,10 +168,10 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
           )}
 
           {/* Duration */}
-          {course.duration && (
+          {course.estimatedMinutes && (
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <Clock className="w-3.5 h-3.5" />
-              <span>{course.duration} min</span>
+              <span>{course.estimatedMinutes} min</span>
             </div>
           )}
 

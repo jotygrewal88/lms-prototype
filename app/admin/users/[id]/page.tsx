@@ -113,7 +113,7 @@ export default function UserProfilePage() {
         let status: CourseWithProgress["status"] = "not_started";
         if (progress?.status === "completed" || completion?.status === "COMPLETED") {
           status = "completed";
-        } else if (completion?.status === "OVERDUE" || (completion?.dueAt && new Date(completion.dueAt) < now && completion.status !== "COMPLETED")) {
+        } else if (completion?.status === "OVERDUE" || (completion?.dueAt && new Date(completion.dueAt) < now)) {
           status = "overdue";
         } else if (progress?.status === "in_progress") {
           status = "in_progress";

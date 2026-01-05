@@ -2631,9 +2631,6 @@ export function collectCourseHtml(courseId: string): string {
   const courseLessons = getLessonsByCourseId(courseId);
   for (const lesson of courseLessons) {
     html += `<h2>${lesson.title}</h2>\n`;
-    if (lesson.description) {
-      html += `<p>${lesson.description}</p>\n`;
-    }
     
     // Add all resource content
     const lessonResources = getResourcesByLessonId(lesson.id);
@@ -2641,8 +2638,6 @@ export function collectCourseHtml(courseId: string): string {
       html += `<h3>${resource.title}</h3>\n`;
       if (resource.type === 'text' && resource.content) {
         html += `${resource.content}\n`;
-      } else if (resource.description) {
-        html += `<p>${resource.description}</p>\n`;
       }
     }
   }
