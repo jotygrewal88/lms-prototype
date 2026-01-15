@@ -1,8 +1,9 @@
 # LMS Prototype - Q1 Build Plan
 
-> **Version:** 1.0  
+> **Version:** 1.1  
 > **Created:** January 5, 2026  
-> **Status:** Planning
+> **Last Updated:** January 15, 2026  
+> **Status:** In Progress
 
 > **Note:** This document covers Q1 only. For Q2 (Course Builder, Learner Experience, Certificates, Analytics, AI Features, Settings), see the [interactive build plan](/build-plan.html) with tabbed navigation.
 
@@ -10,12 +11,12 @@
 
 ## Executive Summary
 
-This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on five core modules that form the foundation of the system: **Users, Trainings, Compliance, Library, and Notifications**.
+This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on six core modules that form the foundation of the system: **Settings, Users, Trainings, Compliance, Library, and Notifications**.
 
 ### Recommended Build Order
 
 ```
-Foundation → Users & Permissions → Trainings → Compliance → Library → Notifications
+Foundation → Settings (Locations) → Users & Permissions → Trainings → Compliance → Library → Notifications
 ```
 
 This sequence ensures each module has its dependencies ready before development begins.
@@ -39,7 +40,8 @@ This sequence ensures each module has its dependencies ready before development 
 
 | Module | Purpose | Key Features |
 |--------|---------|--------------|
-| **Users** | Manage employees, roles, and organizational structure | User CRUD, Roles (Admin/Manager/Learner), Sites & Departments, Permissions |
+| **Settings** | Configure organizational structure | Sites & Departments CRUD, Regions, Locations management |
+| **Users** | Manage employees, roles, and organizational structure | User CRUD, Roles (Admin/Manager/Learner), Job Titles, Flexible Hierarchy, Access Grants, Additional Managers |
 | **Trainings** | Define training requirements and who needs them | Training requirements, Assignment rules, Retrain intervals |
 | **Compliance** | Track who completed what and surface gaps | Completion tracking, Status calculations, Dashboards, Reports |
 | **Library** | Store and organize training materials | Document repository, SDS sheets, Search & tagging |
@@ -57,21 +59,22 @@ This sequence ensures each module has its dependencies ready before development 
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    USERS & PERMISSIONS                           │
-│         (User Management, Roles, Org Hierarchy)                  │
+│                   SETTINGS (LOCATIONS)                           │
+│            (Sites, Departments, Regions)                         │
 └─────────────────────────────────────────────────────────────────┘
-                    │                           │
-                    ▼                           ▼
-┌───────────────────────────────┐   ┌─────────────────────────────┐
-│          TRAININGS            │   │          LIBRARY            │
-│   (Requirements, Assignments) │   │   (Documents, SDS Sheets)   │
-└───────────────────────────────┘   └─────────────────────────────┘
-                    │
-                    ▼
+                              │
+                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        COMPLIANCE                                │
-│       (Completion Tracking, Status, Reports, Dashboard)          │
+│                    USERS & PERMISSIONS                           │
+│   (User Management, Roles, Hierarchy, Access Grants, Job Titles) │
 └─────────────────────────────────────────────────────────────────┘
+              │                   │                   │
+              ▼                   ▼                   ▼
+┌─────────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│     TRAININGS       │   │     LIBRARY     │   │   COMPLIANCE    │
+│  (Requirements,     │   │   (Documents,   │   │  (Completion    │
+│   Assignments)      │   │   SDS Sheets)   │   │   Tracking)     │
+└─────────────────────┘   └─────────────────┘   └─────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -88,19 +91,24 @@ Core entities and their relationships:
 
 | Entity | Key Fields | Relationships |
 |--------|------------|---------------|
-| **User** | id, firstName, lastName, email, role, siteId, departmentId | Belongs to Site, Department; Has many Completions |
-| **Site** | id, name, orgId | Belongs to Organization; Has many Departments, Users |
+| **Site** | id, name, region, orgId | Belongs to Organization; Has many Departments, Users |
 | **Department** | id, name, siteId | Belongs to Site; Has many Users |
+| **User** | id, firstName, lastName, email, role, jobTitle, siteId, departmentId, managerId | Belongs to Site, Department, Manager; Has many Completions, AccessGrants, AdditionalManagers |
+| **UserAccessGrant** | id, userId, siteId?, departmentId?, grantedToUserId? | Belongs to User; Grants visibility to Site/Department/User |
+| **UserAdditionalManager** | id, userId, additionalManagerId | Many-to-many manager relationship |
 | **Training** | id, name, description, retrainIntervalDays, assignmentRules | Has many Completions; Links to Courses |
 | **Course** | id, title, description, lessons[], policy | Has many Lessons; Linked to Training |
 | **Completion** | id, userId, trainingId, status, dueAt, completedAt | Belongs to User, Training |
-| **Notification** | id, subject, body, recipients[], sentAt, status | Has many Recipients (Users) |
 | **LibraryItem** | id, title, type, url, tags[], siteId | Scoped to Site (optional) |
+| **Notification** | id, subject, body, recipients[], sentAt, status | Has many Recipients (Users) |
 
 **Status Enums:**
 - **Completion Status:** ASSIGNED, IN_PROGRESS, COMPLETED, OVERDUE, EXEMPT
 - **User Role:** Admin, Manager, Learner
 - **Notification Status:** DRAFT, SENT, SCHEDULED
+
+**Display Conventions:**
+- Sites display with region in brackets: `{site.name} ({site.region})` e.g., "Plant A (Midwest)"
 
 ---
 
@@ -120,7 +128,41 @@ Core entities and their relationships:
 
 ---
 
-### Module 2: Users & Permissions
+### Module 2: Settings - Locations
+
+**Objective:** Enable admins to configure organizational structure (sites, departments, regions).
+
+**Features:**
+- **Site Management**
+  - Create, edit, delete sites
+  - Assign region to each site (displayed in brackets: "Plant A (Midwest)")
+  - View departments per site
+  - Inline editing with confirmation
+
+- **Department Management**
+  - Create, edit, delete departments within a site
+  - Department-to-site relationships
+  - Inline editing with confirmation
+
+**UI Design:**
+- Two-panel layout: Sites list (left) and Departments panel (right)
+- Click a site to view/manage its departments
+- Add/Edit forms appear inline with save/cancel buttons
+- Delete confirmation to prevent accidental removal
+
+**Implementation Notes:**
+- Regions display format: `{site.name} ({site.region})` applied throughout the application
+- CRUD functions in `lib/store.ts`:
+  - `createSite(name, region)`, `updateSite(siteId, name, region)`, `deleteSite(siteId)`
+  - `createDepartment(name, siteId)`, `updateDepartment(deptId, name)`, `deleteDepartment(deptId)`
+- Region is displayed in brackets wherever sites are referenced (compliance table, user profiles, filters, modals)
+
+**UI Pages:**
+- `/admin/settings/locations` - Locations management
+
+---
+
+### Module 3: Users & Permissions
 
 **Objective:** Enable management of users, roles, and organizational structure.
 
@@ -129,6 +171,7 @@ Core entities and their relationships:
   - Create, edit, view, deactivate users
   - Search and filter by role, site, department
   - User profile pages
+  - Job title field for role clarity (e.g., "Safety Coordinator", "Warehouse Lead")
 
 - **Roles & Permissions**
   - Three roles: Admin, Manager, Learner
@@ -136,17 +179,37 @@ Core entities and their relationships:
   - Permission checks throughout the system
 
 - **Organization Hierarchy**
-  - Organization → Sites → Departments
+  - Organization → Sites (with Regions) → Departments
   - Scope filtering (view data by site/department)
-  - Manager-to-team relationships
+  - Manager-to-team relationships (managerId on User)
+
+- **Flexible Hierarchy & Access Control**
+  - Hybrid access model combining tree-based inheritance with explicit grants
+  - **Tree-based inheritance:** Managers automatically see their direct and indirect reports
+  - **Explicit Access Grants:** Grant visibility to specific sites, departments, or individual users
+  - **Additional Managers:** Many-to-many relationships allowing multiple managers to oversee the same user
+  - Visibility computed by combining: own scope + reports + grants + additional manager relationships
+
+- **Unified User Modal**
+  - Tabbed interface: Basic Info | Managers | Access Grants
+  - Same UI for both creating new users and editing existing users
+  - All user configuration (profile, hierarchy, access) in one flow
+
+**Key Files:**
+- `types.ts` — Data model definitions (User, UserAccessGrant, UserAdditionalManager)
+- `lib/store.ts` — CRUD functions for users, access grants, additional managers
+- `lib/access.ts` — Visibility computation logic:
+  - `getDirectReports(managerId)` — Direct reports for a manager
+  - `getAllReports(managerId)` — Recursive tree traversal (direct + indirect)
+  - `getUserVisibleScope(userId)` — Combined scope from hierarchy + grants
 
 **UI Pages:**
-- `/admin/users` - User list
+- `/admin/users` - User list with Job Title column
 - `/admin/users/[id]` - User detail/edit
 
 ---
 
-### Module 3: Trainings
+### Module 4: Trainings
 
 **Objective:** Define what training requirements exist and who needs to complete them.
 
@@ -169,7 +232,7 @@ Core entities and their relationships:
 
 ---
 
-### Module 4: Compliance
+### Module 5: Compliance
 
 **Objective:** Track completion status and surface compliance gaps. This is the core value of the system.
 
@@ -201,7 +264,7 @@ Core entities and their relationships:
 
 ---
 
-### Module 5: Library
+### Module 6: Library
 
 **Objective:** Centralized repository for training materials and safety documents.
 
@@ -224,7 +287,7 @@ Core entities and their relationships:
 
 ---
 
-### Module 6: Notifications
+### Module 7: Notifications
 
 **Objective:** Automated and manual communication to keep training on track.
 
@@ -265,6 +328,7 @@ Core entities and their relationships:
 | View all users | ✓ | ✓ (team only) | ✗ |
 | Create/edit users | ✓ | ✗ | ✗ |
 | Deactivate users | ✓ | ✗ | ✗ |
+| View own profile & access grants | ✓ | ✓ | ✓ |
 | **Trainings** |
 | View trainings | ✓ | ✓ | ✓ (assigned) |
 | Create/edit trainings | ✓ | ✗ | ✗ |
@@ -285,6 +349,9 @@ Core entities and their relationships:
 | Export data | ✓ | ✓ | ✗ |
 | **Settings** |
 | Manage settings | ✓ | ✗ | ✗ |
+| Manage Locations (Sites/Depts) | ✓ | ✗ | ✗ |
+| Configure Access Grants | ✓ | ✗ | ✗ |
+| Configure Additional Managers | ✓ | ✗ | ✗ |
 
 ---
 
@@ -355,13 +422,24 @@ To enable realistic testing and demonstrations:
 
 ### Organization Structure
 - 1 Organization
-- 2 Sites (Plant A, Plant B)
+- 2 Sites with regions:
+  - Plant A (Midwest)
+  - Plant B (Northeast)
 - 3 Departments per site (Warehouse, Packaging, Maintenance)
 
 ### Users
 - 1 Admin
 - 5-6 Managers (mix of site-level and department-level)
 - 15-20 Learners distributed across sites and departments
+- Job titles assigned (e.g., "Safety Coordinator", "Warehouse Lead", "Machine Operator")
+- Manager hierarchy: Some managers report to other managers (for testing indirect reports)
+
+### Hierarchy & Access Examples
+- Sample Access Grants for testing cross-team visibility:
+  - A manager granted access to view another department
+  - A manager granted access to a specific user outside their team
+- Additional Manager relationships:
+  - At least one user with 2+ managers (many-to-many demo)
 
 ### Training Requirements
 - 4-6 trainings (Forklift Safety, PPE Basics, Lockout/Tagout, Fire Safety)
@@ -442,4 +520,5 @@ Tested on latest versions of Chrome, Safari, Firefox, and Edge.
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Jan 5, 2026 | — | Initial plan |
+| 1.1 | Jan 15, 2026 | — | Added: Locations module (Sites/Departments CRUD), Regions for sites, Job title field, Flexible hierarchy with Access Grants and Additional Managers, Unified user modal with tabs |
 

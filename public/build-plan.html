@@ -454,15 +454,16 @@
   </button>
   
   <div class="print-header">
-    LMS Build Plan v1.0 | January 2026
+    LMS Build Plan v1.1 | January 2026
   </div>
 
   <h1>LMS Prototype - Build Plan</h1>
   
   <div class="meta">
-    <p><strong>Version:</strong> 1.0</p>
+    <p><strong>Version:</strong> 1.1</p>
     <p><strong>Created:</strong> January 5, 2026</p>
-    <p><strong>Status:</strong> Planning</p>
+    <p><strong>Last Updated:</strong> January 15, 2026</p>
+    <p><strong>Status:</strong> In Progress</p>
   </div>
 
   <div class="tabs">
@@ -473,11 +474,11 @@
   <div id="phase1" class="tab-content active">
   
   <h2>Executive Summary <span class="phase-badge phase1">Q1</span></h2>
-  <p>This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on five core modules that form the foundation of the system: <strong>Users, Trainings, Compliance, Library, and Notifications</strong>.</p>
+  <p>This document outlines the plan for building an LMS (Learning Management System) prototype from scratch. Phase 1 focuses on six core modules that form the foundation of the system: <strong>Settings, Users, Trainings, Compliance, Library, and Notifications</strong>.</p>
   
   <h3>Recommended Build Order</h3>
   <div class="build-order">
-    Foundation → Users & Permissions → Trainings → Compliance → Library → Notifications
+    Foundation → Settings (Locations) → Users & Permissions → Trainings → Compliance → Library → Notifications
   </div>
   <p>This sequence ensures each module has its dependencies ready before development begins.</p>
 
@@ -539,9 +540,14 @@
     </thead>
     <tbody>
       <tr>
+        <td><strong>Settings</strong></td>
+        <td>Configure organizational structure</td>
+        <td>Sites & Departments CRUD, Regions, Locations management</td>
+      </tr>
+      <tr>
         <td><strong>Users</strong></td>
         <td>Manage employees, roles, and organizational structure</td>
-        <td>User CRUD, Roles (Admin/Manager/Learner), Sites & Departments, Permissions</td>
+        <td>User CRUD, Roles (Admin/Manager/Learner), Job Titles, Flexible Hierarchy, Access Grants, Additional Managers</td>
       </tr>
       <tr>
         <td><strong>Trainings</strong></td>
@@ -576,21 +582,22 @@
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    USERS & PERMISSIONS                           │
-│         (User Management, Roles, Org Hierarchy)                  │
+│                   SETTINGS (LOCATIONS)                           │
+│            (Sites, Departments, Regions)                         │
 └─────────────────────────────────────────────────────────────────┘
-                    │                           │
-                    ▼                           ▼
-┌───────────────────────────────┐   ┌─────────────────────────────┐
-│          TRAININGS            │   │          LIBRARY            │
-│   (Requirements, Assignments) │   │   (Documents, SDS Sheets)   │
-└───────────────────────────────┘   └─────────────────────────────┘
-                    │
-                    ▼
+                              │
+                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        COMPLIANCE                                │
-│       (Completion Tracking, Status, Reports, Dashboard)          │
+│                    USERS & PERMISSIONS                           │
+│   (User Management, Roles, Hierarchy, Access Grants, Job Titles) │
 └─────────────────────────────────────────────────────────────────┘
+              │                   │                   │
+              ▼                   ▼                   ▼
+┌─────────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│     TRAININGS       │   │     LIBRARY     │   │   COMPLIANCE    │
+│  (Requirements,     │   │   (Documents,   │   │  (Completion    │
+│   Assignments)      │   │   SDS Sheets)   │   │   Tracking)     │
+└─────────────────────┘   └─────────────────┘   └─────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -612,19 +619,29 @@
     </thead>
     <tbody>
       <tr>
-        <td><strong>User</strong></td>
-        <td>id, firstName, lastName, email, role, siteId, departmentId</td>
-        <td>Belongs to Site, Department; Has many Completions</td>
-      </tr>
-      <tr>
         <td><strong>Site</strong></td>
-        <td>id, name, orgId</td>
+        <td>id, name, region, orgId</td>
         <td>Belongs to Organization; Has many Departments, Users</td>
       </tr>
       <tr>
         <td><strong>Department</strong></td>
         <td>id, name, siteId</td>
         <td>Belongs to Site; Has many Users</td>
+      </tr>
+      <tr>
+        <td><strong>User</strong></td>
+        <td>id, firstName, lastName, email, role, jobTitle, siteId, departmentId, managerId</td>
+        <td>Belongs to Site, Department, Manager; Has many Completions, AccessGrants, AdditionalManagers</td>
+      </tr>
+      <tr>
+        <td><strong>UserAccessGrant</strong></td>
+        <td>id, userId, siteId?, departmentId?, grantedToUserId?</td>
+        <td>Belongs to User; Grants visibility to Site/Department/User</td>
+      </tr>
+      <tr>
+        <td><strong>UserAdditionalManager</strong></td>
+        <td>id, userId, additionalManagerId</td>
+        <td>Many-to-many manager relationship</td>
       </tr>
       <tr>
         <td><strong>Training</strong></td>
@@ -642,14 +659,14 @@
         <td>Belongs to User, Training</td>
       </tr>
       <tr>
-        <td><strong>Notification</strong></td>
-        <td>id, subject, body, recipients[], sentAt, status</td>
-        <td>Has many Recipients (Users)</td>
-      </tr>
-      <tr>
         <td><strong>LibraryItem</strong></td>
         <td>id, title, type, url, tags[], siteId</td>
         <td>Scoped to Site (optional)</td>
+      </tr>
+      <tr>
+        <td><strong>Notification</strong></td>
+        <td>id, subject, body, recipients[], sentAt, status</td>
+        <td>Has many Recipients (Users)</td>
       </tr>
     </tbody>
   </table>
@@ -659,6 +676,11 @@
     <li><strong>Completion Status:</strong> ASSIGNED, IN_PROGRESS, COMPLETED, OVERDUE, EXEMPT</li>
     <li><strong>User Role:</strong> Admin, Manager, Learner</li>
     <li><strong>Notification Status:</strong> DRAFT, SENT, SCHEDULED</li>
+  </ul>
+
+  <h4>Display Conventions</h4>
+  <ul>
+    <li>Sites display with region in brackets: <code>{site.name} ({site.region})</code> e.g., "Plant A (Midwest)"</li>
   </ul>
 
   <hr>
@@ -680,7 +702,45 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 2: Users & Permissions</h3>
+    <h3>Module 2: Settings - Locations</h3>
+    <p class="objective">Enable admins to configure organizational structure (sites, departments, regions).</p>
+    
+    <h4>Site Management</h4>
+    <ul>
+      <li>Create, edit, delete sites</li>
+      <li>Assign region to each site (displayed in brackets: "Plant A (Midwest)")</li>
+      <li>View departments per site</li>
+      <li>Inline editing with confirmation</li>
+    </ul>
+    
+    <h4>Department Management</h4>
+    <ul>
+      <li>Create, edit, delete departments within a site</li>
+      <li>Department-to-site relationships</li>
+      <li>Inline editing with confirmation</li>
+    </ul>
+    
+    <h4>UI Design</h4>
+    <ul>
+      <li>Two-panel layout: Sites list (left) and Departments panel (right)</li>
+      <li>Click a site to view/manage its departments</li>
+      <li>Add/Edit forms appear inline with save/cancel buttons</li>
+      <li>Delete confirmation to prevent accidental removal</li>
+    </ul>
+    
+    <h4>Implementation Notes</h4>
+    <ul>
+      <li>Regions display format: <code>{site.name} ({site.region})</code> applied throughout the application</li>
+      <li>CRUD functions in <code>lib/store.ts</code>: createSite(), updateSite(), deleteSite(), createDepartment(), etc.</li>
+      <li>Region is displayed in brackets wherever sites are referenced (compliance table, user profiles, filters, modals)</li>
+    </ul>
+    
+    <h4>UI Pages</h4>
+    <p><span class="feature-tag">/admin/settings/locations</span></p>
+  </div>
+
+  <div class="module-card">
+    <h3>Module 3: Users & Permissions</h3>
     <p class="objective">Enable management of users, roles, and organizational structure.</p>
     
     <h4>User Management</h4>
@@ -688,6 +748,7 @@
       <li>Create, edit, view, deactivate users</li>
       <li>Search and filter by role, site, department</li>
       <li>User profile pages</li>
+      <li>Job title field for role clarity (e.g., "Safety Coordinator", "Warehouse Lead")</li>
     </ul>
     
     <h4>Roles & Permissions</h4>
@@ -699,9 +760,32 @@
     
     <h4>Organization Hierarchy</h4>
     <ul>
-      <li>Organization → Sites → Departments</li>
+      <li>Organization → Sites (with Regions) → Departments</li>
       <li>Scope filtering (view data by site/department)</li>
-      <li>Manager-to-team relationships</li>
+      <li>Manager-to-team relationships (managerId on User)</li>
+    </ul>
+    
+    <h4>Flexible Hierarchy & Access Control</h4>
+    <ul>
+      <li>Hybrid access model combining tree-based inheritance with explicit grants</li>
+      <li><strong>Tree-based inheritance:</strong> Managers automatically see their direct and indirect reports</li>
+      <li><strong>Explicit Access Grants:</strong> Grant visibility to specific sites, departments, or individual users</li>
+      <li><strong>Additional Managers:</strong> Many-to-many relationships allowing multiple managers to oversee the same user</li>
+      <li>Visibility computed by combining: own scope + reports + grants + additional manager relationships</li>
+    </ul>
+    
+    <h4>Unified User Modal</h4>
+    <ul>
+      <li>Tabbed interface: Basic Info | Managers | Access Grants</li>
+      <li>Same UI for both creating new users and editing existing users</li>
+      <li>All user configuration (profile, hierarchy, access) in one flow</li>
+    </ul>
+    
+    <h4>Key Files</h4>
+    <ul>
+      <li><code>types.ts</code> — Data model definitions (User, UserAccessGrant, UserAdditionalManager)</li>
+      <li><code>lib/store.ts</code> — CRUD functions for users, access grants, additional managers</li>
+      <li><code>lib/access.ts</code> — Visibility computation logic (getDirectReports, getAllReports, getUserVisibleScope)</li>
     </ul>
     
     <h4>UI Pages</h4>
@@ -710,7 +794,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 3: Trainings</h3>
+    <h3>Module 4: Trainings</h3>
     <p class="objective">Define what training requirements exist and who needs to complete them.</p>
     
     <h4>Training Requirements</h4>
@@ -734,7 +818,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 4: Compliance</h3>
+    <h3>Module 5: Compliance</h3>
     <p class="objective">Track completion status and surface compliance gaps. This is the core value of the system.</p>
     
     <h4>Completion Tracking</h4>
@@ -772,7 +856,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 5: Library</h3>
+    <h3>Module 6: Library</h3>
     <p class="objective">Centralized repository for training materials and safety documents.</p>
     
     <h4>Document Management</h4>
@@ -797,7 +881,7 @@
   </div>
 
   <div class="module-card">
-    <h3>Module 6: Notifications</h3>
+    <h3>Module 7: Notifications</h3>
     <p class="objective">Automated and manual communication to keep training on track.</p>
     
     <h4>Reminder Rules</h4>
@@ -860,6 +944,12 @@
         <td style="text-align: center;" class="check">✓</td>
         <td style="text-align: center;" class="cross">✗</td>
         <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>View own profile & access grants</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="check">✓</td>
       </tr>
       <tr>
         <td colspan="4"><strong>Trainings</strong></td>
@@ -963,6 +1053,24 @@
         <td style="text-align: center;" class="cross">✗</td>
         <td style="text-align: center;" class="cross">✗</td>
       </tr>
+      <tr>
+        <td>Manage Locations (Sites/Depts)</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Configure Access Grants</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
+      <tr>
+        <td>Configure Additional Managers</td>
+        <td style="text-align: center;" class="check">✓</td>
+        <td style="text-align: center;" class="cross">✗</td>
+        <td style="text-align: center;" class="cross">✗</td>
+      </tr>
     </tbody>
   </table>
 
@@ -1052,7 +1160,12 @@ npm run dev</div>
   <h4>Organization Structure</h4>
   <ul>
     <li>1 Organization</li>
-    <li>2 Sites (Plant A, Plant B)</li>
+    <li>2 Sites with regions:
+      <ul>
+        <li>Plant A (Midwest)</li>
+        <li>Plant B (Northeast)</li>
+      </ul>
+    </li>
     <li>3 Departments per site (Warehouse, Packaging, Maintenance)</li>
   </ul>
   
@@ -1061,6 +1174,23 @@ npm run dev</div>
     <li>1 Admin</li>
     <li>5-6 Managers (mix of site-level and department-level)</li>
     <li>15-20 Learners distributed across sites and departments</li>
+    <li>Job titles assigned (e.g., "Safety Coordinator", "Warehouse Lead", "Machine Operator")</li>
+    <li>Manager hierarchy: Some managers report to other managers (for testing indirect reports)</li>
+  </ul>
+  
+  <h4>Hierarchy & Access Examples</h4>
+  <ul>
+    <li>Sample Access Grants for testing cross-team visibility:
+      <ul>
+        <li>A manager granted access to view another department</li>
+        <li>A manager granted access to a specific user outside their team</li>
+      </ul>
+    </li>
+    <li>Additional Manager relationships:
+      <ul>
+        <li>At least one user with 2+ managers (many-to-many demo)</li>
+      </ul>
+    </li>
   </ul>
   
   <h4>Training Requirements</h4>
@@ -1851,6 +1981,12 @@ npm run dev</div>
         <td>Jan 5, 2026</td>
         <td>—</td>
         <td>Initial plan (Q1 Foundation)</td>
+      </tr>
+      <tr>
+        <td>1.1</td>
+        <td>Jan 15, 2026</td>
+        <td>—</td>
+        <td>Added: Locations module (Sites/Departments CRUD), Regions for sites, Job title field, Flexible hierarchy with Access Grants and Additional Managers, Unified user modal with tabs</td>
       </tr>
       <tr>
         <td>2.0</td>
