@@ -321,7 +321,7 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
                     >
                       <option value="">All Sites</option>
                       {sites.map(site => (
-                        <option key={site.id} value={site.id}>{site.name}</option>
+                        <option key={site.id} value={site.id}>{site.name}{site.region && ` (${site.region})`}</option>
                       ))}
                     </select>
                   </div>

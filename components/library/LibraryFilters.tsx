@@ -123,7 +123,7 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
         >
           <option value="">All Sites</option>
           {sites.map(site => (
-            <option key={site.id} value={site.id}>{site.name}</option>
+            <option key={site.id} value={site.id}>{site.name}{site.region && ` (${site.region})`}</option>
           ))}
         </select>
 
@@ -181,7 +181,7 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
             )}
             {filters.siteId && (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
-                Site: {sites.find(s => s.id === filters.siteId)?.name}
+                Site: {(() => { const s = sites.find(s => s.id === filters.siteId); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : ""; })()}
                 <button onClick={() => updateFilter("siteId", undefined)}>
                   <X className="w-3 h-3" />
                 </button>

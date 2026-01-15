@@ -98,9 +98,9 @@ export default function NotificationsArchivePage() {
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Notification Archive</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                View sent and received notifications
+              <h1 className="text-3xl font-bold text-gray-900">Notifications</h1>
+              <p className="text-gray-500 mt-1">
+                View and manage sent and received notifications
               </p>
             </div>
             {isAdmin && (

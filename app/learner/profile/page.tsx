@@ -67,7 +67,8 @@ export default function LearnerProfilePage() {
   // Get site and department names
   const sites = getSites();
   const departments = getDepartments();
-  const siteName = currentUser.siteId ? sites.find(s => s.id === currentUser.siteId)?.name : null;
+  const userSite = currentUser.siteId ? sites.find(s => s.id === currentUser.siteId) : null;
+  const siteName = userSite ? (userSite.region ? `${userSite.name} (${userSite.region})` : userSite.name) : null;
   const deptName = currentUser.departmentId ? departments.find(d => d.id === currentUser.departmentId)?.name : null;
   
   // Get manager info

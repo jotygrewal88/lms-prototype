@@ -1,17 +1,15 @@
-// Phase I Epic 2 & UI Refresh v2: Trainings management with lucide icons
+// Phase I Epic 2 & UI Refresh v2: Trainings management
 // ✅ Epic 2 Acceptance: Create training with assignment criteria, auto-generates completions
 // ✅ Permissions: Admin/Manager can CRUD trainings; Learner blocked
 // ✅ Demo: Create training → see auto-generated completions in compliance table
 // ✅ Scope Filtering: Trainings filtered by selected scope
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Paperclip } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Search, Plus, Paperclip } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
-import Card from "@/components/Card";
 import Button from "@/components/Button";
-import Badge from "@/components/Badge";
 import TrainingModal from "@/components/TrainingModal";
 import { getCompletionsByTrainingId, deleteTraining, subscribe } from "@/lib/store";
 import { Training } from "@/types";
@@ -23,6 +21,7 @@ export default function TrainingsPage() {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState<Training | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const updateData = () => {
@@ -56,15 +55,11 @@ export default function TrainingsPage() {
     setTrainings(scopedTrainings);
   };
 
-  const getAssignmentSummary = (training: Training): string => {
+  const getAssignmentText = (training: Training): string => {
     const parts: string[] = [];
     
     if (training.assignment.roles && training.assignment.roles.length > 0) {
       parts.push(`Roles: ${training.assignment.roles.join(", ")}`);
-    }
-    
-    if (training.assignment.sites && training.assignment.sites.length > 0) {
-      parts.push(`${training.assignment.sites.length} Site(s)`);
     }
     
     if (training.assignment.departments && training.assignment.departments.length > 0) {
@@ -75,141 +70,172 @@ export default function TrainingsPage() {
       parts.push(`${training.assignment.users.length} User(s)`);
     }
 
-    return parts.join(" • ");
+    return parts.join("   ") || "Not assigned";
   };
 
-  const getCompletionStats = (trainingId: string): { assigned: number; completed: number; overdue: number } => {
+  const getCompletionStats = (trainingId: string) => {
     const completions = getCompletionsByTrainingId(trainingId);
-    return {
-      assigned: completions.filter(c => c.status === "ASSIGNED").length,
-      completed: completions.filter(c => c.status === "COMPLETED").length,
-      overdue: completions.filter(c => c.status === "OVERDUE").length,
-    };
+    const assigned = completions.filter(c => c.status === "ASSIGNED").length;
+    const completed = completions.filter(c => c.status === "COMPLETED").length;
+    const overdue = completions.filter(c => c.status === "OVERDUE").length;
+    
+    return { assigned, completed, overdue };
   };
+
+  // Filter trainings by search
+  const filteredTrainings = useMemo(() => {
+    if (!searchQuery.trim()) return trainings;
+    const query = searchQuery.toLowerCase();
+    return trainings.filter(t => 
+      t.title.toLowerCase().includes(query) ||
+      (t.standardRef?.toLowerCase().includes(query)) ||
+      (t.description?.toLowerCase().includes(query))
+    );
+  }, [trainings, searchQuery]);
 
   return (
     <RouteGuard>
       <AdminLayout>
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Trainings</h1>
-          <Button variant="primary" onClick={handleCreate}>
-            New Training
-          </Button>
-        </div>
-
-        {trainings.length === 0 ? (
-          <Card>
-            <div className="text-center py-12">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                />
-              </svg>
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">No trainings yet</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Get started by creating a new training.
-              </p>
-              <div className="mt-6">
-                <Button variant="primary" onClick={handleCreate}>
-                  Create First Training
-                </Button>
-              </div>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Trainings</h1>
+              <p className="text-gray-500 mt-1">Define training requirements and assign them to your workforce</p>
             </div>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {trainings.map((training) => {
-              const stats = getCompletionStats(training.id);
-              return (
-                <Card key={training.id} className="hover:shadow-lg transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900">{training.title}</h3>
-                          {training.standardRef && (
-                            <p className="text-sm text-primary font-medium mt-1">
-                              {training.standardRef}
-                            </p>
+            <Button variant="primary" onClick={handleCreate} className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              New Training
+            </Button>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search trainings by name, standard, or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
+          </div>
+
+          {/* Training List */}
+          <div className="space-y-4">
+            {filteredTrainings.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {searchQuery ? "No trainings found" : "No trainings yet"}
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  {searchQuery 
+                    ? "Try adjusting your search criteria" 
+                    : "Get started by creating your first training program."}
+                </p>
+                {!searchQuery && (
+                  <Button variant="primary" onClick={handleCreate} className="inline-flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Create First Training
+                  </Button>
+                )}
+              </div>
+            ) : (
+              filteredTrainings.map((training) => {
+                const stats = getCompletionStats(training.id);
+                
+                return (
+                  <div 
+                    key={training.id} 
+                    className="bg-white rounded-xl border border-gray-200 p-6"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        {/* Title & Standard */}
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {training.title}
+                        </h3>
+                        {training.standardRef && (
+                          <p className="text-sm font-medium text-blue-600 mt-0.5">
+                            {training.standardRef}
+                          </p>
+                        )}
+                        
+                        {/* Description */}
+                        {training.description && (
+                          <p className="text-sm text-gray-600 mt-2">{training.description}</p>
+                        )}
+                        
+                        {/* Assignment & Retrain Info */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-gray-600">
+                          <span>
+                            <span className="text-gray-500">Assignment:</span>{" "}
+                            {getAssignmentText(training)}
+                          </span>
+                          {training.retrainIntervalDays && (
+                            <span>
+                              <span className="text-gray-500">Retrain:</span>{" "}
+                              {training.retrainIntervalDays} days
+                            </span>
                           )}
-                          {training.description && (
-                            <p className="text-sm text-gray-600 mt-2">{training.description}</p>
+                          {training.policyUrl && (
+                            <a
+                              href={training.policyUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              <Paperclip className="w-3.5 h-3.5" />
+                              Policy
+                            </a>
+                          )}
+                        </div>
+                        
+                        {/* Status Badges */}
+                        <div className="flex items-center gap-2 mt-3">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            {stats.assigned} Assigned
+                          </span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {stats.completed} Completed
+                          </span>
+                          {stats.overdue > 0 && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                              {stats.overdue} Overdue
+                            </span>
                           )}
                         </div>
                       </div>
-
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <div className="text-sm text-gray-500">
-                          <span className="font-medium">Assignment:</span> {getAssignmentSummary(training)}
-                        </div>
-                        {training.retrainIntervalDays && (
-                          <div className="text-sm text-gray-500">
-                            <span className="font-medium">Retrain:</span> {training.retrainIntervalDays} days
-                          </div>
-                        )}
-                        {training.policyUrl && (
-                          <a
-                            href={training.policyUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[#2563EB] hover:underline"
-                            title="View policy document"
-                          >
-                            <Paperclip className="w-4 h-4" />
-                            <span>Policy</span>
-                          </a>
-                        )}
+                      
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleEdit(training)}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(training.id)}
+                          className="px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                        >
+                          Delete
+                        </button>
                       </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Badge variant="info">{stats.assigned} Assigned</Badge>
-                        <Badge variant="success">{stats.completed} Completed</Badge>
-                        {stats.overdue > 0 && (
-                          <Badge variant="error">{stats.overdue} Overdue</Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 ml-4">
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleEdit(training)}
-                        className="text-sm"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleDelete(training.id)}
-                        className="text-sm text-red-600 hover:text-red-700"
-                      >
-                        Delete
-                      </Button>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+                );
+              })
+            )}
           </div>
-        )}
 
-        <TrainingModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          training={selectedTraining}
-          onSave={handleModalSave}
-        />
-      </div>
+          <TrainingModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            training={selectedTraining}
+            onSave={handleModalSave}
+          />
+        </div>
       </AdminLayout>
     </RouteGuard>
   );

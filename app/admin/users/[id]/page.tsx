@@ -175,7 +175,11 @@ export default function UserProfilePage() {
     );
   }
 
-  const getSiteName = (siteId?: string) => sites.find(s => s.id === siteId)?.name || "—";
+  const getSiteName = (siteId?: string) => {
+    const site = sites.find(s => s.id === siteId);
+    if (!site) return "—";
+    return site.region ? `${site.name} (${site.region})` : site.name;
+  };
   const getDepartmentName = (deptId?: string) => departments.find(d => d.id === deptId)?.name || "—";
 
   // Calculate stats

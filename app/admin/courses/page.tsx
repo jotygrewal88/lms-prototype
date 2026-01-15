@@ -241,8 +241,8 @@ export default function CoursesPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Courses</h1>
-              <p className="text-gray-600 mt-1">
-                {isManager ? "View course library (read-only)" : "Manage your learning content library"}
+              <p className="text-gray-500 mt-1">
+                {isManager ? "View course library (read-only)" : "Create and manage learning content for your organization"}
               </p>
             </div>
             {!isManager && (

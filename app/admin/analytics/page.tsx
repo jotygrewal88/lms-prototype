@@ -100,9 +100,9 @@ export default function AnalyticsPage() {
         <div className="px-8 py-6 space-y-6">
           {/* Page Header */}
           <div>
-            <h1 className="text-[22px] font-bold text-gray-900 mb-1">Analytics</h1>
-            <p className="text-[14px] text-gray-500">
-              Track course and training health metrics across your organization
+            <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
+            <p className="text-gray-500 mt-1">
+              Visualize training metrics and identify trends across your organization
             </p>
           </div>
 

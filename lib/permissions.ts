@@ -74,6 +74,10 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/settings",
       children: [
         {
+          label: "Locations",
+          path: "/admin/settings/locations",
+        },
+        {
           label: "Brand",
           path: "/admin/settings/brand",
         },

@@ -715,9 +715,7 @@ export interface RecipientContext {
   assignedCount: number;
   nearestDueDate: string;
   topOverdueTraining: string;
-}
-
-/**
+}/**
  * Build context for a single recipient by calculating their personal stats
  */
 export function buildRecipientContext(userId: string): RecipientContext | null {
@@ -894,4 +892,3 @@ Thank you!`,
 
   return templates[tone];
 }
-

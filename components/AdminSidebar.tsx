@@ -19,7 +19,8 @@ import {
   Paintbrush2,
   Award,
   BarChart3,
-  Library
+  Library,
+  MapPin
 } from "lucide-react";
 import { getCurrentUser, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
@@ -35,6 +36,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Notifications": Bell,
   "Users": Users,
   "Audit Snapshots": FileStack,
+  "Locations": MapPin,
   "Brand": Palette,
   "Localization": Globe,
   "Reminders": CalendarClock,

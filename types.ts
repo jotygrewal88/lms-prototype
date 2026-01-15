@@ -19,6 +19,7 @@ export interface Organization {
 export interface Site {
   id: string;
   name: string;
+  region?: string;  // Geographic region, e.g., "Midwest", "Northeast"
   organizationId: string;
 }
 
@@ -39,10 +40,33 @@ export interface User {
   lastName: string;
   email: string;
   role: Role;
+  jobTitle?: string;  // Job title/position (e.g., "Forklift Operator", "Safety Coordinator")
   siteId?: string;
   departmentId?: string;
   managerId?: string;
   active: boolean;
+}
+
+// Explicit access grants (for cross-team visibility beyond direct reports)
+export type AccessGrantRelationship = "co-manager" | "matrix" | "coverage" | "mentor";
+
+export interface UserAccessGrant {
+  id: string;
+  userId: string;           // Who gets access
+  siteId?: string;          // Access to entire site (optional)
+  departmentId?: string;    // Access to specific department (optional)
+  grantedBy: string;        // Admin/manager who granted
+  reason?: string;          // "Coverage for Q4", "VP oversight", etc.
+  createdAt: string;
+}
+
+// Secondary/additional managers (many-to-many management relationships)
+export interface UserAdditionalManager {
+  id: string;
+  userId: string;           // The employee being managed
+  managerId: string;        // The additional manager
+  relationship: AccessGrantRelationship;
+  createdAt: string;
 }
 
 // Helper function to get full name

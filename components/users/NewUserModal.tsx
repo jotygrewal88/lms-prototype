@@ -1,7 +1,10 @@
 // User Management: Modal for creating and editing users
+// Enhanced with job title, additional managers, and access grants
+// Same experience for both new and edit modes
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { X, Plus, Users, Shield } from "lucide-react";
 import Modal from "@/components/Modal";
 import Button from "@/components/Button";
 import Toast from "@/components/Toast";
@@ -15,14 +18,34 @@ import {
   getUsers,
   getUser,
   assignCoursesToUser,
-  createNotification
+  createNotification,
+  getUserAdditionalManagers,
+  addAdditionalManager,
+  removeAdditionalManager,
+  getUserAccessGrants,
+  createUserAccessGrant,
+  deleteUserAccessGrant,
 } from "@/lib/store";
-import { User, Role } from "@/types";
+import { User, Role, AccessGrantRelationship, UserAdditionalManager, UserAccessGrant } from "@/types";
 
 interface NewUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   editUser?: User | null;
+}
+
+// Temporary types for pending relationships (before user is created)
+interface PendingAdditionalManager {
+  tempId: string;
+  managerId: string;
+  relationship: AccessGrantRelationship;
+}
+
+interface PendingAccessGrant {
+  tempId: string;
+  siteId?: string;
+  departmentId?: string;
+  reason?: string;
 }
 
 export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModalProps) {
@@ -38,11 +61,30 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [role, setRole] = useState<Role>("LEARNER");
   const [siteId, setSiteId] = useState<string>("");
   const [departmentId, setDepartmentId] = useState<string>("");
   const [managerId, setManagerId] = useState<string>("");
   const [sendInvite, setSendInvite] = useState(false);
+
+  // Additional managers state (for editing existing users)
+  const [additionalManagers, setAdditionalManagers] = useState<UserAdditionalManager[]>([]);
+  // Pending additional managers (for new users)
+  const [pendingAdditionalManagers, setPendingAdditionalManagers] = useState<PendingAdditionalManager[]>([]);
+  const [newAdditionalManagerId, setNewAdditionalManagerId] = useState("");
+  const [newAdditionalRelationship, setNewAdditionalRelationship] = useState<AccessGrantRelationship>("co-manager");
+
+  // Access grants state (for editing existing users)
+  const [accessGrants, setAccessGrants] = useState<UserAccessGrant[]>([]);
+  // Pending access grants (for new users)
+  const [pendingAccessGrants, setPendingAccessGrants] = useState<PendingAccessGrant[]>([]);
+  const [newGrantSiteId, setNewGrantSiteId] = useState("");
+  const [newGrantDeptId, setNewGrantDeptId] = useState("");
+  const [newGrantReason, setNewGrantReason] = useState("");
+
+  // UI state
+  const [activeTab, setActiveTab] = useState<"basic" | "hierarchy" | "access">("basic");
 
   // Error state
   const [error, setError] = useState<string | null>(null);
@@ -58,24 +100,40 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       setFirstName(editUser.firstName);
       setLastName(editUser.lastName);
       setEmail(editUser.email);
+      setJobTitle(editUser.jobTitle || "");
       setRole(editUser.role);
       setSiteId(editUser.siteId || "");
       setDepartmentId(editUser.departmentId || "");
       setManagerId(editUser.managerId || "");
+      // Load additional managers and access grants for this user
+      setAdditionalManagers(getUserAdditionalManagers(editUser.id));
+      setAccessGrants(getUserAccessGrants(editUser.id));
+      setPendingAdditionalManagers([]);
+      setPendingAccessGrants([]);
     } else {
       // Reset form for new user
       setFirstName("");
       setLastName("");
       setEmail("");
+      setJobTitle("");
       setRole("LEARNER");
       setSiteId(currentUser.role === "MANAGER" ? currentUser.siteId || "" : "");
       setDepartmentId(currentUser.role === "MANAGER" ? currentUser.departmentId || "" : "");
       setManagerId("");
       setSendInvite(false);
+      setAdditionalManagers([]);
+      setAccessGrants([]);
+      setPendingAdditionalManagers([]);
+      setPendingAccessGrants([]);
     }
     setError(null);
     setNewlyCreatedUser(null);
     setShowAssignTrainings(false);
+    setActiveTab("basic");
+    setNewAdditionalManagerId("");
+    setNewGrantSiteId("");
+    setNewGrantDeptId("");
+    setNewGrantReason("");
   }, [editUser, isOpen, currentUser]);
 
   // Filter departments based on selected site
@@ -93,6 +151,97 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
     return true;
   });
 
+  // Get combined additional managers (real + pending)
+  const allAdditionalManagerIds = [
+    ...additionalManagers.map(am => am.managerId),
+    ...pendingAdditionalManagers.map(pam => pam.managerId)
+  ];
+
+  // Available managers for additional manager selection (exclude primary manager and already added)
+  const availableAdditionalManagers = allUsers.filter(u => {
+    if (u.role !== "MANAGER" && u.role !== "ADMIN") return false;
+    if (u.id === managerId) return false; // Exclude primary manager
+    if (editUser && u.id === editUser.id) return false; // Exclude self
+    // Exclude already added additional managers
+    if (allAdditionalManagerIds.includes(u.id)) return false;
+    return true;
+  });
+
+  // Handle adding additional manager
+  const handleAddAdditionalManager = () => {
+    if (!newAdditionalManagerId) return;
+    
+    if (isEditing && editUser) {
+      // For existing users, add directly to the store
+      const newRelation = addAdditionalManager(editUser.id, newAdditionalManagerId, newAdditionalRelationship);
+      setAdditionalManagers([...additionalManagers, newRelation]);
+    } else {
+      // For new users, add to pending list
+      setPendingAdditionalManagers([
+        ...pendingAdditionalManagers,
+        {
+          tempId: `temp_${Date.now()}`,
+          managerId: newAdditionalManagerId,
+          relationship: newAdditionalRelationship,
+        }
+      ]);
+    }
+    setNewAdditionalManagerId("");
+    setNewAdditionalRelationship("co-manager");
+  };
+
+  // Handle removing additional manager
+  const handleRemoveAdditionalManager = (am: UserAdditionalManager) => {
+    if (!editUser) return;
+    removeAdditionalManager(editUser.id, am.managerId);
+    setAdditionalManagers(additionalManagers.filter(m => m.id !== am.id));
+  };
+
+  // Handle removing pending additional manager
+  const handleRemovePendingAdditionalManager = (tempId: string) => {
+    setPendingAdditionalManagers(pendingAdditionalManagers.filter(pam => pam.tempId !== tempId));
+  };
+
+  // Handle adding access grant
+  const handleAddAccessGrant = () => {
+    if (!newGrantSiteId && !newGrantDeptId) return;
+    
+    if (isEditing && editUser) {
+      // For existing users, add directly to the store
+      const newGrant = createUserAccessGrant(editUser.id, currentUser.id, {
+        siteId: newGrantSiteId || undefined,
+        departmentId: newGrantDeptId || undefined,
+        reason: newGrantReason || undefined,
+      });
+      setAccessGrants([...accessGrants, newGrant]);
+    } else {
+      // For new users, add to pending list
+      setPendingAccessGrants([
+        ...pendingAccessGrants,
+        {
+          tempId: `temp_${Date.now()}`,
+          siteId: newGrantSiteId || undefined,
+          departmentId: newGrantDeptId || undefined,
+          reason: newGrantReason || undefined,
+        }
+      ]);
+    }
+    setNewGrantSiteId("");
+    setNewGrantDeptId("");
+    setNewGrantReason("");
+  };
+
+  // Handle removing access grant
+  const handleRemoveAccessGrant = (grant: UserAccessGrant) => {
+    deleteUserAccessGrant(grant.id);
+    setAccessGrants(accessGrants.filter(g => g.id !== grant.id));
+  };
+
+  // Handle removing pending access grant
+  const handleRemovePendingAccessGrant = (tempId: string) => {
+    setPendingAccessGrants(pendingAccessGrants.filter(pag => pag.tempId !== tempId));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -100,26 +249,32 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
     // Validation
     if (!firstName.trim()) {
       setError("First name is required");
+      setActiveTab("basic");
       return;
     }
     if (!lastName.trim()) {
       setError("Last name is required");
+      setActiveTab("basic");
       return;
     }
     if (!email.trim()) {
       setError("Email is required");
+      setActiveTab("basic");
       return;
     }
     if (!email.includes("@")) {
       setError("Please enter a valid email address");
+      setActiveTab("basic");
       return;
     }
     if (role === "MANAGER" && !siteId) {
       setError("Site is required for Manager role");
+      setActiveTab("basic");
       return;
     }
     if (role === "LEARNER" && !managerId) {
       setError("Manager is required for Learner role");
+      setActiveTab("basic");
       return;
     }
 
@@ -128,6 +283,7 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
+        jobTitle: jobTitle.trim() || undefined,
         role,
         siteId: siteId || undefined,
         departmentId: departmentId || undefined,
@@ -146,6 +302,21 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       } else {
         // Create new user
         const newUser = createUser(userData);
+        
+        // Apply pending additional managers
+        for (const pam of pendingAdditionalManagers) {
+          addAdditionalManager(newUser.id, pam.managerId, pam.relationship);
+        }
+        
+        // Apply pending access grants
+        for (const pag of pendingAccessGrants) {
+          createUserAccessGrant(newUser.id, currentUser.id, {
+            siteId: pag.siteId,
+            departmentId: pag.departmentId,
+            reason: pag.reason,
+          });
+        }
+        
         setNewlyCreatedUser(newUser);
         
         // Show training assignment modal for new learners
@@ -253,163 +424,484 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
     onClose();
   };
 
+  const getRelationshipLabel = (rel: AccessGrantRelationship) => {
+    switch (rel) {
+      case "co-manager": return "Co-Manager";
+      case "matrix": return "Matrix/Project";
+      case "coverage": return "Coverage/Backup";
+      case "mentor": return "Mentor";
+    }
+  };
+
+  // Combined list of additional managers (real + pending) for display
+  const displayAdditionalManagers = [
+    ...additionalManagers.map(am => ({
+      id: am.id,
+      managerId: am.managerId,
+      relationship: am.relationship,
+      isPending: false,
+    })),
+    ...pendingAdditionalManagers.map(pam => ({
+      id: pam.tempId,
+      managerId: pam.managerId,
+      relationship: pam.relationship,
+      isPending: true,
+    }))
+  ];
+
+  // Combined list of access grants (real + pending) for display
+  const displayAccessGrants = [
+    ...accessGrants.map(g => ({
+      id: g.id,
+      siteId: g.siteId,
+      departmentId: g.departmentId,
+      reason: g.reason,
+      isPending: false,
+    })),
+    ...pendingAccessGrants.map(pag => ({
+      id: pag.tempId,
+      siteId: pag.siteId,
+      departmentId: pag.departmentId,
+      reason: pag.reason,
+      isPending: true,
+    }))
+  ];
+
   return (
     <>
       <Modal isOpen={isOpen && !showAssignTrainings} onClose={handleClose} title={isEditing ? "Edit User" : "New User"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                First Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="First name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Last Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Last name"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="user@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Role <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              disabled={!isAdmin}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          {/* Tabs - always visible */}
+          <div className="flex border-b border-gray-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab("basic")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "basic"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
             >
-              {isAdmin && <option value="ADMIN">Admin</option>}
-              {isAdmin && <option value="MANAGER">Manager</option>}
-              <option value="LEARNER">Learner</option>
-            </select>
-            {!isAdmin && (
-              <p className="mt-1 text-xs text-gray-500">Managers can only create Learner users</p>
+              Basic Info
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("hierarchy")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === "hierarchy"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Managers
+              {displayAdditionalManagers.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                  {displayAdditionalManagers.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("access")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === "access"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Access Grants
+              {displayAccessGrants.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                  {displayAccessGrants.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {/* Basic Info Tab */}
+            {activeTab === "basic" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      First Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="First name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Last name"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="user@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Job Title
+                  </label>
+                  <input
+                    type="text"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Forklift Operator, Safety Coordinator"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">The employee&apos;s position or job function</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    System Role <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as Role)}
+                    disabled={!isAdmin}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    {isAdmin && <option value="ADMIN">Admin</option>}
+                    {isAdmin && <option value="MANAGER">Manager</option>}
+                    <option value="LEARNER">Learner</option>
+                  </select>
+                  {!isAdmin && (
+                    <p className="mt-1 text-xs text-gray-500">Managers can only create Learner users</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Site {role === "MANAGER" && <span className="text-red-500">*</span>}
+                  </label>
+                  <select
+                    value={siteId}
+                    onChange={(e) => {
+                      setSiteId(e.target.value);
+                      // Reset department if it doesn't belong to new site
+                      if (departmentId) {
+                        const dept = departments.find(d => d.id === departmentId);
+                        if (dept && dept.siteId !== e.target.value) {
+                          setDepartmentId("");
+                        }
+                      }
+                    }}
+                    disabled={currentUser.role === "MANAGER"}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select site...</option>
+                    {sites.map(site => (
+                      <option key={site.id} value={site.id}>{site.name}{site.region && ` (${site.region})`}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={departmentId}
+                    onChange={(e) => setDepartmentId(e.target.value)}
+                    disabled={currentUser.role === "MANAGER" || !siteId}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select department...</option>
+                    {availableDepartments.map(dept => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {role === "LEARNER" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Primary Manager <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={managerId}
+                      onChange={(e) => setManagerId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select manager...</option>
+                      {availableManagers.map(mgr => {
+                        const mgrSite = sites.find(s => s.id === mgr.siteId);
+                        const mgrDept = departments.find(d => d.id === mgr.departmentId);
+                        const locationLabel = mgrDept?.name || (mgrSite ? (mgrSite.region ? `${mgrSite.name} (${mgrSite.region})` : mgrSite.name) : "");
+                        return (
+                          <option key={mgr.id} value={mgr.id}>
+                            {mgr.firstName} {mgr.lastName} ({locationLabel})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {!isEditing && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="sendInvite"
+                      checked={sendInvite}
+                      onChange={(e) => setSendInvite(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="sendInvite" className="text-sm text-gray-700">
+                      Send invite email (mock - not functional)
+                    </label>
+                  </div>
+                )}
+              </div>
             )}
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Site {role === "MANAGER" && <span className="text-red-500">*</span>}
-            </label>
-            <select
-              value={siteId}
-              onChange={(e) => {
-                setSiteId(e.target.value);
-                // Reset department if it doesn't belong to new site
-                if (departmentId) {
-                  const dept = departments.find(d => d.id === departmentId);
-                  if (dept && dept.siteId !== e.target.value) {
-                    setDepartmentId("");
-                  }
-                }
-              }}
-              disabled={currentUser.role === "MANAGER"}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">Select site...</option>
-              {sites.map(site => (
-                <option key={site.id} value={site.id}>{site.name}</option>
-              ))}
-            </select>
-          </div>
+            {/* Additional Managers Tab */}
+            {activeTab === "hierarchy" && (
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Primary Manager</h4>
+                  {managerId ? (
+                    <p className="text-sm text-gray-700">
+                      {allUsers.find(u => u.id === managerId)?.firstName} {allUsers.find(u => u.id === managerId)?.lastName}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      {role === "LEARNER" ? "Set in Basic Info tab" : "Not applicable for this role"}
+                    </p>
+                  )}
+                </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Department
-            </label>
-            <select
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              disabled={currentUser.role === "MANAGER" || !siteId}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">Select department...</option>
-              {availableDepartments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
-              ))}
-            </select>
-          </div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Additional Managers</h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Add co-managers, matrix managers, or mentors who should have visibility into this employee&apos;s training.
+                  </p>
 
-          {role === "LEARNER" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Manager <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={managerId}
-                onChange={(e) => setManagerId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select manager...</option>
-                {availableManagers.map(mgr => (
-                  <option key={mgr.id} value={mgr.id}>
-                    {mgr.firstName} {mgr.lastName} ({mgr.departmentId ? departments.find(d => d.id === mgr.departmentId)?.name : sites.find(s => s.id === mgr.siteId)?.name})
-                  </option>
-                ))}
-              </select>
+                  {/* Current additional managers */}
+                  {displayAdditionalManagers.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {displayAdditionalManagers.map(am => {
+                        const manager = allUsers.find(u => u.id === am.managerId);
+                        return (
+                          <div key={am.id} className={`flex items-center justify-between p-2 bg-white border rounded-lg ${am.isPending ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {manager?.firstName} {manager?.lastName}
+                              </span>
+                              <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                {getRelationshipLabel(am.relationship)}
+                              </span>
+                              {am.isPending && (
+                                <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (am.isPending) {
+                                  handleRemovePendingAdditionalManager(am.id);
+                                } else {
+                                  const realAm = additionalManagers.find(m => m.id === am.id);
+                                  if (realAm) handleRemoveAdditionalManager(realAm);
+                                }
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add new additional manager */}
+                  <div className="flex gap-2">
+                    <select
+                      value={newAdditionalManagerId}
+                      onChange={(e) => setNewAdditionalManagerId(e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select manager...</option>
+                      {availableAdditionalManagers.map(mgr => (
+                        <option key={mgr.id} value={mgr.id}>
+                          {mgr.firstName} {mgr.lastName}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={newAdditionalRelationship}
+                      onChange={(e) => setNewAdditionalRelationship(e.target.value as AccessGrantRelationship)}
+                      className="w-32 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="co-manager">Co-Manager</option>
+                      <option value="matrix">Matrix</option>
+                      <option value="coverage">Coverage</option>
+                      <option value="mentor">Mentor</option>
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleAddAdditionalManager}
+                      disabled={!newAdditionalManagerId}
+                      className="px-3"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Access Grants Tab */}
+            {activeTab === "access" && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Access Grants</h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Grant this user visibility into additional sites or departments beyond their normal scope. 
+                    Useful for VPs, cross-functional managers, or coverage scenarios.
+                  </p>
+
+                  {/* Current access grants */}
+                  {displayAccessGrants.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {displayAccessGrants.map(grant => {
+                        const site = sites.find(s => s.id === grant.siteId);
+                        const dept = departments.find(d => d.id === grant.departmentId);
+                        return (
+                          <div key={grant.id} className={`flex items-center justify-between p-2 bg-white border rounded-lg ${grant.isPending ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {site ? (site.region ? `${site.name} (${site.region})` : site.name) : ""}{site && dept ? " → " : ""}{dept ? dept.name : ""}
+                              </span>
+                              {grant.reason && (
+                                <span className="ml-2 text-xs text-gray-500">({grant.reason})</span>
+                              )}
+                              {grant.isPending && (
+                                <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (grant.isPending) {
+                                  handleRemovePendingAccessGrant(grant.id);
+                                } else {
+                                  const realGrant = accessGrants.find(g => g.id === grant.id);
+                                  if (realGrant) handleRemoveAccessGrant(realGrant);
+                                }
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add new access grant */}
+                  <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={newGrantSiteId}
+                        onChange={(e) => {
+                          setNewGrantSiteId(e.target.value);
+                          setNewGrantDeptId(""); // Reset dept when site changes
+                        }}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Site (optional)...</option>
+                        {sites.map(site => (
+                          <option key={site.id} value={site.id}>{site.name}{site.region && ` (${site.region})`}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={newGrantDeptId}
+                        onChange={(e) => setNewGrantDeptId(e.target.value)}
+                        disabled={!newGrantSiteId}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Department (optional)...</option>
+                        {departments.filter(d => d.siteId === newGrantSiteId).map(dept => (
+                          <option key={dept.id} value={dept.id}>{dept.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newGrantReason}
+                        onChange={(e) => setNewGrantReason(e.target.value)}
+                        placeholder="Reason (optional)..."
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleAddAccessGrant}
+                        disabled={!newGrantSiteId && !newGrantDeptId}
+                        className="px-3"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Grant
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200">
+              <Button type="button" variant="secondary" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary">
+                {isEditing ? "Update User" : "Create User"}
+              </Button>
             </div>
-          )}
-
-          {!isEditing && (
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="sendInvite"
-                checked={sendInvite}
-                onChange={(e) => setSendInvite(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="sendInvite" className="text-sm text-gray-700">
-                Send invite email (mock - not functional)
-              </label>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-            <Button type="button" variant="secondary" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              {isEditing ? "Update User" : "Create User"}
-            </Button>
-          </div>
-        </form>
+          </form>
+        </div>
       </Modal>
 
       {/* Training Assignment Modal - shown after creating a new learner */}

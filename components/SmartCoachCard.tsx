@@ -321,8 +321,8 @@ export default function SmartCoachCard() {
     const site = scope.siteId !== "ALL" ? getSiteById(scope.siteId) : null;
     const dept = scope.deptId !== "ALL" ? getDepartmentById(scope.deptId) : null;
     
-    if (site && dept) return `${site.name} / ${dept.name}`;
-    if (site) return site.name;
+    if (site && dept) return `${site.name}${site.region ? ` (${site.region})` : ""} / ${dept.name}`;
+    if (site) return site.region ? `${site.name} (${site.region})` : site.name;
     if (dept) return dept.name;
     return "Current scope";
   };

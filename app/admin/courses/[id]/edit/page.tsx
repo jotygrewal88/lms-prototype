@@ -2708,12 +2708,12 @@ export default function CourseEditPage() {
                             
                             {/* Visual Timeline */}
                             {policy.reminderDaysBefore && policy.reminderDaysBefore.length > 0 && (
-                              <div className="mt-4 p-3 bg-white rounded-lg border border-gray-200">
+                              <div className="mt-4 p-3 pb-6 bg-white rounded-lg border border-gray-200">
                                 <p className="text-xs font-medium text-gray-700 mb-2">Reminder Timeline</p>
                                 <div className="relative h-8">
                                   <div className="absolute inset-x-0 top-1/2 h-1 bg-gray-200 rounded-full -translate-y-1/2"></div>
                                   <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-sm"></div>
-                                  <span className="absolute right-0 top-full mt-1 text-[10px] font-medium text-red-600 -translate-x-1/2">Expires</span>
+                                  <span className="absolute right-0 top-full mt-1 text-[10px] font-medium text-red-600 whitespace-nowrap -translate-x-1/2">Due</span>
                                   {policy.reminderDaysBefore.map((day) => {
                                     const position = Math.min((day / Math.max(...policy.reminderDaysBefore!, 30)) * 80, 80);
                                     return (

@@ -39,7 +39,7 @@ export default function AssignmentResolveModal({
       case "role":
         const parts = [target.roles.join(", ")];
         if (target.siteIds && target.siteIds.length > 0) {
-          const siteNames = target.siteIds.map(sid => sites.find(s => s.id === sid)?.name || sid).join(", ");
+          const siteNames = target.siteIds.map(sid => { const s = sites.find(s => s.id === sid); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : sid; }).join(", ");
           parts.push(`at ${siteNames}`);
         }
         if (target.departmentIds && target.departmentIds.length > 0) {
@@ -48,7 +48,7 @@ export default function AssignmentResolveModal({
         }
         return parts.join(" ");
       case "site":
-        return `Site(s): ${target.siteIds.map(sid => sites.find(s => s.id === sid)?.name || sid).join(", ")}`;
+        return `Site(s): ${target.siteIds.map(sid => { const s = sites.find(s => s.id === sid); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : sid; }).join(", ")}`;
       case "department":
         return `Department(s): ${target.departmentIds.map(did => departments.find(d => d.id === did)?.name || did).join(", ")}`;
     }
@@ -129,7 +129,7 @@ export default function AssignmentResolveModal({
                     </div>
                     <div className="text-xs text-gray-500">
                       {user.role}
-                      {user.siteId && ` • ${sites.find(s => s.id === user.siteId)?.name || user.siteId}`}
+                      {user.siteId && ` • ${(() => { const s = sites.find(s => s.id === user.siteId); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : user.siteId; })()}`}
                       {user.departmentId && ` • ${departments.find(d => d.id === user.departmentId)?.name || user.departmentId}`}
                     </div>
                   </div>

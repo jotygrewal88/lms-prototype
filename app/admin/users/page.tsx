@@ -58,7 +58,9 @@ export default function UsersPage() {
 
   const getSiteName = (siteId?: string) => {
     if (!siteId) return "—";
-    return sites.find(s => s.id === siteId)?.name || "—";
+    const site = sites.find(s => s.id === siteId);
+    if (!site) return "—";
+    return site.region ? `${site.name} (${site.region})` : site.name;
   };
 
   const getDepartmentName = (deptId?: string) => {
@@ -122,7 +124,10 @@ export default function UsersPage() {
       <AdminLayout>
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Users</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Users</h1>
+            <p className="text-gray-500 mt-1">Manage employee accounts, roles, and department assignments</p>
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="secondary" onClick={() => setIsImportModalOpen(true)}>
               <Upload className="w-4 h-4 mr-2" />
@@ -157,6 +162,9 @@ export default function UsersPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Job Title
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
@@ -195,6 +203,9 @@ export default function UsersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.jobTitle || "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <Badge variant={getRoleBadgeVariant(user.role)}>
@@ -247,7 +258,7 @@ export default function UsersPage() {
                 ))}
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-500">
                       No users found. {!showDeactivated && "Try enabling 'Show deactivated users'."}
                     </td>
                   </tr>

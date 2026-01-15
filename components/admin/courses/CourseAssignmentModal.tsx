@@ -187,7 +187,7 @@ export default function CourseAssignmentModal({
       case "role":
         const parts = [target.roles.join(", ")];
         if (target.siteIds && target.siteIds.length > 0) {
-          const siteNames = target.siteIds.map(sid => sites.find(s => s.id === sid)?.name || sid).join(", ");
+          const siteNames = target.siteIds.map(sid => { const s = sites.find(s => s.id === sid); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : sid; }).join(", ");
           parts.push(`at ${siteNames}`);
         }
         if (target.departmentIds && target.departmentIds.length > 0) {
@@ -196,7 +196,7 @@ export default function CourseAssignmentModal({
         }
         return parts.join(" ");
       case "site":
-        return `Site(s): ${target.siteIds.map(sid => sites.find(s => s.id === sid)?.name || sid).join(", ")}`;
+        return `Site(s): ${target.siteIds.map(sid => { const s = sites.find(s => s.id === sid); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : sid; }).join(", ")}`;
       case "department":
         return `Department(s): ${target.departmentIds.map(did => departments.find(d => d.id === did)?.name || did).join(", ")}`;
     }
@@ -327,7 +327,7 @@ export default function CourseAssignmentModal({
                               }}
                               className="w-4 h-4 text-indigo-600 rounded border-gray-300"
                             />
-                            <span className="text-sm text-gray-900">{site.name}</span>
+                            <span className="text-sm text-gray-900">{site.name}{site.region && ` (${site.region})`}</span>
                           </label>
                         ))}
                       </div>
@@ -388,7 +388,7 @@ export default function CourseAssignmentModal({
                         }}
                         className="w-4 h-4 text-indigo-600 rounded border-gray-300"
                       />
-                      <span className="text-sm font-medium text-gray-900">{site.name}</span>
+                      <span className="text-sm font-medium text-gray-900">{site.name}{site.region && ` (${site.region})`}</span>
                     </label>
                   ))}
                 </div>

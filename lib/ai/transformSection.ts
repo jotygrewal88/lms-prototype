@@ -205,9 +205,7 @@ Example 1: Routine Operations
 When performing daily tasks related to ${topic}, always follow the established procedures. For instance, before starting any work, conduct a brief assessment of your surroundings and verify that all safety measures are in place.
 
 Example 2: Handling Unexpected Situations
-If you encounter an unexpected condition while working, stop immediately and assess the situation. Do not proceed until you have consulted with your supervisor and taken appropriate precautions.
-
-Example 3: Team Communication
+If you encounter an unexpected condition while working, stop immediately and assess the situation. Do not proceed until you have consulted with your supervisor and taken appropriate precautions.Example 3: Team Communication
 Effective communication is essential. Before, during, and after tasks, ensure all team members are informed of the procedures, hazards, and any changes to the plan.`;
   }
   
@@ -249,4 +247,3 @@ Important Notes:
 • Apply these concepts in your daily work
 • Consult with your supervisor if you have questions`;
 }
-

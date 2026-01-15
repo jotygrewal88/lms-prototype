@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail } from "lucide-react";
+import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -26,6 +26,7 @@ import HistoricImportModal from "@/components/HistoricImportModal";
 import ExemptionModal from "@/components/ExemptionModal";
 import BulkActionModal from "@/components/BulkActionModal";
 import ChangeHistoryDrawer from "@/components/ChangeHistoryDrawer";
+import ManualTrainingImportModal from "@/components/ManualTrainingImportModal";
 import NotificationComposeModal from "@/components/NotificationComposeModal";
 import DropdownMenu from "@/components/DropdownMenu";
 import {
@@ -67,6 +68,7 @@ export default function CompliancePage() {
   // Polish Pack: New modals and states
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
   const [isHistoricImportOpen, setIsHistoricImportOpen] = useState(false);
+  const [isManualImportOpen, setIsManualImportOpen] = useState(false);
   const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
   const [isExemptionModalOpen, setIsExemptionModalOpen] = useState(false);
   const [isBulkActionModalOpen, setIsBulkActionModalOpen] = useState(false);
@@ -169,7 +171,7 @@ export default function CompliancePage() {
         return [
           training?.title || "",
           user ? getFullName(user) : "",
-          site?.name || "",
+          site ? (site.region ? `${site.name} (${site.region})` : site.name) : "",
           dept?.name || "",
           c.status,
           formatDate(c.dueAt),
@@ -195,7 +197,7 @@ export default function CompliancePage() {
     const filtered = getFilteredCompletions();
     const filtersSummary = [
       searchQuery && `Search: "${searchQuery}"`,
-      filterSite && `Site: ${sites.find((s) => s.id === filterSite)?.name}`,
+      filterSite && `Site: ${(() => { const s = sites.find((s) => s.id === filterSite); return s ? (s.region ? `${s.name} (${s.region})` : s.name) : filterSite; })()}`,
       filterDepartment && `Department: ${departments.find((d) => d.id === filterDepartment)?.name}`,
       filterTraining && `Training: ${trainings.find((t) => t.id === filterTraining)?.title}`,
       filterStatus && `Status: ${filterStatus}`,
@@ -360,8 +362,17 @@ export default function CompliancePage() {
       <AdminLayout>
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Compliance</h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Compliance</h1>
+              <p className="text-gray-500 mt-1">Track and manage training completion status for all employees</p>
+            </div>
             <div className="flex gap-2">
+              {/* Primary CTA: Add Training Record */}
+              <Button variant="primary" onClick={() => setIsManualImportOpen(true)}>
+                <Plus className="w-4 h-4" />
+                Add Training Record
+              </Button>
+
               {/* Import Dropdown */}
               <DropdownMenu
                 label="Import"
@@ -488,7 +499,7 @@ export default function CompliancePage() {
                   <option value="">All Sites</option>
                   {sites.map((site) => (
                     <option key={site.id} value={site.id}>
-                      {site.name}
+                      {site.name}{site.region && ` (${site.region})`}
                     </option>
                   ))}
                 </select>
@@ -675,7 +686,7 @@ export default function CompliancePage() {
                             {training?.standardRef && <div className="text-xs text-gray-500 mt-1">{training.standardRef}</div>}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "—"}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{site?.name || "—"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{site ? (site.region ? `${site.name} (${site.region})` : site.name) : "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{dept?.name || "—"}</td>
                           <td className="px-4 py-3 text-sm">{getStatusBadge(completion)}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{formatDate(completion.dueAt)}</td>
@@ -805,6 +816,15 @@ export default function CompliancePage() {
             isOpen={historyDrawerOpen}
             onClose={() => setHistoryDrawerOpen(false)}
             completionId={historyCompletionId}
+          />
+
+          <ManualTrainingImportModal
+            isOpen={isManualImportOpen}
+            onClose={() => setIsManualImportOpen(false)}
+            onImportComplete={(created) => {
+              setToastMessage(`Successfully created ${created} training record${created !== 1 ? "s" : ""}.`);
+              setToastType("success");
+            }}
           />
 
           {toastMessage && <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />}

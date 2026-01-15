@@ -2,7 +2,7 @@
 // Phase II Epic 1: Extended with Course Library
 "use client";
 
-import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, CertificateTemplate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType, CourseMetadata, OrgStyleGuide, StyleAuditIssue, IgnoredLint, QuizAttempt, GradedQuestion, CoursePolicy, QuizPolicy, Skill, getFullName, LibraryItem } from "@/types";
+import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, CertificateTemplate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType, CourseMetadata, OrgStyleGuide, StyleAuditIssue, IgnoredLint, QuizAttempt, GradedQuestion, CoursePolicy, QuizPolicy, Skill, getFullName, LibraryItem, UserAccessGrant, UserAdditionalManager, AccessGrantRelationship } from "@/types";
 import { 
   organization as seedOrg, 
   users as seedUsers, 
@@ -60,6 +60,10 @@ let skills: Skill[] = [...seedSkills];
 
 // Phase II — 1N.3: Library state
 let libraryItems: LibraryItem[] = [...seedLibraryItems];
+
+// Hierarchy & Access Control state
+let userAccessGrants: UserAccessGrant[] = [];
+let userAdditionalManagers: UserAdditionalManager[] = [];
 
 // Phase II 1H.2a: Quiz Attempts state
 let quizAttempts: QuizAttempt[] = [];
@@ -132,8 +136,205 @@ export function getSites(): Site[] {
   return sites;
 }
 
+export function getSite(siteId: string): Site | undefined {
+  return sites.find(s => s.id === siteId);
+}
+
+export function createSite(name: string, region?: string): Site {
+  const newSite: Site = {
+    id: `site_${Date.now()}`,
+    name,
+    region,
+    organizationId: organization.id,
+  };
+  sites.push(newSite);
+  notifyListeners();
+  return newSite;
+}
+
+export function updateSite(siteId: string, name: string, region?: string): Site | undefined {
+  const site = sites.find(s => s.id === siteId);
+  if (site) {
+    site.name = name;
+    site.region = region;
+    notifyListeners();
+  }
+  return site;
+}
+
+export function deleteSite(siteId: string): { success: boolean; error?: string } {
+  // Check if any departments belong to this site
+  const deptCount = departments.filter(d => d.siteId === siteId).length;
+  if (deptCount > 0) {
+    return { success: false, error: `Cannot delete site: ${deptCount} department(s) still assigned` };
+  }
+  
+  // Check if any users are assigned to this site
+  const userCount = users.filter(u => u.siteId === siteId).length;
+  if (userCount > 0) {
+    return { success: false, error: `Cannot delete site: ${userCount} user(s) still assigned` };
+  }
+  
+  const index = sites.findIndex(s => s.id === siteId);
+  if (index > -1) {
+    sites.splice(index, 1);
+    notifyListeners();
+    return { success: true };
+  }
+  return { success: false, error: "Site not found" };
+}
+
 export function getDepartments(): Department[] {
   return departments;
+}
+
+export function getDepartment(departmentId: string): Department | undefined {
+  return departments.find(d => d.id === departmentId);
+}
+
+export function getDepartmentsBySite(siteId: string): Department[] {
+  return departments.filter(d => d.siteId === siteId);
+}
+
+export function createDepartment(name: string, siteId: string): Department {
+  const newDepartment: Department = {
+    id: `dept_${Date.now()}`,
+    name,
+    siteId,
+  };
+  departments.push(newDepartment);
+  notifyListeners();
+  return newDepartment;
+}
+
+export function updateDepartment(departmentId: string, name: string, siteId?: string): Department | undefined {
+  const department = departments.find(d => d.id === departmentId);
+  if (department) {
+    department.name = name;
+    if (siteId) {
+      department.siteId = siteId;
+    }
+    notifyListeners();
+  }
+  return department;
+}
+
+export function deleteDepartment(departmentId: string): { success: boolean; error?: string } {
+  // Check if any users are assigned to this department
+  const userCount = users.filter(u => u.departmentId === departmentId).length;
+  if (userCount > 0) {
+    return { success: false, error: `Cannot delete department: ${userCount} user(s) still assigned` };
+  }
+  
+  const index = departments.findIndex(d => d.id === departmentId);
+  if (index > -1) {
+    departments.splice(index, 1);
+    notifyListeners();
+    return { success: true };
+  }
+  return { success: false, error: "Department not found" };
+}
+
+// ============================================================================
+// User Access Grants (explicit cross-team visibility)
+// ============================================================================
+
+export function getUserAccessGrants(userId?: string): UserAccessGrant[] {
+  if (userId) {
+    return userAccessGrants.filter(g => g.userId === userId);
+  }
+  return userAccessGrants;
+}
+
+export function createUserAccessGrant(
+  userId: string,
+  grantedBy: string,
+  options: { siteId?: string; departmentId?: string; reason?: string }
+): UserAccessGrant {
+  const newGrant: UserAccessGrant = {
+    id: `grant_${Date.now()}`,
+    userId,
+    siteId: options.siteId,
+    departmentId: options.departmentId,
+    grantedBy,
+    reason: options.reason,
+    createdAt: new Date().toISOString(),
+  };
+  userAccessGrants.push(newGrant);
+  notifyListeners();
+  return newGrant;
+}
+
+export function deleteUserAccessGrant(grantId: string): boolean {
+  const index = userAccessGrants.findIndex(g => g.id === grantId);
+  if (index > -1) {
+    userAccessGrants.splice(index, 1);
+    notifyListeners();
+    return true;
+  }
+  return false;
+}
+
+// ============================================================================
+// Additional Managers (many-to-many management relationships)
+// ============================================================================
+
+export function getUserAdditionalManagers(userId: string): UserAdditionalManager[] {
+  return userAdditionalManagers.filter(m => m.userId === userId);
+}
+
+export function getManagedByAdditionalManager(managerId: string): UserAdditionalManager[] {
+  return userAdditionalManagers.filter(m => m.managerId === managerId);
+}
+
+export function addAdditionalManager(
+  userId: string,
+  managerId: string,
+  relationship: AccessGrantRelationship
+): UserAdditionalManager {
+  // Check if this relationship already exists
+  const existing = userAdditionalManagers.find(
+    m => m.userId === userId && m.managerId === managerId
+  );
+  if (existing) {
+    // Update relationship type if already exists
+    existing.relationship = relationship;
+    notifyListeners();
+    return existing;
+  }
+  
+  const newRelation: UserAdditionalManager = {
+    id: `addmgr_${Date.now()}`,
+    userId,
+    managerId,
+    relationship,
+    createdAt: new Date().toISOString(),
+  };
+  userAdditionalManagers.push(newRelation);
+  notifyListeners();
+  return newRelation;
+}
+
+export function removeAdditionalManager(userId: string, managerId: string): boolean {
+  const index = userAdditionalManagers.findIndex(
+    m => m.userId === userId && m.managerId === managerId
+  );
+  if (index > -1) {
+    userAdditionalManagers.splice(index, 1);
+    notifyListeners();
+    return true;
+  }
+  return false;
+}
+
+export function deleteAdditionalManagerById(id: string): boolean {
+  const index = userAdditionalManagers.findIndex(m => m.id === id);
+  if (index > -1) {
+    userAdditionalManagers.splice(index, 1);
+    notifyListeners();
+    return true;
+  }
+  return false;
 }
 
 export function getUsers(includeInactive = false): User[] {
