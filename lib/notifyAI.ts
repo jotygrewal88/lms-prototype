@@ -733,9 +733,7 @@ export function buildRecipientContext(userId: string): RecipientContext | null {
   let completedCount = 0;
   let assignedCount = 0;
   let nearestDueDate: string | undefined;
-  let topOverdueTraining: string | undefined;
-
-  const now = new Date();
+  let topOverdueTraining: string | undefined;  const now = new Date();
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const pendingItems: Array<{ dueAt: string; trainingId: string }> = [];
 
@@ -761,9 +759,7 @@ export function buildRecipientContext(userId: string): RecipientContext | null {
       }
       pendingItems.push({ dueAt: c.dueAt, trainingId: c.trainingId });
     }
-  }
-
-  // Find nearest due date
+  }  // Find nearest due date
   if (pendingItems.length > 0) {
     pendingItems.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
     nearestDueDate = formatDate(pendingItems[0].dueAt);

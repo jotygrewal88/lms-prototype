@@ -2,13 +2,15 @@
 // ✅ Epic 2 Acceptance: Mark completion with proof/notes; calculates expiresAt = completedAt + retrainIntervalDays
 // ✅ Demo: Submit updates status=COMPLETED, sets completedAt, computes expiration
 // ✅ Polish Pack: Logs changes to change history
+// ✅ File Upload: Support file attachment as proof via paperclip icon
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { TrainingCompletion } from "@/types";
 import { updateCompletion } from "@/lib/store";
 import { today, addDays, formatDate } from "@/lib/utils";
 import { logChange } from "@/lib/changeLog";
+import { Paperclip, Loader2, X, FileText, ExternalLink } from "lucide-react";
 import Button from "./Button";
 
 interface CompletionModalProps {
@@ -23,13 +25,30 @@ export default function CompletionModal({ isOpen, onClose, completion, trainingR
   const [completedAt, setCompletedAt] = useState(formatDate(today()));
   const [notes, setNotes] = useState("");
   const [proofUrl, setProofUrl] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isExempt, setIsExempt] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Check if the current proofUrl is an uploaded file (starts with /uploads/)
+  const isUploadedFile = proofUrl.startsWith("/uploads/");
 
   useEffect(() => {
     if (completion) {
       setCompletedAt(completion.completedAt ? formatDate(completion.completedAt) : formatDate(today()));
       setNotes(completion.notes || "");
-      setProofUrl(completion.proofUrl || "");
+      const existingProofUrl = completion.proofUrl || "";
+      setProofUrl(existingProofUrl);
+      // If it's an uploaded file, extract filename from path
+      if (existingProofUrl.startsWith("/uploads/")) {
+        const pathParts = existingProofUrl.split("/");
+        const filename = pathParts[pathParts.length - 1];
+        // Remove UUID prefix if present (format: uuid-filename.ext)
+        const cleanFilename = filename.includes("-") ? filename.substring(filename.indexOf("-") + 1) : filename;
+        setUploadedFileName(cleanFilename);
+      } else {
+        setUploadedFileName(null);
+      }
       setIsExempt(completion.notes?.includes("exempt") || false);
     } else {
       resetForm();
@@ -40,7 +59,52 @@ export default function CompletionModal({ isOpen, onClose, completion, trainingR
     setCompletedAt(formatDate(today()));
     setNotes("");
     setProofUrl("");
+    setUploadedFileName(null);
     setIsExempt(false);
+    setIsUploading(false);
+  };
+
+  // Handle file upload for proof attachment
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    try {
+      // Determine resource type based on MIME
+      let resourceType = "pdf";
+      if (file.type.startsWith("image/")) {
+        resourceType = "image";
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", resourceType);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        setProofUrl(result.url);
+        setUploadedFileName(file.name);
+      } else {
+        alert(result.error || "Failed to upload file");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploading(false);
+      // Reset file input so the same file can be selected again if needed
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -146,17 +210,87 @@ export default function CompletionModal({ isOpen, onClose, completion, trainingR
             </div>
 
             <div>
-              <label htmlFor="proofUrl" className="block text-sm font-medium text-gray-700 mb-1">
-                Proof/Certificate URL
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Proof/Certificate
               </label>
+              
+              {/* Hidden file input */}
               <input
-                type="url"
-                id="proofUrl"
-                value={proofUrl}
-                onChange={(e) => setProofUrl(e.target.value)}
-                placeholder="https://example.com/certificate.pdf"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,image/*,application/pdf"
+                onChange={handleFileUpload}
+                className="hidden"
               />
+              
+              {isUploadedFile && uploadedFileName ? (
+                // Show uploaded file as clickable link
+                <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                  <FileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <a
+                    href={proofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-sm text-blue-600 hover:text-blue-800 hover:underline truncate"
+                  >
+                    {uploadedFileName}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProofUrl("");
+                      setUploadedFileName(null);
+                    }}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                    title="Remove file"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                // Show URL input with paperclip button
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="url"
+                      id="proofUrl"
+                      value={proofUrl}
+                      onChange={(e) => setProofUrl(e.target.value)}
+                      placeholder="Enter URL or attach a file"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    {proofUrl && !isUploadedFile && (
+                      <a
+                        href={proofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600"
+                        title="Open URL"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                  {/* Paperclip button to trigger file upload */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Attach a file"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Paperclip className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              )}
+              
+              <p className="text-xs text-gray-500 mt-1">
+                {isUploadedFile ? "Click filename to view, or X to remove" : "Enter a URL or click the paperclip to upload a file"}
+              </p>
             </div>
 
             {trainingRetrainDays && (

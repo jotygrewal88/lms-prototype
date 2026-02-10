@@ -460,7 +460,12 @@ export function getTrainingById(id: string): Training | undefined {
 }
 
 export function createTraining(training: Training): void {
-  trainings.push(training);
+  // Default status to 'active' if not provided
+  const trainingWithDefaults: Training = {
+    ...training,
+    status: training.status || "active",
+  };
+  trainings.push(trainingWithDefaults);
   notifyListeners();
 }
 
@@ -1863,6 +1868,7 @@ export function getOrCreateTrainingForCourse(courseId: string): Training | undef
       },
       policy: "LMS-COURSE",
       courseId: courseId,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     };

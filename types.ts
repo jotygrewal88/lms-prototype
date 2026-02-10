@@ -89,6 +89,10 @@ export interface TrainingAssignment {
   users?: string[];
 }
 
+// Training category and status types for filtering
+export type TrainingCategory = "Safety" | "Compliance" | "Onboarding" | "Technical" | "HR" | "Other";
+export type TrainingStatus = "active" | "draft" | "archived";
+
 export interface Training {
   id: string;
   title: string;
@@ -100,6 +104,9 @@ export interface Training {
   policyUrl?: string;
   policy?: string; // Phase II 1H.4: Support shadow trainings (e.g., 'LMS-COURSE')
   courseId?: string; // Phase II 1H.4: Link to course if training is course-based
+  category?: TrainingCategory;
+  status: TrainingStatus;
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }

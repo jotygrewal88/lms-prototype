@@ -5,12 +5,15 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Training, TrainingAssignment, Role, TrainingCompletion, User, getFullName } from "@/types";
+import { Training, TrainingAssignment, Role, TrainingCompletion, User, getFullName, TrainingCategory, TrainingStatus } from "@/types";
 import { getUsers, getSites, getDepartments, createTraining, updateTraining, createCompletion } from "@/lib/store";
 import { getUsersForTraining } from "@/lib/assignment";
 import { today, addDays } from "@/lib/utils";
-import { Search, X, UserPlus, Check } from "lucide-react";
+import { Search, X, UserPlus, Check, Tag } from "lucide-react";
 import Button from "./Button";
+
+const TRAINING_CATEGORIES: TrainingCategory[] = ["Safety", "Compliance", "Onboarding", "Technical", "HR", "Other"];
+const TRAINING_STATUSES: TrainingStatus[] = ["active", "draft", "archived"];
 
 interface TrainingModalProps {
   isOpen: boolean;
@@ -28,6 +31,12 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  
+  // Category, Status, and Tags state
+  const [category, setCategory] = useState<TrainingCategory | "">("");
+  const [status, setStatus] = useState<TrainingStatus>("active");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   
   // User search state
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -85,6 +94,9 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
       setSelectedSites(training.assignment.sites || []);
       setSelectedDepartments(training.assignment.departments || []);
       setSelectedUsers(training.assignment.users || []);
+      setCategory(training.category || "");
+      setStatus(training.status || "active");
+      setTags(training.tags || []);
     } else {
       resetForm();
     }
@@ -99,6 +111,10 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
     setSelectedSites([]);
     setSelectedDepartments([]);
     setSelectedUsers([]);
+    setCategory("");
+    setStatus("active");
+    setTags([]);
+    setTagInput("");
     setUserSearchQuery("");
     setShowUserDropdown(false);
   };
@@ -121,6 +137,9 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         standardRef,
         retrainIntervalDays,
         assignment,
+        category: category || undefined,
+        status,
+        tags: tags.length > 0 ? tags : undefined,
         updatedAt: new Date().toISOString(),
       });
     } else {
@@ -133,6 +152,9 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         assignment,
         retrainIntervalDays,
         ownerManagerId: "usr_admin_1", // TODO: use current user
+        category: category || undefined,
+        status,
+        tags: tags.length > 0 ? tags : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -198,6 +220,26 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
   
   const removeUser = (userId: string) => {
     setSelectedUsers(prev => prev.filter(u => u !== userId));
+  };
+  
+  // Tag handling
+  const addTag = () => {
+    const trimmedTag = tagInput.trim().toLowerCase();
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      setTags(prev => [...prev, trimmedTag]);
+    }
+    setTagInput("");
+  };
+  
+  const removeTag = (tag: string) => {
+    setTags(prev => prev.filter(t => t !== tag));
+  };
+  
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addTag();
+    }
   };
   
   const getSiteName = (siteId?: string) => {
@@ -293,6 +335,98 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
+            </div>
+
+            {/* Category and Status */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Category
+                </label>
+                <select
+                  id="category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as TrainingCategory | "")}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                >
+                  <option value="">Select category...</option>
+                  {TRAINING_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Status
+                </label>
+                <select
+                  id="status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as TrainingStatus)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                >
+                  {TRAINING_STATUSES.map(s => (
+                    <option key={s} value={s}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Tags
+              </label>
+              
+              {/* Display existing tags */}
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.map(tag => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
+                    >
+                      <Tag className="w-3 h-3" />
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              {/* Tag input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="tags"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  placeholder="Type a tag and press Enter..."
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addTag}
+                  disabled={!tagInput.trim()}
+                  className="px-4"
+                >
+                  Add
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Press Enter or click Add to add a tag
+              </p>
             </div>
 
             <div className="border-t border-gray-200 pt-5">
