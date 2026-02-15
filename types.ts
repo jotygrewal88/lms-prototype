@@ -1,4 +1,4 @@
-// Phase I Epic 1 & 2: Core type definitions for UpKeep LMS
+// Phase I Epic 1 & 2: Core type definitions for UpKeep Learn
 
 export type Role = "ADMIN" | "MANAGER" | "LEARNER";
 
@@ -107,8 +107,22 @@ export interface Training {
   category?: TrainingCategory;
   status: TrainingStatus;
   tags?: string[];
+  vendor?: string; // Third-party vendor/provider of the training
+  contentUrl?: string; // URL link or uploaded file path for training content/materials
   createdAt: string;
   updatedAt: string;
+  // Skills V2: What skills completing this training grants
+  skillsGranted?: Array<{
+    skillId: string;
+    level?: number;
+    evidenceRequired: boolean;
+  }>;
+  // Skills V2: What skills needed to take this training
+  skillsRequired?: Array<{
+    skillId: string;
+    level?: number;
+    required: boolean;
+  }>;
 }
 
 export type CompletionStatus = "ASSIGNED" | "COMPLETED" | "OVERDUE" | "EXEMPT";
@@ -286,6 +300,12 @@ export interface LibraryItem extends Timestamped {
   fileName?: string;
   fileSize?: number;       // bytes
   mimeType?: string;
+
+  // Knowledge Source / Synthesis metadata (Phase II)
+  sourceType?: "policy" | "sop" | "manual" | "regulation" | "text";
+  content?: string;              // For pasted text/Markdown content
+  regulatoryRef?: string;        // "OSHA 1910.147", "ISO 9001"
+  allowedForSynthesis?: boolean; // Can AI use this for training synthesis? (undefined = false)
 }
 
 // Course Policy configuration
@@ -321,13 +341,15 @@ export interface CourseScope {
 }
 
 // Course entity
+export type CourseStatus = "draft" | "published" | "ai-draft" | "in-review" | "rejected";
+
 export interface Course extends Timestamped {
   id: string;
   title: string;
   description: string;
   category?: string;
   estimatedMinutes?: number;
-  status: "draft" | "published";
+  status: CourseStatus;
   tags?: string[];
   standards?: string[];
   skills?: string[]; // Phase II — 1M.1: array of Skill IDs
@@ -338,15 +360,53 @@ export interface Course extends Timestamped {
   ai?: { source: "AI"; origin: "prompt" | "file" }; // Epic 1G: AI generation metadata
   metadata?: CourseMetadata; // Epic 1G.7: AI-enhanced metadata
   scope?: CourseScope; // Assignment scope for new user onboarding
+  // Skills V2: What skills completing this course grants
+  skillsGranted?: Array<{
+    skillId: string;
+    level?: number;
+    evidenceRequired: boolean;
+  }>;
+  // Skills V2: What skills needed to take this course
+  skillsRequired?: Array<{
+    skillId: string;
+    level?: number;
+    required: boolean;
+  }>;
+
+  // AI Generation metadata (populated when aiGenerated === true)
+  aiGenerated?: boolean;
+  synthesisType?: SynthesisType;
+  sourceIds?: string[];                // Library item IDs used for generation
+  sourceAttributions?: string[];       // Library item titles (for display)
+  conversationHistory?: ChatMessage[]; // Full chat log from generation
+  confidenceScore?: number;            // 0-1 AI confidence
+  suggestedSkillIds?: string[];        // AI-suggested skills
+  reviewNotes?: string;
+  reviewedByUserId?: string;
+  reviewedAt?: string;
 }
 
 // Lesson entity
+// Knowledge check — low-stakes inline question within a lesson
+export interface KnowledgeCheck {
+  id: string;
+  question: string;
+  type: "multiple-choice" | "true-false";
+  options: { id: string; text: string }[];
+  correctOptionId: string;
+  explanation: string;
+}
+
 export interface Lesson extends Timestamped {
   id: string;
   courseId: string;
   title: string;
   order: number;
   resourceIds: string[];
+  sourceAttributions?: string[];  // Library item IDs this lesson drew from (AI-generated)
+  knowledgeChecks?: KnowledgeCheck[];
+  estimatedMinutes?: number;
+  lessonType?: "lesson" | "assessment";
 }
 
 // Resource entity (attached to lessons)
@@ -508,6 +568,8 @@ export interface ProgressLesson extends Timestamped {
   // Phase II 1H.2d: Quiz attempt tracking
   lastQuizAttemptId?: string; // Links to most recent attempt
   lastPassedQuizAttemptId?: string; // Links to most recent passed attempt
+  // Knowledge check persistence
+  knowledgeCheckAnswers?: Record<string, string>; // checkId -> selectedOptionId
 }
 
 // Certificate for course completion
@@ -705,3 +767,175 @@ export interface AuditEvent {
   meta?: Record<string, any>; // prompt, fileName, tokens, etc.
 }
 
+// ============================================================================
+// SKILLS V2 TYPES (New Implementation - Surgical Rebuild)
+// ============================================================================
+
+export interface SkillV2 extends Timestamped {
+  id: string;                           // "skl_<timestamp>" or existing IDs
+  name: string;                         // "LOTO Certified", "Forklift Operation"
+  category?: string;                    // "Safety", "Equipment", "Compliance", "Technical"
+  type: "skill" | "certification";      // Certification = requires renewal
+  expiryDays?: number;                  // For certifications: days until expiry
+  requiresEvidence: boolean;            // Does completion need proof?
+  requiresAssessment: boolean;          // Must pass quiz/test to earn?
+  description?: string;
+  regulatoryRef?: string;               // "OSHA 1910.147", "EPA 608"
+  level?: number;                       // Optional: 1=basic, 2=intermediate, 3=advanced
+  prerequisiteSkillIds?: string[];      // Optional: skills needed before earning this one
+  active: boolean;                      // Can be granted/used
+}
+
+export type UserSkillStatus = "active" | "expired" | "pending" | "revoked";
+export type EvidenceType = "training" | "course" | "manual" | "import" | "assessment";
+
+export interface UserSkillRecord extends Timestamped {
+  id: string;                           // "usr_<timestamp>_<userId>_<skillId>"
+  userId: string;
+  skillId: string;                      // References SkillV2
+
+  // Lifecycle
+  status: UserSkillStatus;
+  achievedDate?: string;                // ISO date when earned
+  expiryDate?: string;                  // ISO date when expires (auto-calculated)
+  renewalDate?: string;                 // When user must renew by
+  revokedDate?: string;
+  revokedReason?: string;
+
+  // Provenance (how they got this skill)
+  evidenceType: EvidenceType;
+  evidenceId?: string;                  // trainingId, courseId, or assessmentId
+  evidenceUrl?: string;                 // Link to proof document (upload)
+
+  // Validation
+  verifiedByUserId?: string;            // Who verified/granted this
+  verificationDate?: string;
+
+  // Optional: Competency level
+  level?: number;                       // If skill has levels
+  assessmentScore?: number;             // Quiz/test score when earned
+
+  // Admin
+  notes?: string;
+}
+
+export type EnforcementMode = "none" | "warn" | "block";
+
+export interface RoleSkillRequirement extends Timestamped {
+  id: string;                           // "rsr_<timestamp>"
+  siteId?: string;                      // Scope: specific site (undefined = all sites)
+  departmentId?: string;                // Scope: specific department (undefined = all depts)
+  jobTitle?: string;                    // Scope: specific job title (undefined = all titles)
+  skillId: string;                      // References SkillV2
+  required: boolean;                    // Is this mandatory?
+  level?: number;                       // Minimum level required
+  enforcementMode: EnforcementMode;     // Future: gate actions if missing
+  gracePeriodDays?: number;             // Days allowed to complete after hire
+}
+
+export type WorkContextType = "asset_type" | "work_order_type" | "permit_type" | "inspection_type" | "training_type";
+
+export interface WorkContextSkillRequirement extends Timestamped {
+  id: string;                           // "wsr_<timestamp>"
+  contextType: WorkContextType;
+  contextKey: string;                   // "LOTO", "ConfinedSpace", "HotWork", "HVAC"
+  skillId: string;                      // References SkillV2
+  required: boolean;
+  level?: number;
+  enforcementMode: EnforcementMode;
+}
+
+// ============================================================================
+// LEARNING SYNTHESIS ENGINE TYPES (Phase II)
+// ============================================================================
+
+export type SynthesisType = "micro-lesson" | "full-course" | "onboarding-path" | "toolbox-talk" | "refresher" | "what-changed" | "assessment-only";
+export type DraftStatus = "pending" | "approved" | "rejected" | "published";
+
+export interface GeneratedQuiz {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface GeneratedLesson {
+  title: string;
+  description: string;
+  contentType: "text" | "video" | "quiz" | "interactive";
+  content: string;                      // Markdown content
+  duration: number;                     // Minutes
+  skillsAddressed?: string[];           // Skill IDs
+  quizQuestions?: GeneratedQuiz[];
+  sourceAttributions?: string[];        // Library item IDs this lesson drew from
+}export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+  attachedOutline?: GeneratedLesson[];
+  attachedSources?: string[];           // Library item IDs referenced
+}
+
+export interface SynthesisDraft extends Timestamped {
+  id: string;                           // "draft_<timestamp>"
+  synthesisType: SynthesisType;
+  status: DraftStatus;
+
+  // Context (from the generation form)
+  sourceIds: string[];                  // LibraryItem IDs used for synthesis
+  targetRole?: string;                  // "ADMIN" | "MANAGER" | "LEARNER"
+  targetSkillId?: string;               // Skill this training should grant
+  targetContext?: string;               // Work context (LOTO, ConfinedSpace, etc.)
+  industryContext?: string;
+
+  // Conversation
+  conversationHistory: ChatMessage[];   // Full chat log with agent
+
+  // Generated Output
+  generatedTitle?: string;
+  generatedDescription?: string;
+  generatedLessons?: GeneratedLesson[];
+  suggestedSkillIds?: string[];         // AI-suggested skills to link
+  confidenceScore?: number;             // 0-1
+
+  // Review
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+
+  // Publishing
+  publishedCourseId?: string;           // Links to Course once published
+  publishedAt?: string;
+
+  // Audit
+  generatedByUserId: string;
+}
+
+export interface SynthesisHistory extends Timestamped {
+  id: string;                           // "syn_<timestamp>"
+  draftId: string;
+  synthesisType: SynthesisType;
+  status: "success" | "failed";
+
+  // Metadata
+  sourceCount: number;
+  lessonCount: number;
+  generatedByUserId: string;
+  generatedTitle?: string;
+  generationTimeMs?: number;
+
+  // Outcome
+  outcome?: "approved" | "rejected" | "pending";
+  publishedCourseId?: string;
+}
+
+export interface AISynthesisSettings {
+  defaultSynthesisType: SynthesisType;
+  defaultIndustry: string;
+  complianceStrictness: "standard" | "strict" | "maximum";
+  defaultTone: "professional" | "conversational" | "technical";
+  autoSuggestSkills: boolean;
+  includeQuizzes: boolean;
+  maxLessonsPerCourse: number;
+}

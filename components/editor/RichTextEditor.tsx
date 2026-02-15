@@ -151,7 +151,7 @@ export default function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[120px] p-4',
+        class: 'prose prose-base max-w-none focus:outline-none min-h-[120px] p-5 prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:text-gray-700 prose-p:leading-relaxed prose-li:text-gray-700 prose-strong:text-gray-900 prose-blockquote:border-indigo-300 prose-blockquote:text-gray-600',
         'aria-label': ariaLabel,
       },
     },

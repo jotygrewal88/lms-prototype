@@ -22,10 +22,10 @@
 
 ```tsx
 // Before:
-<span className="font-semibold">UpKeep LMS</span>
+<span className="font-semibold">UpKeep Learn</span>
 
 // After:
-<span className="text-[16px] leading-none font-semibold tracking-tight text-white">UpKeep LMS</span>
+<span className="text-[16px] leading-none font-semibold tracking-tight text-white">UpKeep Learn</span>
 ```
 
 **Visual Impact:**

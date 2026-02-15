@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -205,7 +206,7 @@ export default function NotificationsArchivePage() {
                                 {remaining > 0 && ` +${remaining} more`}
                               </>
                             ) : (
-                              sender ? getFullName(sender) : "System"
+                              sender ? <Link href={`/admin/users/${sender.id}`} className="text-blue-600 hover:text-blue-800 hover:underline" onClick={(e) => e.stopPropagation()}>{getFullName(sender)}</Link> : "System"
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
@@ -263,9 +264,9 @@ export default function NotificationsArchivePage() {
                   <div className="pb-4 border-b border-gray-200">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-xs font-medium text-gray-500">From:</span>
-                      <span className="text-sm text-gray-900">
+                      <span className="text-sm">
                         {getUser(selectedNotification.senderId) 
-                          ? getFullName(getUser(selectedNotification.senderId)!) 
+                          ? <Link href={`/admin/users/${getUser(selectedNotification.senderId)!.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(getUser(selectedNotification.senderId)!)}</Link>
                           : "System"}
                       </span>
                     </div>

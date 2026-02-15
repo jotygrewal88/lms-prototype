@@ -2,7 +2,7 @@
 import { 
   Course, Lesson, Resource, Quiz, Question, 
   CourseAssignment, ProgressCourse, ProgressLesson, Certificate,
-  CoursePolicy
+  CoursePolicy, ChatMessage
 } from "@/types";
 
 // Helper for timestamps
@@ -169,7 +169,7 @@ export const courses: Course[] = [
     skills: ["skl_002"], // Phase II — 1M.1: Forklift Safety
     policy: { ...defaultPolicy, minVideoWatchPct: 90, maxQuizAttempts: 2 },
     ownerUserId: "usr_admin_1",
-    lessonIds: ["lsn_002_01", "lsn_002_02", "lsn_002_03"],
+    lessonIds: ["lsn_002_01", "lsn_002_02", "lsn_002_03", "lsn_002_04"],
     quizId: "qz_002",
     scope: { type: "department", departmentIds: ["dept_warehouse_a", "dept_warehouse_b"] }, // Warehouse departments
     createdAt: daysAgo(40),
@@ -291,6 +291,88 @@ export const courses: Course[] = [
     createdAt: daysAgo(75),
     updatedAt: daysAgo(45),
   },
+
+  // ==================== AI-GENERATED COURSES ====================
+  {
+    id: "crs_ai_loto_001",
+    title: "Lockout/Tagout (LOTO) Safety Training",
+    description: "AI-generated comprehensive LOTO training covering OSHA 1910.147 requirements, step-by-step procedures, equipment identification, and practical assessment for maintenance technicians.",
+    category: "Safety",
+    status: "ai-draft",
+    tags: ["LOTO", "OSHA", "Safety", "AI-Generated"],
+    lessonIds: ["lsn_ai_loto_01", "lsn_ai_loto_02", "lsn_ai_loto_03"],
+    ownerUserId: "usr_admin_001",
+    policy: defaultPolicy,
+    aiGenerated: true,
+    synthesisType: "full-course",
+    sourceIds: ["lib_002", "lib_006"],
+    sourceAttributions: ["LOTO Standard Operating Procedure", "PPE Requirements Matrix"],
+    conversationHistory: [
+      { id: "msg_s1", role: "system", content: "Welcome! I'll help you generate a course based on your selected sources and organizational context.", timestamp: daysAgo(2) },
+      { id: "msg_u1", role: "user", content: "I need a comprehensive LOTO training course for new maintenance technicians. It should cover all OSHA requirements and include practical assessments.", timestamp: daysAgo(2) },
+      { id: "msg_a1", role: "assistant", content: "Based on your LOTO SOP and PPE requirements documents, I can create a comprehensive 3-lesson course. Shall I proceed?", timestamp: daysAgo(2) },
+      { id: "msg_u2", role: "user", content: "Looks good! Go ahead and generate it.", timestamp: daysAgo(2) },
+      { id: "msg_a2", role: "assistant", content: "I've generated the complete Lockout/Tagout Safety Training course with 3 lessons. Review and save to drafts when ready.", timestamp: daysAgo(2) },
+    ] as ChatMessage[],
+    confidenceScore: 0.92,
+    suggestedSkillIds: ["skl_loto"],
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "crs_ai_cs_001",
+    title: "Confined Space Entry Training",
+    description: "AI-generated training course covering confined space classification, entry procedures, and emergency rescue protocols per OSHA 1910.146.",
+    category: "Safety",
+    status: "published",
+    tags: ["Confined Space", "OSHA", "Safety", "AI-Generated"],
+    lessonIds: [],
+    ownerUserId: "usr_admin_001",
+    policy: defaultPolicy,
+    aiGenerated: true,
+    synthesisType: "full-course",
+    sourceIds: ["lib_013"],
+    sourceAttributions: ["Confined Space Entry Procedures"],
+    conversationHistory: [
+      { id: "msg_cs_s1", role: "system", content: "Welcome! I'll help you generate a course.", timestamp: daysAgo(10) },
+      { id: "msg_cs_u1", role: "user", content: "Create a confined space entry training based on our SOPs.", timestamp: daysAgo(10) },
+      { id: "msg_cs_a1", role: "assistant", content: "I'll create a 3-lesson confined space entry course. Generating now...", timestamp: daysAgo(10) },
+    ] as ChatMessage[],
+    confidenceScore: 0.88,
+    suggestedSkillIds: ["skl_confined_space"],
+    reviewedByUserId: "usr_admin_001",
+    reviewedAt: daysAgo(5),
+    reviewNotes: "Content is accurate and aligns with our SOPs. Approved for publication.",
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "crs_ai_ppe_001",
+    title: "PPE Basics — Quick Overview",
+    description: "AI-generated micro-lesson covering personal protective equipment fundamentals.",
+    category: "Safety",
+    status: "rejected",
+    tags: ["PPE", "Safety", "AI-Generated"],
+    lessonIds: [],
+    ownerUserId: "usr_admin_001",
+    policy: defaultPolicy,
+    aiGenerated: true,
+    synthesisType: "micro-lesson",
+    sourceIds: ["lib_006"],
+    sourceAttributions: ["PPE Requirements Matrix"],
+    conversationHistory: [
+      { id: "msg_ppe_s1", role: "system", content: "Welcome! I'll help you generate a micro-lesson.", timestamp: daysAgo(5) },
+      { id: "msg_ppe_u1", role: "user", content: "Generate a quick PPE overview lesson.", timestamp: daysAgo(5) },
+      { id: "msg_ppe_a1", role: "assistant", content: "Here's a concise PPE micro-lesson covering the basics.", timestamp: daysAgo(5) },
+    ] as ChatMessage[],
+    confidenceScore: 0.65,
+    suggestedSkillIds: ["skl_electrical_basic"],
+    reviewedByUserId: "usr_admin_001",
+    reviewedAt: daysAgo(4),
+    reviewNotes: "Too basic — needs more detail on selection criteria and hazard assessment. Please regenerate with deeper content.",
+    createdAt: daysAgo(5),
+    updatedAt: daysAgo(4),
+  },
 ];
 
 // 10 Lessons across courses
@@ -301,7 +383,13 @@ export const lessons: Lesson[] = [
     courseId: "crs_001",
     title: "Introduction to Workplace Safety",
     order: 0,
-    resourceIds: ["res_001_01_01", "res_001_01_02"],
+    resourceIds: ["res_001_01_01", "res_001_01_02", "res_001_01_img"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_safe_1_1", question: "Who is responsible for workplace safety?", type: "multiple-choice" as const, options: [{ id: "kc_safe_1_1_a", text: "Only the safety department" }, { id: "kc_safe_1_1_b", text: "Only the supervisor" }, { id: "kc_safe_1_1_c", text: "Everyone — employers and employees share responsibility" }, { id: "kc_safe_1_1_d", text: "Only OSHA" }], correctOptionId: "kc_safe_1_1_c", explanation: "Under the OSH Act, employers must provide a safe workplace, but employees also have a duty to follow safety rules, report hazards, and use PPE correctly. Safety is a shared responsibility." },
+      { id: "kc_safe_1_2", question: "True or False: You can be disciplined for reporting a safety hazard to OSHA.", type: "true-false" as const, options: [{ id: "kc_safe_1_2_a", text: "True" }, { id: "kc_safe_1_2_b", text: "False" }], correctOptionId: "kc_safe_1_2_b", explanation: "False. Section 11(c) of the OSH Act protects employees from retaliation for reporting safety concerns or filing complaints. It is illegal for employers to punish workers for exercising their safety rights." },
+    ],
     createdAt: daysAgo(45),
     updatedAt: daysAgo(45),
   },
@@ -310,7 +398,13 @@ export const lessons: Lesson[] = [
     courseId: "crs_001",
     title: "Hazard Identification",
     order: 1,
-    resourceIds: ["res_001_02_01", "res_001_02_02", "res_001_02_03"],
+    resourceIds: ["res_001_02_01", "res_001_02_02", "res_001_02_03", "res_001_02_img"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_safe_2_1", question: "Which of these is an example of a biological hazard?", type: "multiple-choice" as const, options: [{ id: "kc_safe_2_1_a", text: "Wet floor" }, { id: "kc_safe_2_1_b", text: "Mold spores in an HVAC system" }, { id: "kc_safe_2_1_c", text: "Loud machinery" }, { id: "kc_safe_2_1_d", text: "Repetitive motion" }], correctOptionId: "kc_safe_2_1_b", explanation: "Biological hazards include bacteria, viruses, mold, fungi, and other living organisms that can cause illness. Mold spores in an HVAC system are a common workplace biological hazard." },
+      { id: "kc_safe_2_2", question: "What should you do FIRST when you identify a workplace hazard?", type: "multiple-choice" as const, options: [{ id: "kc_safe_2_2_a", text: "Fix it yourself" }, { id: "kc_safe_2_2_b", text: "Report it to your supervisor immediately" }, { id: "kc_safe_2_2_c", text: "Wait until the next safety meeting" }, { id: "kc_safe_2_2_d", text: "Post about it on the safety bulletin board" }], correctOptionId: "kc_safe_2_2_b", explanation: "Immediately reporting hazards to your supervisor is the first step. This allows proper evaluation and corrective action to be taken before someone is injured." },
+    ],
     createdAt: daysAgo(45),
     updatedAt: daysAgo(44),
   },
@@ -319,17 +413,29 @@ export const lessons: Lesson[] = [
     courseId: "crs_001",
     title: "Personal Protective Equipment (PPE)",
     order: 2,
-    resourceIds: ["res_001_03_01"],
+    resourceIds: ["res_001_03_01", "res_001_03_img", "res_001_03_pdf"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_safe_3_1", question: "Who is responsible for paying for required PPE?", type: "multiple-choice" as const, options: [{ id: "kc_safe_3_1_a", text: "The employee" }, { id: "kc_safe_3_1_b", text: "The employer" }, { id: "kc_safe_3_1_c", text: "OSHA" }, { id: "kc_safe_3_1_d", text: "The union" }], correctOptionId: "kc_safe_3_1_b", explanation: "Under OSHA regulation 29 CFR 1910.132(h), the employer must pay for PPE required to comply with OSHA standards (with limited exceptions like safety-toe shoes and prescription safety glasses)." },
+      { id: "kc_safe_3_2", question: "True or False: Safety glasses with side shields provide adequate eye protection when working with liquid chemicals.", type: "true-false" as const, options: [{ id: "kc_safe_3_2_a", text: "True" }, { id: "kc_safe_3_2_b", text: "False" }], correctOptionId: "kc_safe_3_2_b", explanation: "False. When working with liquid chemicals, chemical splash goggles are required. Safety glasses, even with side shields, do not provide adequate splash protection and can allow chemicals to reach the eyes." },
+    ],
     createdAt: daysAgo(45),
     updatedAt: daysAgo(44),
   },
-  // Course 2: Forklift (3 lessons)
+  // Course 2: Forklift (4 lessons — 3 content + 1 assessment)
   {
     id: "lsn_002_01",
     courseId: "crs_002",
     title: "Forklift Components & Controls",
     order: 0,
-    resourceIds: ["res_002_01_01", "res_002_01_02"],
+    resourceIds: ["res_002_01_text", "res_002_01_01", "res_002_01_02"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_fork_1_1", question: "What is the 'stability triangle' on a forklift?", type: "multiple-choice" as const, options: [{ id: "kc_fork_1_1_a", text: "The three-point suspension formed by the front wheels and the rear axle pivot" }, { id: "kc_fork_1_1_b", text: "A warning decal on the dashboard" }, { id: "kc_fork_1_1_c", text: "The shape of the overhead guard" }, { id: "kc_fork_1_1_d", text: "The arrangement of the hydraulic cylinders" }], correctOptionId: "kc_fork_1_1_a", explanation: "The stability triangle is formed by the two front wheels and the pivot point of the rear axle. The forklift's center of gravity must remain within this triangle to prevent tipping." },
+      { id: "kc_fork_1_2", question: "True or False: An overhead guard on a forklift is designed to protect the operator from all falling objects.", type: "true-false" as const, options: [{ id: "kc_fork_1_2_a", text: "True" }, { id: "kc_fork_1_2_b", text: "False" }], correctOptionId: "kc_fork_1_2_b", explanation: "False. The overhead guard protects against falling small objects but is NOT designed to withstand the impact of a full-capacity load falling from maximum height. Operators must still exercise caution around elevated loads." },
+    ],
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
@@ -338,7 +444,13 @@ export const lessons: Lesson[] = [
     courseId: "crs_002",
     title: "Pre-Operation Inspection",
     order: 1,
-    resourceIds: ["res_002_02_01", "res_002_02_02"],
+    resourceIds: ["res_002_02_text", "res_002_02_01", "res_002_02_02"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_fork_2_1", question: "If you discover a deficiency during the pre-operation inspection, what should you do?", type: "multiple-choice" as const, options: [{ id: "kc_fork_2_1_a", text: "Operate the forklift carefully and report it at end of shift" }, { id: "kc_fork_2_1_b", text: "Tag the forklift out of service and report immediately to your supervisor" }, { id: "kc_fork_2_1_c", text: "Ask a coworker if they think it's safe" }, { id: "kc_fork_2_1_d", text: "Only report it if it affects steering" }], correctOptionId: "kc_fork_2_1_b", explanation: "Any deficiency that could affect safe operation must result in the forklift being tagged out of service immediately. Report to your supervisor and do not operate until repairs are completed." },
+      { id: "kc_fork_2_2", question: "How often must a pre-operation inspection be performed?", type: "multiple-choice" as const, options: [{ id: "kc_fork_2_2_a", text: "Weekly" }, { id: "kc_fork_2_2_b", text: "At the start of each shift before use" }, { id: "kc_fork_2_2_c", text: "Monthly" }, { id: "kc_fork_2_2_d", text: "Only after maintenance" }], correctOptionId: "kc_fork_2_2_b", explanation: "OSHA requires that powered industrial trucks be examined before being placed in service each shift. This applies to each operator who uses the forklift during that shift." },
+    ],
     createdAt: daysAgo(40),
     updatedAt: daysAgo(39),
   },
@@ -347,7 +459,24 @@ export const lessons: Lesson[] = [
     courseId: "crs_002",
     title: "Safe Operating Procedures",
     order: 2,
-    resourceIds: ["res_002_03_01"],
+    resourceIds: ["res_002_03_text", "res_002_03_01", "res_002_03_img", "res_002_03_pdf"],
+    estimatedMinutes: 20,
+    lessonType: "lesson" as const,
+    knowledgeChecks: [
+      { id: "kc_fork_3_1", question: "When traveling with a load on a forklift, the forks should be:", type: "multiple-choice" as const, options: [{ id: "kc_fork_3_1_a", text: "Raised high for visibility" }, { id: "kc_fork_3_1_b", text: "Tilted forward" }, { id: "kc_fork_3_1_c", text: "Approximately 4-6 inches off the ground, tilted slightly back" }, { id: "kc_fork_3_1_d", text: "At maximum height to clear obstacles" }], correctOptionId: "kc_fork_3_1_c", explanation: "When traveling with a load, forks should be 4-6 inches off the ground and tilted slightly back. This keeps the center of gravity low and within the stability triangle, reducing tip-over risk." },
+      { id: "kc_fork_3_2", question: "When driving a loaded forklift DOWN a ramp, you should:", type: "multiple-choice" as const, options: [{ id: "kc_fork_3_2_a", text: "Drive forward with the load leading" }, { id: "kc_fork_3_2_b", text: "Drive in reverse with the load uphill" }, { id: "kc_fork_3_2_c", text: "Coast down in neutral" }, { id: "kc_fork_3_2_d", text: "Turn the forklift sideways" }], correctOptionId: "kc_fork_3_2_b", explanation: "When descending a ramp with a load, always travel in reverse with the load on the uphill side. This keeps the load from sliding off the forks and maintains stability." },
+    ],
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(39),
+  },
+  {
+    id: "lsn_002_04",
+    courseId: "crs_002",
+    title: "Forklift Certification Assessment",
+    order: 3,
+    resourceIds: ["res_002_04_text"],
+    estimatedMinutes: 10,
+    lessonType: "assessment" as const,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(39),
   },
@@ -357,7 +486,9 @@ export const lessons: Lesson[] = [
     courseId: "crs_003",
     title: "Understanding GHS and Chemical Labels",
     order: 0,
-    resourceIds: ["res_003_01_01", "res_003_01_02"],
+    resourceIds: ["res_003_01_text", "res_003_01_01", "res_003_01_02", "res_003_01_img"],
+    estimatedMinutes: 20,
+    lessonType: "lesson" as const,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(35),
   },
@@ -366,7 +497,9 @@ export const lessons: Lesson[] = [
     courseId: "crs_003",
     title: "Reading Safety Data Sheets (SDS)",
     order: 1,
-    resourceIds: ["res_003_02_01", "res_003_02_02"],
+    resourceIds: ["res_003_02_text", "res_003_02_01", "res_003_02_02", "res_003_02_pdf"],
+    estimatedMinutes: 20,
+    lessonType: "lesson" as const,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(34),
   },
@@ -376,7 +509,9 @@ export const lessons: Lesson[] = [
     courseId: "crs_004",
     title: "Emergency Action Plans",
     order: 0,
-    resourceIds: ["res_004_01_01"],
+    resourceIds: ["res_004_01_01", "res_004_01_img", "res_004_01_pdf"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
     createdAt: daysAgo(10),
     updatedAt: daysAgo(10),
   },
@@ -385,9 +520,40 @@ export const lessons: Lesson[] = [
     courseId: "crs_004",
     title: "Evacuation Procedures",
     order: 1,
-    resourceIds: ["res_004_02_01"],
+    resourceIds: ["res_004_02_01", "res_004_02_img", "res_004_02_pdf"],
+    estimatedMinutes: 15,
+    lessonType: "lesson" as const,
     createdAt: daysAgo(10),
     updatedAt: daysAgo(10),
+  },
+
+  // AI LOTO Course Lessons
+  {
+    id: "lsn_ai_loto_01",
+    courseId: "crs_ai_loto_001",
+    title: "Introduction to Lockout/Tagout",
+    order: 0,
+    resourceIds: ["res_ai_loto_01"],
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "lsn_ai_loto_02",
+    courseId: "crs_ai_loto_001",
+    title: "OSHA 1910.147 Requirements",
+    order: 1,
+    resourceIds: ["res_ai_loto_02"],
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "lsn_ai_loto_03",
+    courseId: "crs_ai_loto_001",
+    title: "LOTO Procedures Step-by-Step",
+    order: 2,
+    resourceIds: ["res_ai_loto_03"],
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
   },
 ];
 
@@ -513,7 +679,42 @@ export const resources: Resource[] = [
     createdAt: daysAgo(45),
     updatedAt: daysAgo(45),
   },
-  // Course 2, Lesson 1
+  // Course 2, Lesson 1 — text content above video
+  {
+    id: "res_002_01_text",
+    courseId: "crs_002",
+    lessonId: "lsn_002_01",
+    type: "text",
+    title: "Forklift Components & Controls",
+    content: `<h2>Forklift Components & Controls</h2>
+<p>Before operating any powered industrial truck, you must understand its key components and how they work together. This lesson covers the major parts of a counterbalance forklift — the most common type in warehouse and manufacturing operations.</p>
+
+<h3>Types of Forklifts</h3>
+<ul>
+  <li><strong>Counterbalance</strong> — The most common type. Uses a heavy counterweight at the rear to balance the load on the forks. Available in sit-down and stand-up models.</li>
+  <li><strong>Reach Truck</strong> — Designed for narrow aisles. The forks extend forward on a pantograph mechanism, allowing the operator to reach into racking without the truck itself entering the aisle.</li>
+  <li><strong>Order Picker</strong> — The operator platform rises with the forks, allowing the worker to pick items at height. Requires fall protection equipment.</li>
+</ul>
+
+<h3>Key Components</h3>
+<ol>
+  <li><strong>Mast</strong> — The vertical assembly that raises and lowers the forks. Can be single-stage (low lift), two-stage, or three-stage (triple mast for maximum height).</li>
+  <li><strong>Carriage</strong> — Rides along the mast rails and holds the forks. The tilt cylinder allows forward and backward tilt for load handling.</li>
+  <li><strong>Forks (Tines)</strong> — The L-shaped prongs that slide under pallets. Must be inspected for cracks, bends, and uneven height.</li>
+  <li><strong>Overhead Guard</strong> — Protects the operator from small falling objects. <em>Not designed to withstand the impact of a maximum-capacity load falling from height.</em></li>
+  <li><strong>Load Backrest</strong> — Prevents the load from sliding backward toward the operator during transport.</li>
+  <li><strong>Counterweight</strong> — Heavy casting at the rear of the forklift that balances the weight of the load. Never remove or modify the counterweight.</li>
+</ol>
+
+<div class="callout" data-variant="key-point">
+  <strong>✅ The Stability Triangle:</strong> A forklift's stability is based on a triangle formed by the two front wheels and the pivot point of the rear axle. The combined center of gravity (truck + load) must stay within this triangle, or the forklift will tip over.
+</div>
+
+<div class="image-placeholder" data-caption="📸 Diagram: Forklift Stability Triangle — showing the three-point stability zone and center of gravity"></div>`,
+    order: 0,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(40),
+  },
   {
     id: "res_002_01_01",
     courseId: "crs_002",
@@ -522,7 +723,7 @@ export const resources: Resource[] = [
     title: "Forklift Anatomy",
     url: "https://example.com/videos/forklift-components.mp4",
     durationSec: 720,
-    order: 0,
+    order: 1,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
@@ -533,11 +734,42 @@ export const resources: Resource[] = [
     type: "image",
     title: "Forklift Component Diagram",
     url: "https://example.com/images/forklift-diagram.png",
-    order: 1,
+    order: 2,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
-  // Course 2, Lesson 2
+  // Course 2, Lesson 2 — text content above video
+  {
+    id: "res_002_02_text",
+    courseId: "crs_002",
+    lessonId: "lsn_002_02",
+    type: "text",
+    title: "Pre-Operation Inspection",
+    content: `<h2>Pre-Operation Inspection</h2>
+<p>OSHA requires a thorough inspection of powered industrial trucks <strong>before each shift</strong> and before placing the forklift into service. This is not optional — operating an uninspected forklift puts you and everyone around you at risk.</p>
+
+<h3>Daily Inspection Checklist</h3>
+<p>Walk around the forklift and check each of the following. If any item fails inspection, <strong>tag the forklift out of service</strong> and report to your supervisor immediately.</p>
+<ol>
+  <li><strong>Tires</strong> — Check for cuts, gouges, chunking, and proper inflation (pneumatic tires). Solid tires should not have excessive wear or flat spots.</li>
+  <li><strong>Forks</strong> — Inspect for cracks (especially at the heel), bends, uneven height between forks, and worn positioning lock pins.</li>
+  <li><strong>Hydraulic System</strong> — Check fluid level, look for leaks at hoses, cylinders, and fittings. Pooled fluid under the forklift is a red flag.</li>
+  <li><strong>Mast and Chains</strong> — Inspect chains for stretch, wear, and proper lubrication. Mast rails should be free of damage.</li>
+  <li><strong>Horn</strong> — Must be loud and functional. Sound the horn to test.</li>
+  <li><strong>Lights</strong> — Headlights, tail lights, and strobe/warning lights must all work.</li>
+  <li><strong>Seatbelt</strong> — Must latch securely. Replace if frayed or damaged.</li>
+  <li><strong>Fire Extinguisher</strong> — Must be present, charged (check gauge), and accessible.</li>
+  <li><strong>Brakes</strong> — Test both service brakes and parking brake before moving.</li>
+  <li><strong>Steering</strong> — Check for excessive play or unusual resistance.</li>
+</ol>
+
+<div class="callout" data-variant="warning">
+  <strong>⚠️ If the inspection reveals ANY deficiency that could affect safe operation, do NOT operate the forklift.</strong> Tag it out of service, notify your supervisor, and use a different unit. Never assume "it'll be fine for one more shift."
+</div>`,
+    order: 0,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(40),
+  },
   {
     id: "res_002_02_01",
     courseId: "crs_002",
@@ -546,7 +778,7 @@ export const resources: Resource[] = [
     title: "Pre-Op Inspection Walkthrough",
     url: "https://example.com/videos/forklift-inspection.mp4",
     durationSec: 540,
-    order: 0,
+    order: 1,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
@@ -557,11 +789,62 @@ export const resources: Resource[] = [
     type: "pdf",
     title: "Daily Inspection Checklist",
     url: "https://example.com/docs/forklift-checklist.pdf",
-    order: 1,
+    order: 2,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
-  // Course 2, Lesson 3
+  // Course 2, Lesson 3 — text content above video
+  {
+    id: "res_002_03_text",
+    courseId: "crs_002",
+    lessonId: "lsn_002_03",
+    type: "text",
+    title: "Safe Operating Procedures",
+    content: `<h2>Safe Operating Procedures</h2>
+<p>Operating a forklift safely requires understanding load dynamics, navigating different terrain, and maintaining awareness of your surroundings at all times. This lesson covers the essential rules every certified forklift operator must follow.</p>
+
+<h3>Load Capacity & Load Center</h3>
+<p>Every forklift has a <strong>data plate</strong> that shows its maximum rated capacity at a specified load center distance (typically 24 inches from the face of the forks). Exceeding this capacity — even slightly — can cause a tip-over.</p>
+<ul>
+  <li>Never exceed the rated capacity shown on the data plate</li>
+  <li>As the load center moves forward, the effective capacity <strong>decreases</strong></li>
+  <li>Raising the load higher also reduces stability — keep loads as low as possible during travel</li>
+</ul>
+
+<h3>Traveling With and Without Loads</h3>
+<ul>
+  <li>Travel with forks <strong>4-6 inches off the ground</strong>, tilted slightly back</li>
+  <li>Loaded forklifts travel <strong>forward up ramps</strong> and <strong>reverse down ramps</strong> (load always on the uphill side)</li>
+  <li>Unloaded forklifts travel <strong>forward down ramps</strong></li>
+  <li>Never exceed <strong>5 mph</strong> in general work areas; <strong>3 mph</strong> in pedestrian areas</li>
+  <li>If a load blocks your forward view, travel in <strong>reverse</strong> (except going up a ramp)</li>
+</ul>
+
+<div class="callout" data-variant="danger">
+  <strong>⛔ If your forklift starts to tip over, do NOT jump off.</strong> Stay in the seat, brace yourself, lean away from the direction of the fall, and hold on. Jumping puts you in the crush zone. The overhead guard is your best protection.
+</div>
+
+<h3>Pedestrian Safety</h3>
+<p>Pedestrian-forklift collisions are one of the most common fatal workplace accidents. Follow these rules:</p>
+<ul>
+  <li><strong>Sound your horn</strong> at intersections, blind corners, and doorways</li>
+  <li>Maintain <strong>eye contact</strong> with pedestrians before proceeding</li>
+  <li>Never drive a forklift <strong>toward</strong> anyone standing in front of an object</li>
+  <li>Yield to pedestrians at all times</li>
+</ul>
+
+<h3>Parking Procedures</h3>
+<ol>
+  <li>Park on a <strong>level surface</strong> — never on an incline unless wheels are blocked</li>
+  <li>Lower forks completely to the <strong>ground</strong></li>
+  <li>Tilt the mast <strong>forward</strong> until forks are flat on the surface</li>
+  <li>Set the <strong>parking brake</strong></li>
+  <li>Turn off the <strong>ignition</strong> and remove the key</li>
+</ol>`,
+    order: 0,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(40),
+  },
   {
     id: "res_002_03_01",
     courseId: "crs_002",
@@ -570,11 +853,74 @@ export const resources: Resource[] = [
     title: "Safe Operation Techniques",
     url: "https://example.com/videos/forklift-operations.mp4",
     durationSec: 900,
-    order: 0,
+    order: 1,
     createdAt: daysAgo(40),
     updatedAt: daysAgo(40),
   },
-  // Course 3, Lesson 1
+  // Course 2, Lesson 4 — Assessment intro text
+  {
+    id: "res_002_04_text",
+    courseId: "crs_002",
+    lessonId: "lsn_002_04",
+    type: "text",
+    title: "Forklift Certification Assessment",
+    content: `<h2>Forklift Certification Assessment</h2>
+<p>This assessment evaluates your knowledge of forklift operation as required by OSHA 29 CFR 1910.178. You must score <strong>85% or higher</strong> to earn your Forklift Operation Certification.</p>
+<div class="callout" data-variant="key-point">
+  <strong>Assessment Details:</strong>
+  <ul>
+    <li>6 questions covering components, inspection, and safe operation</li>
+    <li>Passing score: 85%</li>
+    <li>You may retake the assessment if needed</li>
+  </ul>
+</div>
+<p>When you're ready, click <strong>"Start Attempt"</strong> below.</p>`,
+    order: 0,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(39),
+  },
+  // Course 3, Lesson 1 — text content before video
+  {
+    id: "res_003_01_text",
+    courseId: "crs_003",
+    lessonId: "lsn_003_01",
+    type: "text",
+    title: "Understanding GHS and Chemical Labels",
+    content: `<h2>Understanding GHS and Chemical Labels</h2>
+<p>The <strong>Globally Harmonized System (GHS)</strong> provides a worldwide standard for classifying and communicating chemical hazards through labels and Safety Data Sheets. Under OSHA's Hazard Communication Standard (29 CFR 1910.1200), all employers must ensure employees can identify and understand chemical labels.</p>
+
+<h3>Required Label Elements</h3>
+<p>Every GHS-compliant chemical label must include six elements:</p>
+<ol>
+  <li><strong>Product Identifier</strong> — Chemical name or product name matching the SDS</li>
+  <li><strong>Signal Word</strong> — Either "Danger" (more severe) or "Warning" (less severe)</li>
+  <li><strong>Hazard Statements</strong> — Standardized phrases describing the nature of the hazard (e.g., "Causes serious eye damage")</li>
+  <li><strong>Pictograms</strong> — Red-bordered diamond symbols identifying hazard categories</li>
+  <li><strong>Precautionary Statements</strong> — Recommended measures for handling, storage, and first aid</li>
+  <li><strong>Supplier Information</strong> — Name, address, and phone number of the manufacturer</li>
+</ol>
+
+<h3>GHS Pictograms</h3>
+<p>There are 9 GHS pictograms. You must recognize each on sight:</p>
+<ul>
+  <li><strong>Flame</strong> — Flammable liquids, gases, aerosols, and solids</li>
+  <li><strong>Flame Over Circle</strong> — Oxidizers that can intensify a fire</li>
+  <li><strong>Exploding Bomb</strong> — Explosives and self-reactive substances</li>
+  <li><strong>Skull & Crossbones</strong> — Acute toxicity (fatal or toxic)</li>
+  <li><strong>Corrosion</strong> — Corrosive to skin, eyes, or metals</li>
+  <li><strong>Health Hazard</strong> — Carcinogens, respiratory sensitizers, reproductive toxicity</li>
+  <li><strong>Exclamation Mark</strong> — Irritants, skin sensitizers, narcotic effects</li>
+  <li><strong>Gas Cylinder</strong> — Gases under pressure</li>
+  <li><strong>Environment</strong> — Aquatic toxicity (not mandated by OSHA but may appear)</li>
+</ul>
+
+<div class="callout" data-variant="warning">
+  <strong>⚠️ Never use a chemical from an unlabeled container.</strong> If you find an unlabeled container, do not open it, do not smell it, and do not attempt to identify it yourself. Report it to your supervisor immediately.
+</div>`,
+    order: 0,
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(35),
+  },
   {
     id: "res_003_01_01",
     courseId: "crs_003",
@@ -583,7 +929,7 @@ export const resources: Resource[] = [
     title: "GHS Labeling System",
     url: "https://example.com/videos/ghs-labels.mp4",
     durationSec: 540,
-    order: 0,
+    order: 1,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(35),
   },
@@ -594,11 +940,49 @@ export const resources: Resource[] = [
     type: "pdf",
     title: "GHS Pictogram Guide",
     url: "https://example.com/docs/ghs-pictograms.pdf",
-    order: 1,
+    order: 2,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(35),
   },
-  // Course 3, Lesson 2
+  // Course 3, Lesson 2 — text content before video
+  {
+    id: "res_003_02_text",
+    courseId: "crs_003",
+    lessonId: "lsn_003_02",
+    type: "text",
+    title: "Reading Safety Data Sheets (SDS)",
+    content: `<h2>Reading Safety Data Sheets (SDS)</h2>
+<p>A Safety Data Sheet provides detailed information about a chemical's hazards, safe handling, and emergency procedures. Under GHS, all SDS documents follow the same <strong>16-section format</strong>, making it easy to find information quickly — no matter who manufactured the chemical.</p>
+
+<h3>The 16 SDS Sections</h3>
+<ol>
+  <li><strong>Identification</strong> — Product name, manufacturer, recommended use, emergency phone</li>
+  <li><strong>Hazard(s) Identification</strong> — GHS classification, label elements, other hazards</li>
+  <li><strong>Composition / Ingredients</strong> — Chemical identity, impurities, concentration</li>
+  <li><strong>First-Aid Measures</strong> — Required treatment for inhalation, skin, eye, and ingestion exposure</li>
+  <li><strong>Fire-Fighting Measures</strong> — Suitable extinguishing media, special hazards, firefighter PPE</li>
+  <li><strong>Accidental Release</strong> — Spill cleanup, containment, environmental precautions</li>
+  <li><strong>Handling and Storage</strong> — Safe handling practices, incompatibilities, storage conditions</li>
+  <li><strong>Exposure Controls / PPE</strong> — Exposure limits (PEL, TLV), required PPE</li>
+  <li><strong>Physical / Chemical Properties</strong> — Appearance, odor, pH, flash point, boiling point</li>
+  <li><strong>Stability and Reactivity</strong> — Conditions to avoid, incompatible materials</li>
+  <li><strong>Toxicological Information</strong> — Routes of exposure, symptoms, acute/chronic effects</li>
+  <li><strong>Ecological Information</strong> — Environmental impact (not enforced by OSHA)</li>
+  <li><strong>Disposal Considerations</strong> — Waste disposal methods</li>
+  <li><strong>Transport Information</strong> — DOT shipping classification</li>
+  <li><strong>Regulatory Information</strong> — Applicable regulations</li>
+  <li><strong>Other Information</strong> — Date of preparation or last revision</li>
+</ol>
+
+<div class="callout" data-variant="tip">
+  <strong>💡 Most-Used Sections:</strong> In an emergency, go to <strong>Section 4 (First Aid)</strong> and <strong>Section 5 (Fire-Fighting)</strong> first. For daily work, focus on <strong>Section 8 (Exposure Controls / PPE)</strong> to know what protection you need.
+</div>
+
+<p>SDS documents must be readily accessible to all employees during their work shifts. Your facility keeps them in designated SDS binders and/or the electronic SDS system. Know where to find them <strong>before</strong> you need them.</p>`,
+    order: 0,
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(35),
+  },
   {
     id: "res_003_02_01",
     courseId: "crs_003",
@@ -607,7 +991,7 @@ export const resources: Resource[] = [
     title: "How to Read an SDS",
     url: "https://example.com/videos/reading-sds.mp4",
     durationSec: 660,
-    order: 0,
+    order: 1,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(35),
   },
@@ -618,7 +1002,7 @@ export const resources: Resource[] = [
     type: "link",
     title: "OSHA SDS Resources",
     url: "https://www.osha.gov/sds",
-    order: 1,
+    order: 2,
     createdAt: daysAgo(35),
     updatedAt: daysAgo(35),
   },
@@ -628,8 +1012,37 @@ export const resources: Resource[] = [
     courseId: "crs_004",
     lessonId: "lsn_004_01",
     type: "text",
-    title: "Emergency Preparedness",
-    content: "<h2>Emergency Preparedness</h2><p>Understanding your facility's emergency action plan and your role during emergencies.</p>",
+    title: "Emergency Action Plans",
+    content: `<h2>Emergency Action Plans</h2>
+<p>Every facility is required under OSHA 29 CFR 1910.38 to maintain a written <strong>Emergency Action Plan (EAP)</strong>. This plan outlines the procedures employees must follow during workplace emergencies including fires, chemical releases, severe weather, and medical emergencies.</p>
+
+<h3>Key Elements of an Emergency Action Plan</h3>
+<ol>
+  <li><strong>Emergency Escape Procedures</strong> — Designated routes and exits for each area</li>
+  <li><strong>Critical Operations</strong> — Procedures for employees who remain behind to shut down equipment</li>
+  <li><strong>Employee Headcount</strong> — Accountability procedures at assembly points</li>
+  <li><strong>Rescue and Medical Duties</strong> — Who is trained for first aid and CPR</li>
+  <li><strong>Reporting</strong> — How to report fires and other emergencies</li>
+  <li><strong>Contact Information</strong> — Names, titles, and phone numbers of key contacts</li>
+</ol>
+
+<h3>Fire Extinguisher Types</h3>
+<p>Knowing which extinguisher to use is critical. Using the wrong type can spread the fire or create additional hazards.</p>
+<ul>
+  <li><strong>Class A</strong> — Ordinary combustibles (wood, paper, cloth). Use water or foam.</li>
+  <li><strong>Class B</strong> — Flammable liquids (gasoline, oil, grease). Use CO₂ or dry chemical. <em>Never use water.</em></li>
+  <li><strong>Class C</strong> — Energized electrical equipment. Use CO₂ or dry chemical. De-energize first if possible.</li>
+  <li><strong>Class D</strong> — Combustible metals (magnesium, titanium). Use specialized Class D agents only.</li>
+  <li><strong>Class K</strong> — Cooking oils and fats. Use wet chemical extinguishers.</li>
+</ul>
+
+<div class="callout" data-variant="tip">
+  <strong>💡 Remember PASS:</strong> <strong>P</strong>ull the pin → <strong>A</strong>im at the base of the fire → <strong>S</strong>queeze the handle → <strong>S</strong>weep side to side.
+</div>
+
+<div class="callout" data-variant="warning">
+  <strong>⚠️ Only attempt to fight a fire if:</strong> It's small and contained, you have the correct extinguisher, you have a clear escape route behind you, and the fire department has been called. When in doubt, evacuate.
+</div>`,
     order: 0,
     createdAt: daysAgo(10),
     updatedAt: daysAgo(10),
@@ -640,11 +1053,224 @@ export const resources: Resource[] = [
     courseId: "crs_004",
     lessonId: "lsn_004_02",
     type: "text",
-    title: "Safe Evacuation",
-    content: "<h2>Safe Evacuation</h2><p>Learn evacuation routes, assembly points, and accountability procedures.</p>",
+    title: "Evacuation Procedures & Incident Reporting",
+    content: `<h2>Evacuation Procedures & Incident Reporting</h2>
+<p>When an evacuation is ordered, every second counts. Knowing your evacuation route and assembly point <strong>before</strong> an emergency occurs is the difference between a calm, organized exit and chaos.</p>
+
+<h3>Evacuation Steps</h3>
+<ol>
+  <li><strong>Stop work immediately</strong> when the alarm sounds — do not finish your current task</li>
+  <li><strong>Shut down equipment</strong> only if it can be done in a few seconds without risk</li>
+  <li><strong>Follow your designated evacuation route</strong> — do not take shortcuts or use elevators</li>
+  <li><strong>Assist others</strong> if safe to do so, especially those with mobility challenges</li>
+  <li><strong>Proceed to your assembly point</strong> and check in with your area warden</li>
+  <li><strong>Do NOT re-enter the building</strong> until the all-clear is given by emergency responders</li>
+</ol>
+
+<h3>Incident Reporting</h3>
+<p>All incidents, injuries, and <strong>near-misses</strong> must be reported — no matter how minor. Near-miss reporting is especially important because it helps identify hazards before someone gets hurt.</p>
+<ul>
+  <li><strong>Injuries:</strong> Report immediately to your supervisor. Complete an incident report within the shift.</li>
+  <li><strong>Near-Misses:</strong> Report within 24 hours. Include what happened, where, when, and what could be done to prevent it.</li>
+  <li><strong>Property Damage:</strong> Report immediately. Do not attempt to fix damaged equipment yourself.</li>
+</ul>
+
+<div class="callout" data-variant="key-point">
+  <strong>✅ Know Your Assembly Point:</strong> Every area has a designated assembly point. Find yours on the posted evacuation maps. If you are in an unfamiliar area when an alarm sounds, follow the green exit signs and go to the nearest assembly point.
+</div>`,
     order: 0,
     createdAt: daysAgo(10),
     updatedAt: daysAgo(10),
+  },
+
+  // ==================== SUPPLEMENTARY IMAGE & PDF RESOURCES ====================
+
+  // Course 1, Lesson 1 — Safety culture image
+  {
+    id: "res_001_01_img",
+    courseId: "crs_001",
+    lessonId: "lsn_001_01",
+    type: "image",
+    title: "Workplace Safety Culture — Team Briefing",
+    url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=900&auto=format&fit=crop",
+    order: 2,
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(45),
+  },
+
+  // Course 1, Lesson 2 — Hazard control hierarchy infographic
+  {
+    id: "res_001_02_img",
+    courseId: "crs_001",
+    lessonId: "lsn_001_02",
+    type: "image",
+    title: "Hierarchy of Controls — NIOSH Infographic",
+    url: "https://www.cdc.gov/niosh/images/topics/hierarchy-controls/702px-NIOSH_Hierarchy_of_Controls_infographic.jpg",
+    order: 3,
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(45),
+  },
+
+  // Course 1, Lesson 3 — PPE types image + PDF guide
+  {
+    id: "res_001_03_img",
+    courseId: "crs_001",
+    lessonId: "lsn_001_03",
+    type: "image",
+    title: "Types of Personal Protective Equipment",
+    url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=900&auto=format&fit=crop",
+    order: 1,
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(45),
+  },
+  {
+    id: "res_001_03_pdf",
+    courseId: "crs_001",
+    lessonId: "lsn_001_03",
+    type: "pdf",
+    title: "OSHA PPE Selection Guide",
+    url: "https://www.osha.gov/sites/default/files/publications/osha3151.pdf",
+    fileName: "OSHA_PPE_Selection_Guide.pdf",
+    order: 2,
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(45),
+  },
+
+  // Course 2, Lesson 3 — Forklift safety image + quick reference PDF
+  {
+    id: "res_002_03_img",
+    courseId: "crs_002",
+    lessonId: "lsn_002_03",
+    type: "image",
+    title: "Forklift Operating in Warehouse Environment",
+    url: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=900&auto=format&fit=crop",
+    order: 2,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(40),
+  },
+  {
+    id: "res_002_03_pdf",
+    courseId: "crs_002",
+    lessonId: "lsn_002_03",
+    type: "pdf",
+    title: "OSHA Powered Industrial Trucks — Quick Reference",
+    url: "https://www.osha.gov/sites/default/files/publications/osha3949.pdf",
+    fileName: "OSHA_Forklift_Quick_Reference.pdf",
+    order: 3,
+    createdAt: daysAgo(40),
+    updatedAt: daysAgo(40),
+  },
+
+  // Course 3, Lesson 1 — GHS pictograms reference image
+  {
+    id: "res_003_01_img",
+    courseId: "crs_003",
+    lessonId: "lsn_003_01",
+    type: "image",
+    title: "GHS Hazard Pictograms — Quick Reference Chart",
+    url: "https://www.osha.gov/sites/default/files/GHS_Pictograms.jpg",
+    order: 3,
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(35),
+  },
+
+  // Course 3, Lesson 2 — Sample SDS document PDF
+  {
+    id: "res_003_02_pdf",
+    courseId: "crs_003",
+    lessonId: "lsn_003_02",
+    type: "pdf",
+    title: "Sample Safety Data Sheet (SDS) — Acetone",
+    url: "https://www.labchem.com/tools/msds/msds/LC10420.pdf",
+    fileName: "Sample_SDS_Acetone.pdf",
+    order: 3,
+    createdAt: daysAgo(35),
+    updatedAt: daysAgo(35),
+  },
+
+  // Course 4, Lesson 1 — Fire extinguisher image + Emergency Action Plan PDF
+  {
+    id: "res_004_01_img",
+    courseId: "crs_004",
+    lessonId: "lsn_004_01",
+    type: "image",
+    title: "Fire Extinguisher Stations — Know Your Location",
+    url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=900&auto=format&fit=crop",
+    order: 1,
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(10),
+  },
+  {
+    id: "res_004_01_pdf",
+    courseId: "crs_004",
+    lessonId: "lsn_004_01",
+    type: "pdf",
+    title: "OSHA Emergency Action Plan Guide",
+    url: "https://www.osha.gov/sites/default/files/publications/osha3088.pdf",
+    fileName: "OSHA_Emergency_Action_Plan.pdf",
+    order: 2,
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(10),
+  },
+
+  // Course 4, Lesson 2 — Evacuation image + Incident report form PDF
+  {
+    id: "res_004_02_img",
+    courseId: "crs_004",
+    lessonId: "lsn_004_02",
+    type: "image",
+    title: "Emergency Exit Signage — Evacuation Routes",
+    url: "https://images.unsplash.com/photo-1582139329536-e7284fece509?w=900&auto=format&fit=crop",
+    order: 1,
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(10),
+  },
+  {
+    id: "res_004_02_pdf",
+    courseId: "crs_004",
+    lessonId: "lsn_004_02",
+    type: "pdf",
+    title: "Workplace Incident Report Form Template",
+    url: "https://www.osha.gov/sites/default/files/publications/osha300.pdf",
+    fileName: "Incident_Report_Form_Template.pdf",
+    order: 2,
+    createdAt: daysAgo(10),
+    updatedAt: daysAgo(10),
+  },
+
+  // AI LOTO Course Resources
+  {
+    id: "res_ai_loto_01",
+    courseId: "crs_ai_loto_001",
+    lessonId: "lsn_ai_loto_01",
+    type: "text",
+    title: "Introduction to Lockout/Tagout",
+    content: "# Introduction to Lockout/Tagout (LOTO)\n\n## What is LOTO?\n\nLockout/Tagout (LOTO) refers to specific practices and procedures to safeguard employees from the unexpected energization or startup of machinery and equipment during service or maintenance.\n\n## Why LOTO Matters\n\n- Prevents approximately **120 fatalities** and **50,000 injuries** annually\n- Required by OSHA Standard **29 CFR 1910.147**\n- Applies to all energy sources: electrical, mechanical, hydraulic, pneumatic, chemical, thermal",
+    order: 0,
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "res_ai_loto_02",
+    courseId: "crs_ai_loto_001",
+    lessonId: "lsn_ai_loto_02",
+    type: "text",
+    title: "OSHA 1910.147 Requirements",
+    content: "# OSHA 1910.147 — Control of Hazardous Energy\n\n## Scope\n\nCovers servicing and maintenance of machines where unexpected energization could harm employees.\n\n## Employer Responsibilities\n\n1. **Develop** and implement an energy control program\n2. **Provide** locks, tags, and other hardware\n3. **Train** all affected employees\n4. **Conduct** periodic inspections at least annually",
+    order: 0,
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "res_ai_loto_03",
+    courseId: "crs_ai_loto_001",
+    lessonId: "lsn_ai_loto_03",
+    type: "text",
+    title: "LOTO Procedures Step-by-Step",
+    content: "# The 6-Step LOTO Process\n\n## Step 1: Preparation\nIdentify all energy sources. Review the equipment-specific energy control procedure.\n\n## Step 2: Notification\nNotify all affected employees.\n\n## Step 3: Shutdown\nShut down the machine using normal operating procedures.\n\n## Step 4: Isolation\nDisconnect or isolate all energy sources.\n\n## Step 5: Lockout/Tagout\nApply your personal lock and tag to every energy-isolating device.\n\n## Step 6: Verification\nAttempt to restart the machine to verify all energy has been isolated.",
+    order: 0,
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
   },
 ];
 

@@ -1,6 +1,6 @@
-# UpKeep LMS Prototype
+# UpKeep Learn Prototype
 
-This project builds **UpKeep LMS** — a compliance-focused learning management system integrated with EHS and CMMS.
+This project builds **UpKeep Learn** — a compliance-focused learning management system integrated with EHS and CMMS.
 
 It's designed as an **AI-first, modular web app** starting with:
 - **Phase I:** Compliance Tracker MVP (training records, reminders, dashboards)

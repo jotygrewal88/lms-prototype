@@ -6,7 +6,7 @@ import BrandProvider from "@/components/BrandProvider";
 import DevSmokeTest from "@/components/DevSmokeTest";
 
 export const metadata: Metadata = {
-  title: "UpKeep LMS",
+  title: "UpKeep Learn",
   description: "Compliance-focused Learning Management System",
 };
 

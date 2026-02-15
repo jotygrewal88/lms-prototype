@@ -4,7 +4,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import LearnerLayout from "@/components/layouts/LearnerLayout";
 import RouteGuard from "@/components/RouteGuard";
-import { getCurrentUser, getEarnedSkillsByUser, subscribe, getOrganization, getProgressCoursesByUserId, getCertificatesByUserId, getCompletionsByUserId } from "@/lib/store";
+import { getCurrentUser, getEarnedSkillsByUser, subscribe, getOrganization, getProgressCoursesByUserId, getCertificatesByUserId, getCompletionsByUserId, getActiveUserSkillRecordsByUserId, getSkillV2ById } from "@/lib/store";
+import type { SkillV2, UserSkillRecord } from "@/types";
 import { Download, BookOpen, Stamp, Calendar, Award, Shield, Verified, Sparkles, ChevronRight, Loader2 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -13,6 +14,7 @@ import SkillStamp from "@/components/learner/SkillStamp";
 export default function SkillPassportPage() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [earnedSkills, setEarnedSkills] = useState(getEarnedSkillsByUser(currentUser.id));
+  const [v2Records, setV2Records] = useState<UserSkillRecord[]>([]);
   const organization = getOrganization();
   const pdfRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -22,12 +24,25 @@ export default function SkillPassportPage() {
       const user = getCurrentUser();
       setCurrentUser(user);
       setEarnedSkills(getEarnedSkillsByUser(user.id));
+      setV2Records(getActiveUserSkillRecordsByUserId(user.id));
     };
     
     updateState();
     const unsubscribe = subscribe(updateState);
     return unsubscribe;
   }, []);
+
+  // Skills V2: Group V2 records by category (used when V2 records exist)
+  const v2SkillsByCategory = v2Records.reduce((acc, record) => {
+    const skill = getSkillV2ById(record.skillId);
+    if (!skill) return acc;
+    const category = skill.category || "Other";
+    if (!acc[category]) acc[category] = [];
+    acc[category].push({ skill, record });
+    return acc;
+  }, {} as Record<string, Array<{ skill: SkillV2; record: UserSkillRecord }>>);
+
+  const hasV2Skills = v2Records.length > 0;
 
   const getSkillEarnedDate = (skillId: string, courseId: string): string | null => {
     const userId = currentUser.id;
@@ -169,11 +184,11 @@ export default function SkillPassportPage() {
                   {/* Stats cards */}
                   <div className="flex gap-3">
                     <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-4 text-center min-w-[100px]">
-                      <p className="text-3xl font-bold text-white">{earnedSkills.length}</p>
+                      <p className="text-3xl font-bold text-white">{hasV2Skills ? v2Records.length : earnedSkills.length}</p>
                       <p className="text-xs text-slate-400 font-medium">Skills</p>
                     </div>
                     <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-4 text-center min-w-[100px]">
-                      <p className="text-3xl font-bold text-white">{Object.keys(skillsByCategory).length}</p>
+                      <p className="text-3xl font-bold text-white">{hasV2Skills ? Object.keys(v2SkillsByCategory).length : Object.keys(skillsByCategory).length}</p>
                       <p className="text-xs text-slate-400 font-medium">Categories</p>
                     </div>
                     <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-4 text-center min-w-[100px]">
@@ -185,7 +200,7 @@ export default function SkillPassportPage() {
                   {/* Download button */}
                   <button
                     onClick={handleDownloadPDF}
-                    disabled={isGeneratingPDF || earnedSkills.length === 0}
+                    disabled={isGeneratingPDF || (earnedSkills.length === 0 && !hasV2Skills)}
                     className="flex items-center justify-center gap-2 bg-white hover:bg-gray-100 text-slate-900 font-semibold py-3 px-6 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isGeneratingPDF ? (
@@ -206,7 +221,7 @@ export default function SkillPassportPage() {
           </div>
 
           {/* Skills Content */}
-          {earnedSkills.length === 0 ? (
+          {earnedSkills.length === 0 && !hasV2Skills ? (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
               <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
                 <Stamp className="w-10 h-10 text-slate-400" />
@@ -227,7 +242,42 @@ export default function SkillPassportPage() {
             </div>
           ) : (
             <div className="space-y-8">
-              {Object.entries(skillsByCategory).map(([category, items]) => {
+              {/* Skills V2 records (shown when V2 data exists) */}
+              {hasV2Skills && (
+                <>
+                  {Object.entries(v2SkillsByCategory).map(([category, items]) => {
+                    const headerStyle = categoryHeaderStyles[category] || categoryHeaderStyles.Other;
+                    return (
+                      <div key={`v2-${category}`}>
+                        <div className={`${headerStyle.bg} ${headerStyle.border} border rounded-xl px-5 py-3 mb-4 flex items-center justify-between`}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center">
+                              <Shield className={`w-4 h-4 ${headerStyle.icon}`} />
+                            </div>
+                            <div>
+                              <h2 className="font-bold text-gray-900">{category}</h2>
+                              <p className="text-xs text-gray-500">{items.length} skill{items.length !== 1 ? "s" : ""} earned</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                          {items.map(({ skill, record }) => (
+                            <SkillStamp
+                              key={record.id}
+                              skill={{ id: skill.id, name: skill.name, category: skill.category }}
+                              courses={[]}
+                              earnedDate={record.achievedDate || undefined}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Legacy skills rendering (shown when no V2 data) */}
+              {!hasV2Skills && Object.entries(skillsByCategory).map(([category, items]) => {
                 const headerStyle = categoryHeaderStyles[category] || categoryHeaderStyles.Other;
                 
                 return (
@@ -279,7 +329,7 @@ export default function SkillPassportPage() {
           )}
 
           {/* Footer */}
-          {earnedSkills.length > 0 && (
+          {(earnedSkills.length > 0 || hasV2Skills) && (
             <div className="text-center py-6 border-t border-gray-100">
               <p className="text-sm text-gray-500">
                 Issued by <span className="font-semibold text-gray-700">{organization.name}</span>

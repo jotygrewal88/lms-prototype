@@ -9,8 +9,9 @@ import { Training, TrainingAssignment, Role, TrainingCompletion, User, getFullNa
 import { getUsers, getSites, getDepartments, createTraining, updateTraining, createCompletion } from "@/lib/store";
 import { getUsersForTraining } from "@/lib/assignment";
 import { today, addDays } from "@/lib/utils";
-import { Search, X, UserPlus, Check, Tag } from "lucide-react";
+import { Search, X, UserPlus, Check, Tag, Paperclip, Loader2, FileText, ExternalLink } from "lucide-react";
 import Button from "./Button";
+import SkillPickerV2 from "./admin/skills/SkillPickerV2";
 
 const TRAINING_CATEGORIES: TrainingCategory[] = ["Safety", "Compliance", "Onboarding", "Technical", "HR", "Other"];
 const TRAINING_STATUSES: TrainingStatus[] = ["active", "draft", "archived"];
@@ -37,6 +38,20 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
   const [status, setStatus] = useState<TrainingStatus>("active");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [skillsGranted, setSkillsGranted] = useState<Array<{ skillId: string; level?: number; evidenceRequired: boolean }>>([]);
+  const [vendor, setVendor] = useState("");
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"details" | "assignment">("details");
+  
+  // Content URL / file upload state
+  const [contentUrl, setContentUrl] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Check if the current contentUrl is an uploaded file (starts with /uploads/)
+  const isUploadedFile = contentUrl.startsWith("/uploads/");
   
   // User search state
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -97,6 +112,19 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
       setCategory(training.category || "");
       setStatus(training.status || "active");
       setTags(training.tags || []);
+      setSkillsGranted(training.skillsGranted || []);
+      setVendor(training.vendor || "");
+      const existingContentUrl = training.contentUrl || "";
+      setContentUrl(existingContentUrl);
+      // If it's an uploaded file, extract filename from path
+      if (existingContentUrl.startsWith("/uploads/")) {
+        const pathParts = existingContentUrl.split("/");
+        const filename = pathParts[pathParts.length - 1];
+        const cleanFilename = filename.includes("-") ? filename.substring(filename.indexOf("-") + 1) : filename;
+        setUploadedFileName(cleanFilename);
+      } else {
+        setUploadedFileName(null);
+      }
     } else {
       resetForm();
     }
@@ -115,6 +143,12 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
     setStatus("active");
     setTags([]);
     setTagInput("");
+    setSkillsGranted([]);
+    setVendor("");
+    setActiveTab("details");
+    setContentUrl("");
+    setUploadedFileName(null);
+    setIsUploading(false);
     setUserSearchQuery("");
     setShowUserDropdown(false);
   };
@@ -140,6 +174,9 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         category: category || undefined,
         status,
         tags: tags.length > 0 ? tags : undefined,
+        skillsGranted: skillsGranted.length > 0 ? skillsGranted : undefined,
+        contentUrl: contentUrl || undefined,
+        vendor: vendor || undefined,
         updatedAt: new Date().toISOString(),
       });
     } else {
@@ -155,6 +192,9 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         category: category || undefined,
         status,
         tags: tags.length > 0 ? tags : undefined,
+        skillsGranted: skillsGranted.length > 0 ? skillsGranted : undefined,
+        contentUrl: contentUrl || undefined,
+        vendor: vendor || undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -242,6 +282,49 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
     }
   };
   
+  // Handle file upload for content attachment
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    try {
+      let resourceType = "pdf";
+      if (file.type.startsWith("image/")) {
+        resourceType = "image";
+      } else if (file.type.startsWith("video/")) {
+        resourceType = "video";
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", resourceType);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        setContentUrl(result.url);
+        setUploadedFileName(file.name);
+      } else {
+        alert(result.error || "Failed to upload file");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   const getSiteName = (siteId?: string) => {
     if (!siteId) return "";
     const site = sites.find(s => s.id === siteId);
@@ -296,167 +379,236 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                placeholder="e.g., Forklift Safety Training"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Description
-              </label>
-              <textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="Brief description of the training content and objectives..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="standardRef" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Standard Reference
-                </label>
-                <input
-                  type="text"
-                  id="standardRef"
-                  value={standardRef}
-                  onChange={(e) => setStandardRef(e.target.value)}
-                  placeholder="e.g., OSHA 1910.147"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="retrainInterval" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Retrain Interval (days)
-                </label>
-                <input
-                  type="number"
-                  id="retrainInterval"
-                  value={retrainIntervalDays}
-                  onChange={(e) => setRetrainIntervalDays(parseInt(e.target.value))}
-                  min="1"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Category */}
-            <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Category
-              </label>
-              <select
-                id="category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value as TrainingCategory | "")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              >
-                <option value="">Select category...</option>
-                {TRAINING_CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Tags */}
-            <div>
-              <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Tags
-              </label>
-              
-              {/* Display existing tags */}
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {tags.map(tag => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
-                    >
-                      <Tag className="w-3 h-3" />
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(tag)}
-                        className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
+          {/* Tab Navigation */}
+          <div className="flex border-b border-gray-200 mb-5">
+            <button
+              type="button"
+              onClick={() => setActiveTab("details")}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "details"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("assignment")}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "assignment"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Assignment
+              {(selectedRoles.length > 0 || selectedSites.length > 0 || selectedDepartments.length > 0 || selectedUsers.length > 0) && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-100 text-blue-700 rounded-full">
+                  {selectedRoles.length + selectedSites.length + selectedDepartments.length + selectedUsers.length}
+                </span>
               )}
-              
-              {/* Tag input */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  id="tags"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  placeholder="Type a tag and press Enter..."
-                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={addTag}
-                  disabled={!tagInput.trim()}
-                  className="px-4"
-                >
-                  Add
-                </Button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Press Enter or click Add to add a tag
-              </p>
-            </div>
+            </button>
+          </div>
 
-            <div className="border-t border-gray-200 pt-5">
-              <label className="block text-sm font-medium text-gray-900 mb-3">
-                Assignment Criteria
-              </label>
-              <p className="text-xs text-gray-500 mb-4">
-                Select who should complete this training. You can combine multiple criteria.
-              </p>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* ===== TAB 1: DETAILS ===== */}
+            {activeTab === "details" && (
+              <div className="space-y-5">
+                <div>
+                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    placeholder="e.g., Forklift Safety Training"
+                    required
+                  />
+                </div>
 
-              <div className="space-y-4">
-                {/* Individual Users Section */}
-                <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-                    <UserPlus className="w-4 h-4 text-blue-600" />
-                    Specific Users
+                <div>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Description
+                  </label>
+                  <textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    placeholder="Brief description of the training content and objectives..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  />
+                </div>
+
+                {/* Content URL / File Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Content Link / Attachment
                   </label>
                   
-                  {/* Selected users display */}
-                  {selectedUserObjects.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {selectedUserObjects.map(user => (
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*,application/pdf,video/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  
+                  {isUploadedFile && uploadedFileName ? (
+                    <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <FileText className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      <a
+                        href={contentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 text-sm text-blue-600 hover:text-blue-800 hover:underline truncate"
+                      >
+                        {uploadedFileName}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContentUrl("");
+                          setUploadedFileName(null);
+                        }}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                        title="Remove file"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="url"
+                          id="contentUrl"
+                          value={contentUrl}
+                          onChange={(e) => setContentUrl(e.target.value)}
+                          placeholder="Enter URL or attach a file"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        />
+                        {contentUrl && !isUploadedFile && (
+                          <a
+                            href={contentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600"
+                            title="Open URL"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="flex items-center justify-center px-3 py-2.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        title="Attach a file"
+                      >
+                        {isUploading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Paperclip className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isUploadedFile ? "Click filename to view, or X to remove" : "Link to external content or click the paperclip to upload a file"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="standardRef" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Standard Reference
+                    </label>
+                    <input
+                      type="text"
+                      id="standardRef"
+                      value={standardRef}
+                      onChange={(e) => setStandardRef(e.target.value)}
+                      placeholder="e.g., OSHA 1910.147"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="retrainInterval" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Retrain Interval (days)
+                    </label>
+                    <input
+                      type="number"
+                      id="retrainInterval"
+                      value={retrainIntervalDays}
+                      onChange={(e) => setRetrainIntervalDays(parseInt(e.target.value))}
+                      min="1"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Category */}
+                  <div>
+                    <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Category
+                    </label>
+                    <select
+                      id="category"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as TrainingCategory | "")}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    >
+                      <option value="">Select category...</option>
+                      {TRAINING_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Vendor */}
+                  <div>
+                    <label htmlFor="vendor" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Vendor
+                    </label>
+                    <input
+                      type="text"
+                      id="vendor"
+                      value={vendor}
+                      onChange={(e) => setVendor(e.target.value)}
+                      placeholder="e.g., SafetyCo, Internal"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Tags
+                  </label>
+                  
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {tags.map(tag => (
                         <span
-                          key={user.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium"
+                          key={tag}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
                         >
-                          <span>{getFullName(user)}</span>
+                          <Tag className="w-3 h-3" />
+                          {tag}
                           <button
                             type="button"
-                            onClick={() => removeUser(user.id)}
-                            className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-blue-200 transition-colors"
+                            onClick={() => removeTag(tag)}
+                            className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -465,147 +617,227 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
                     </div>
                   )}
                   
-                  {/* User search input */}
-                  <div className="relative" ref={userSearchRef}>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        value={userSearchQuery}
-                        onChange={(e) => {
-                          setUserSearchQuery(e.target.value);
-                          setShowUserDropdown(true);
-                        }}
-                        onFocus={() => setShowUserDropdown(true)}
-                        placeholder="Search users by name or email..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                      />
-                    </div>
-                    
-                    {/* User dropdown */}
-                    {showUserDropdown && (
-                      <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-gray-200 shadow-lg max-h-60 overflow-y-auto">
-                        {filteredUsers.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500">
-                            No users found
-                          </div>
-                        ) : (
-                          filteredUsers.map(user => {
-                            const isSelected = selectedUsers.includes(user.id);
-                            return (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      id="tags"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                      placeholder="Type a tag and press Enter..."
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={addTag}
+                      disabled={!tagInput.trim()}
+                      className="px-4"
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Press Enter or click Add to add a tag
+                  </p>
+                </div>
+
+                {/* Skills Granted on Completion */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Skills Granted on Completion
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Learners will earn these skills when they complete this training
+                  </p>
+                  <SkillPickerV2
+                    selectedSkills={skillsGranted}
+                    onChange={(updated) => setSkillsGranted(updated)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ===== TAB 2: ASSIGNMENT ===== */}
+            {activeTab === "assignment" && (
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Assignment Criteria
+                  </label>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Select who should complete this training. You can combine multiple criteria.
+                  </p>
+
+                  <div className="space-y-4">
+                    {/* Individual Users Section */}
+                    <div className="bg-blue-50/50 rounded-lg p-4 border border-blue-100">
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                        <UserPlus className="w-4 h-4 text-blue-600" />
+                        Specific Users
+                      </label>
+                      
+                      {selectedUserObjects.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {selectedUserObjects.map(user => (
+                            <span
+                              key={user.id}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium"
+                            >
+                              <span>{getFullName(user)}</span>
                               <button
-                                key={user.id}
                                 type="button"
-                                onClick={() => {
-                                  toggleUser(user.id);
-                                  setUserSearchQuery("");
-                                }}
-                                className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 flex items-center justify-between transition-colors ${
-                                  isSelected ? "bg-blue-50" : ""
-                                }`}
+                                onClick={() => removeUser(user.id)}
+                                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-blue-200 transition-colors"
                               >
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {getFullName(user)}
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    {user.email}
-                                    {user.siteId && ` • ${getSiteName(user.siteId)}`}
-                                    {user.departmentId && ` • ${getDeptName(user.departmentId)}`}
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                                )}
+                                <X className="w-3 h-3" />
                               </button>
-                            );
-                          })
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className="relative" ref={userSearchRef}>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={userSearchQuery}
+                            onChange={(e) => {
+                              setUserSearchQuery(e.target.value);
+                              setShowUserDropdown(true);
+                            }}
+                            onFocus={() => setShowUserDropdown(true)}
+                            placeholder="Search users by name or email..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          />
+                        </div>
+                        
+                        {showUserDropdown && (
+                          <div className="absolute z-10 mt-1 w-full bg-white rounded-lg border border-gray-200 shadow-lg max-h-60 overflow-y-auto">
+                            {filteredUsers.length === 0 ? (
+                              <div className="px-4 py-3 text-sm text-gray-500">
+                                No users found
+                              </div>
+                            ) : (
+                              filteredUsers.map(user => {
+                                const isSelected = selectedUsers.includes(user.id);
+                                return (
+                                  <button
+                                    key={user.id}
+                                    type="button"
+                                    onClick={() => {
+                                      toggleUser(user.id);
+                                      setUserSearchQuery("");
+                                    }}
+                                    className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                                      isSelected ? "bg-blue-50" : ""
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900">
+                                        {getFullName(user)}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        {user.email}
+                                        {user.siteId && ` • ${getSiteName(user.siteId)}`}
+                                        {user.departmentId && ` • ${getDeptName(user.departmentId)}`}
+                                      </div>
+                                    </div>
+                                    {isSelected && (
+                                      <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                    )}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Roles */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-2">By Role</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["ADMIN", "MANAGER", "LEARNER"] as Role[]).map(role => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => toggleRole(role)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          selectedRoles.includes(role)
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sites */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-2">By Site</label>
-                  <div className="flex flex-wrap gap-2">
-                    {sites.map(site => (
-                      <button
-                        key={site.id}
-                        type="button"
-                        onClick={() => toggleSite(site.id)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          selectedSites.includes(site.id)
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {site.name}{site.region && ` (${site.region})`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Departments - Dynamic based on selected sites */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-2">
-                    By Department
-                    {selectedSites.length > 0 && (
-                      <span className="ml-2 text-blue-600 font-normal">
-                        (filtered by selected sites)
-                      </span>
-                    )}
-                  </label>
-                  {filteredDepartments.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">
-                      Select a site above to see available departments
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {filteredDepartments.map(dept => {
-                        const site = sites.find(s => s.id === dept.siteId);
-                        return (
+                    </div>
+                    
+                    {/* Roles */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">By Role</label>
+                      <div className="flex flex-wrap gap-2">
+                        {(["ADMIN", "MANAGER", "LEARNER"] as Role[]).map(role => (
                           <button
-                            key={dept.id}
+                            key={role}
                             type="button"
-                            onClick={() => toggleDepartment(dept.id)}
+                            onClick={() => toggleRole(role)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                              selectedDepartments.includes(dept.id)
+                              selectedRoles.includes(role)
                                 ? "bg-blue-600 text-white shadow-sm"
                                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                             }`}
                           >
-                            {dept.name} {site && <span className="opacity-70">({site.name}{site.region && ` - ${site.region}`})</span>}
+                            {role}
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  )}
+
+                    {/* Sites */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">By Site</label>
+                      <div className="flex flex-wrap gap-2">
+                        {sites.map(site => (
+                          <button
+                            key={site.id}
+                            type="button"
+                            onClick={() => toggleSite(site.id)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                              selectedSites.includes(site.id)
+                                ? "bg-blue-600 text-white shadow-sm"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            {site.name}{site.region && ` (${site.region})`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Departments */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">
+                        By Department
+                        {selectedSites.length > 0 && (
+                          <span className="ml-2 text-blue-600 font-normal">
+                            (filtered by selected sites)
+                          </span>
+                        )}
+                      </label>
+                      {filteredDepartments.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">
+                          Select a site above to see available departments
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {filteredDepartments.map(dept => {
+                            const site = sites.find(s => s.id === dept.siteId);
+                            return (
+                              <button
+                                key={dept.id}
+                                type="button"
+                                onClick={() => toggleDepartment(dept.id)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                  selectedDepartments.includes(dept.id)
+                                    ? "bg-blue-600 text-white shadow-sm"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                }`}
+                              >
+                                {dept.name} {site && <span className="opacity-70">({site.name}{site.region && ` - ${site.region}`})</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-5 border-t border-gray-200">
               <Button type="button" variant="secondary" onClick={onClose}>

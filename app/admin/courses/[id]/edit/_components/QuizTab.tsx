@@ -2,10 +2,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Sparkles, Edit2, Trash2, Copy, GripVertical, Eye, Settings, Undo2, Redo2, History } from "lucide-react";
+import { Plus, Sparkles, Edit2, Trash2, Copy, GripVertical, Eye, Settings, Undo2, Redo2, History, ClipboardCheck, BookOpen, Check } from "lucide-react";
 import { Quiz, Lesson, Question, QuestionType } from "@/types";
-import { getAttemptsForQuiz, getUsers, getAllQuizAttempts } from "@/lib/store";
-import { getFullName } from "@/types";
+import { getQuizzesByLessonId, getQuizByCourseId, getQuizzesByCourseId } from "@/lib/store";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import { formatDate } from "@/lib/utils";
@@ -146,14 +145,11 @@ function SortableQuestionCard({
           </p>
           {question.options && question.options.length > 0 && (
             <div className="text-xs text-gray-600 space-y-1">
-              {question.options.slice(0, 2).map((opt, idx) => (
-                <div key={opt.id}>
+              {question.options.map((opt) => (
+                <div key={opt.id} className={opt.correct ? 'text-green-700 font-medium' : ''}>
                   {opt.correct ? '✓' : '○'} {opt.text}
                 </div>
               ))}
-              {question.options.length > 2 && (
-                <div className="text-gray-400">+{question.options.length - 2} more...</div>
-              )}
             </div>
           )}
         </div>
@@ -194,6 +190,11 @@ export default function QuizTab(props: QuizTabProps) {
     activeLessonId,
     lessons,
     isManager,
+    quizType,
+    selectedLessonIdForQuiz,
+    onQuizTypeChange,
+    onSelectLessonForQuiz,
+    onCreateLessonQuiz,
     onCreateQuestion,
     onEditQuestion,
     onDeleteQuestion,
@@ -215,63 +216,135 @@ export default function QuizTab(props: QuizTabProps) {
     })
   );
 
-  // Get all attempts for this quiz
-  const allUsers = getUsers();
-  const allAttempts = getAllQuizAttempts();
-  const attemptsByUser: Record<string, Array<{ attempt: any; user: any }>> = {};
-  
-  allAttempts
-    .filter(attempt => attempt.quizId === quiz?.id)
-    .forEach(attempt => {
-      const user = allUsers.find(u => u.id === attempt.userId);
-      if (user) {
-        if (!attemptsByUser[attempt.userId]) {
-          attemptsByUser[attempt.userId] = [];
-        }
-        attemptsByUser[attempt.userId].push({ attempt, user });
-      }
-    });
+  // Compute quiz counts for the toggle badges
+  const courseQuiz = getQuizByCourseId(courseId);
+  const allCourseQuizzes = getQuizzesByCourseId(courseId);
+  const lessonQuizCount = lessons.filter((l) => {
+    const lq = getQuizzesByLessonId(l.id);
+    return lq.length > 0;
+  }).length;
+  const hasCourseQuiz = allCourseQuizzes.some((q) => !q.lessonId);
 
-  // Calculate stats for each user
-  const userStats = Object.entries(attemptsByUser).map(([userId, attempts]) => {
-    const submittedAttempts = attempts.filter(a => a.attempt.submittedAt);
-    const lastAttempt = submittedAttempts.length > 0 
-      ? submittedAttempts.sort((a, b) => 
-          new Date(b.attempt.submittedAt || 0).getTime() - new Date(a.attempt.submittedAt || 0).getTime()
-        )[0]
-      : null;
-    
-    return {
-      user: attempts[0].user,
-      attemptCount: submittedAttempts.length,
-      lastScore: lastAttempt?.attempt.scorePct,
-      lastAttemptDate: lastAttempt?.attempt.submittedAt,
-      passed: lastAttempt?.attempt.passed,
-    };
-  });
-
-  if (!quiz) {
-    return (
-      <div className="max-w-5xl space-y-6">
-        <div className="text-center py-12 bg-white rounded-xl shadow-md border-2 border-gray-100">
-          <p className="text-gray-500 mb-4">No quiz available for this course.</p>
+  // Build the empty state for when no quiz is selected/available
+  const renderEmptyState = () => (
+    <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
+      {quizType === "course" ? (
+        <>
+          <ClipboardCheck className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 mb-1 font-medium">No final assessment yet</p>
+          <p className="text-sm text-gray-400 mb-4">Create a course-level quiz that learners take at the end.</p>
           {!isManager && (
-            <div className="flex gap-3 justify-center">
-              <Button onClick={onCreateQuestion} variant="primary">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Quiz
-              </Button>
-            </div>
+            <Button onClick={onCreateQuestion} variant="primary" className="!text-sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Final Assessment
+            </Button>
           )}
-        </div>
-      </div>
-    );
-  }
+        </>
+      ) : (
+        <>
+          <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 mb-1 font-medium">
+            {selectedLessonIdForQuiz
+              ? `No quiz for this lesson`
+              : `Select a lesson`}
+          </p>
+          <p className="text-sm text-gray-400 mb-4">
+            {selectedLessonIdForQuiz
+              ? "Add a knowledge check quiz for this lesson."
+              : "Choose a lesson from the list above to view or create its quiz."}
+          </p>
+          {!isManager && selectedLessonIdForQuiz && (
+            <Button onClick={onCreateLessonQuiz} variant="primary" className="!text-sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Lesson Quiz
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
 
-  const questions = quiz.questions || [];
+  const questions = quiz?.questions || [];
 
   return (
     <div className="max-w-5xl space-y-6">
+      {/* Quiz Type Toggle */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => onQuizTypeChange("course")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                quizType === "course"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              Course Quiz
+              {hasCourseQuiz && (
+                <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">1</span>
+              )}
+            </button>
+            <button
+              onClick={() => onQuizTypeChange("lesson")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                quizType === "lesson"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              Lesson Quizzes
+              <span className={`ml-1 inline-flex items-center justify-center px-1.5 h-5 rounded-full text-xs font-bold ${
+                lessonQuizCount > 0 ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-500"
+              }`}>
+                {lessonQuizCount}/{lessons.length}
+              </span>
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {quizType === "course"
+              ? "Single final assessment at the end of the course"
+              : "Knowledge check quizzes after individual lessons"}
+          </span>
+        </div>
+
+        {/* Lesson Selector (only visible when quizType is "lesson") */}
+        {quizType === "lesson" && lessons.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+            {lessons.map((lesson) => {
+              const hasQuiz = getQuizzesByLessonId(lesson.id).length > 0;
+              const isSelected = selectedLessonIdForQuiz === lesson.id;
+              return (
+                <button
+                  key={lesson.id}
+                  onClick={() => onSelectLessonForQuiz(lesson.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                    isSelected
+                      ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
+                      : hasQuiz
+                      ? "bg-white border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-blue-50/50"
+                      : "bg-white border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600"
+                  }`}
+                  title={hasQuiz ? `${lesson.title} — has quiz` : `${lesson.title} — no quiz`}
+                >
+                  {hasQuiz && (
+                    <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
+                  )}
+                  <span className="truncate max-w-[140px]">
+                    {lesson.order + 1}. {lesson.title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Show empty state or quiz editor */}
+      {!quiz ? renderEmptyState() : (
+      <>
       {/* Quiz Editor Section */}
       <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
@@ -376,69 +449,8 @@ export default function QuizTab(props: QuizTabProps) {
         </div>
       </div>
 
-      {/* Attempts Table Section */}
-      <div className="bg-white rounded-xl shadow-md border-2 border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
-            <h3 className="text-lg font-bold text-gray-900">Quiz Attempts</h3>
-          </div>
-        </div>
-        <div className="p-6">
-          {userStats.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No attempts recorded yet.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Learner</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Attempts</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Last Score</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Last Attempt</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userStats.map((stat) => (
-                    <tr key={stat.user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-gray-900">
-                        {getFullName(stat.user)}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {stat.attemptCount}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {stat.lastScore !== undefined ? `${stat.lastScore}%` : '-'}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {stat.lastAttemptDate
-                          ? new Date(stat.lastAttemptDate).toLocaleDateString()
-                          : '-'}
-                      </td>
-                      <td className="py-3 px-4">
-                        {stat.passed !== undefined && (
-                          <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              stat.passed
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {stat.passed ? 'Passed' : 'Failed'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      </>
+      )}
     </div>
   );
 }

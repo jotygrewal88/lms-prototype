@@ -1,4 +1,4 @@
-# UpKeep LMS - UI Refresh v2 Summary
+# UpKeep Learn - UI Refresh v2 Summary
 **Final Visual Refinement - EHS Design Parity**
 
 ---
@@ -32,7 +32,7 @@ Apply final visual refinement to match EHS conventions precisely. Remove ALL emo
 - Height: `h-14`
 - Background: `#0B1220` (dark blue-gray)
 - Text: `text-white`
-- Left brand: `<Book className="w-4 h-4 text-white/80" />` + "UpKeep LMS" font-semibold
+- Left brand: `<Book className="w-4 h-4 text-white/80" />` + "UpKeep Learn" font-semibold
 - Right controls: scope + department + role selectors aligned right with `mr-4`
 - No raster logo image
 
@@ -350,7 +350,7 @@ Apply final visual refinement to match EHS conventions precisely. Remove ALL emo
 
 **LMS UI refinement v2 applied (no emojis, book icon header, EHS-parity spacing) — build passing.**
 
-The UpKeep LMS now has **100% EHS design parity**:
+The UpKeep Learn now has **100% EHS design parity**:
 - Professional dark header with lucide Book icon
 - Clean left navigation with semantic icons and blue rail
 - Compact, data-dense dashboard with color-coded KPIs

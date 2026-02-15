@@ -7,6 +7,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
@@ -132,8 +133,8 @@ export default function AuditsListPage() {
                           <td className="px-6 py-4 text-sm text-gray-500">
                             {formatDate(snapshot.createdAt)}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            {creator ? getFullName(creator) : "Unknown"}
+                          <td className="px-6 py-4 text-sm">
+                            {creator ? <Link href={`/admin/users/${creator.id}`} className="text-blue-600 hover:text-blue-800 hover:underline" onClick={(e) => e.stopPropagation()}>{getFullName(creator)}</Link> : "Unknown"}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
                             {snapshot.filtersSummary}

@@ -38,7 +38,9 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
     filters.departmentId ||
     filters.dateFrom ||
     filters.dateTo ||
-    filters.search;
+    filters.search ||
+    filters.sourceType ||
+    filters.allowedForSynthesis !== undefined;
 
   return (
     <div className="bg-white border-b border-gray-200 p-4 space-y-4">
@@ -54,7 +56,7 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
       </div>
 
       {/* Filter Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         {/* Type */}
         <select
           value={filters.type || ""}
@@ -141,6 +143,34 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
               <option key={dept.id} value={dept.id}>{dept.name}</option>
             ))}
         </select>
+
+        {/* Source Type */}
+        <select
+          value={filters.sourceType || ""}
+          onChange={(e) => updateFilter("sourceType", e.target.value as LibraryFiltersType["sourceType"] || undefined)}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          <option value="">All Source Types</option>
+          <option value="policy">Policy</option>
+          <option value="sop">SOP</option>
+          <option value="manual">Manual</option>
+          <option value="regulation">Regulation</option>
+          <option value="text">Text</option>
+        </select>
+
+        {/* AI Synthesis */}
+        <select
+          value={filters.allowedForSynthesis === undefined ? "" : filters.allowedForSynthesis ? "true" : "false"}
+          onChange={(e) => {
+            const val = e.target.value;
+            updateFilter("allowedForSynthesis", val === "" ? undefined : val === "true");
+          }}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          <option value="">AI Synthesis: All</option>
+          <option value="true">AI Enabled</option>
+          <option value="false">AI Disabled</option>
+        </select>
       </div>
 
       {/* Active Filters & Clear */}
@@ -199,6 +229,22 @@ export default function LibraryFiltersComponent({ filters, onChange }: LibraryFi
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
                 Search: {filters.search}
                 <button onClick={() => updateFilter("search", undefined)}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filters.sourceType && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 text-purple-700 text-xs">
+                Source: {filters.sourceType.toUpperCase()}
+                <button onClick={() => updateFilter("sourceType", undefined)}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filters.allowedForSynthesis !== undefined && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-50 text-purple-700 text-xs">
+                AI: {filters.allowedForSynthesis ? "Enabled" : "Disabled"}
+                <button onClick={() => updateFilter("allowedForSynthesis", undefined)}>
                   <X className="w-3 h-3" />
                 </button>
               </span>

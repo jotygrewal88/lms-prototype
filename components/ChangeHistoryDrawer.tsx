@@ -9,6 +9,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { 
   RefreshCw, 
   Calendar, 
@@ -115,7 +116,7 @@ export default function ChangeHistoryDrawer({
                         {log.summary}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {user ? getFullName(user) : "Unknown User"} • {formatDate(log.at)}
+                        {user ? <Link href={`/admin/users/${user.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(user)}</Link> : "Unknown User"} • {formatDate(log.at)}
                       </p>
                       {log.metadata?.reason && (
                         <p className="text-xs text-gray-600 mt-1 italic">

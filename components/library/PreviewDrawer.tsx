@@ -25,6 +25,10 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
   const [editCategories, setEditCategories] = useState<string[]>([]);
   const [editSiteId, setEditSiteId] = useState<string>("");
   const [editDepartmentId, setEditDepartmentId] = useState<string>("");
+  const [editSourceType, setEditSourceType] = useState<string>("");
+  const [editRegulatoryRef, setEditRegulatoryRef] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editAllowedForSynthesis, setEditAllowedForSynthesis] = useState(false);
   const [imageZoom, setImageZoom] = useState(1);
 
   const currentUser = getCurrentUser();
@@ -43,6 +47,10 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
       setEditCategories([...item.categories]);
       setEditSiteId(item.siteId || "");
       setEditDepartmentId(item.departmentId || "");
+      setEditSourceType(item.sourceType || "");
+      setEditRegulatoryRef(item.regulatoryRef || "");
+      setEditContent(item.content || "");
+      setEditAllowedForSynthesis(item.allowedForSynthesis || false);
       setImageZoom(1);
     }
   }, [item]);
@@ -58,6 +66,10 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
         categories: editCategories,
         siteId: editSiteId || undefined,
         departmentId: editDepartmentId || undefined,
+        sourceType: (editSourceType as LibraryItem["sourceType"]) || undefined,
+        regulatoryRef: editRegulatoryRef.trim() || undefined,
+        content: editContent || undefined,
+        allowedForSynthesis: editAllowedForSynthesis,
       });
       setIsEditing(false);
       onUpdate?.();
@@ -75,6 +87,10 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
       setEditCategories([...item.categories]);
       setEditSiteId(item.siteId || "");
       setEditDepartmentId(item.departmentId || "");
+      setEditSourceType(item.sourceType || "");
+      setEditRegulatoryRef(item.regulatoryRef || "");
+      setEditContent(item.content || "");
+      setEditAllowedForSynthesis(item.allowedForSynthesis || false);
     }
     setIsEditing(false);
   };
@@ -82,6 +98,17 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
   if (!isOpen || !item) return null;
 
   const renderPreview = () => {
+    // Pasted text content -- render as formatted text
+    if (item.content && !item.url) {
+      return (
+        <div className="p-8 overflow-auto h-full">
+          <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+            {item.content}
+          </div>
+        </div>
+      );
+    }
+
     if (item.type === "file") {
       // PDF Preview
       if (item.fileType === "pdf" && item.url) {
@@ -344,6 +371,64 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
                     </select>
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Source Type
+                  </label>
+                  <select
+                    value={editSourceType}
+                    onChange={(e) => setEditSourceType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="">None (General)</option>
+                    <option value="policy">Policy</option>
+                    <option value="sop">SOP</option>
+                    <option value="manual">Manual</option>
+                    <option value="regulation">Regulation</option>
+                    <option value="text">Text</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Regulatory Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={editRegulatoryRef}
+                    onChange={(e) => setEditRegulatoryRef(e.target.value)}
+                    placeholder="e.g., OSHA 1910.147"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  />
+                </div>
+
+                {item.content !== undefined && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Content (Markdown)
+                    </label>
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={6}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="editAllowSynthesis"
+                    checked={editAllowedForSynthesis}
+                    onChange={(e) => setEditAllowedForSynthesis(e.target.checked)}
+                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  />
+                  <label htmlFor="editAllowSynthesis" className="text-sm text-gray-700">
+                    Allow AI synthesis
+                  </label>
+                </div>
               </>
             ) : (
               <>
@@ -406,6 +491,42 @@ export default function PreviewDrawer({ item, isOpen, onClose, onUpdate }: Previ
                   <div>
                     <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Version</h3>
                     <p className="text-sm text-gray-900">v{item.version}</p>
+                  </div>
+                )}
+
+                {item.sourceType && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Source Type</h3>
+                    <span className="inline-block px-2 py-1 rounded-md bg-purple-100 text-purple-800 text-xs font-medium uppercase">
+                      {item.sourceType}
+                    </span>
+                  </div>
+                )}
+
+                {item.regulatoryRef && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Regulatory Ref</h3>
+                    <p className="text-sm text-blue-700 font-medium">{item.regulatoryRef}</p>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">AI Synthesis</h3>
+                  <span className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${
+                    item.allowedForSynthesis
+                      ? "bg-green-100 text-green-800"
+                      : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {item.allowedForSynthesis ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+
+                {item.content && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Content Preview</h3>
+                    <div className="text-xs text-gray-700 bg-white rounded-md p-3 border border-gray-200 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono">
+                      {item.content.slice(0, 500)}{item.content.length > 500 ? "..." : ""}
+                    </div>
                   </div>
                 )}
               </>

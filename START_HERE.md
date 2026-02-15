@@ -1,4 +1,4 @@
-# 🚀 UpKeep LMS - Epic 1 Complete!
+# 🚀 UpKeep Learn - Epic 1 Complete!
 
 ## ✅ Status: Ready for Demo
 
@@ -17,7 +17,7 @@ Then open: **http://localhost:3000**
 ## What You'll See
 
 ### 1. Default View (Admin)
-- Header with "UpKeep LMS" logo and role toggle
+- Header with "UpKeep Learn" logo and role toggle
 - Left sidebar with: Dashboard, Trainings, Compliance, Users, Settings
 - Dashboard page with stat cards
 - **Current User**: Sarah Admin (ADMIN)

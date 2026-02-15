@@ -117,6 +117,58 @@ h2 {
   margin-top: 0.5rem;
 }
 
+/* Lesson Content Callout Boxes */
+.callout {
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: 0.5rem;
+  border-left: 4px solid;
+  font-size: 0.925rem;
+  line-height: 1.6;
+}
+.callout ul, .callout ol {
+  margin: 0.5rem 0 0 1.25rem;
+}
+.callout li {
+  margin-bottom: 0.25rem;
+}
+.callout[data-variant="warning"] {
+  background-color: #fffbeb;
+  border-left-color: #f59e0b;
+  color: #92400e;
+}
+.callout[data-variant="danger"] {
+  background-color: #fef2f2;
+  border-left-color: #ef4444;
+  color: #991b1b;
+}
+.callout[data-variant="tip"] {
+  background-color: #ecfdf5;
+  border-left-color: #10b981;
+  color: #065f46;
+}
+.callout[data-variant="key-point"] {
+  background-color: #eff6ff;
+  border-left-color: #3b82f6;
+  color: #1e40af;
+}
+
+/* Image Placeholder */
+.image-placeholder {
+  margin: 1.5rem 0;
+  padding: 2.5rem 1.5rem;
+  background-color: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 0.75rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+.image-placeholder::before {
+  content: attr(data-caption);
+  display: block;
+}
+
 /* Phase I Polish Pack: Print Styles */
 @media print {
   /* Hide non-printable elements */

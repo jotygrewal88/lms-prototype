@@ -1,7 +1,7 @@
 # Phase I AI Uplift - Implementation Summary
 
 ## Overview
-Successfully implemented Smart Compliance Coach and AI Notification Suggestions features for the UpKeep LMS. All features run entirely client-side using scope-aware data calculations.
+Successfully implemented Smart Compliance Coach and AI Notification Suggestions features for the UpKeep Learn. All features run entirely client-side using scope-aware data calculations.
 
 ## Features Implemented
 

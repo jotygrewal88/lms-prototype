@@ -165,7 +165,7 @@ Successfully implemented a comprehensive notification system that unifies the AI
    - Learner: Blocked by RouteGuard
 
 4. **Detail Modal**:
-   - Header: Shows "From: UpKeep LMS (Mock Notification)"
+   - Header: Shows "From: UpKeep Learn (Mock Notification)"
    - Sent date and source badge
    - **To section**: Recipient chips with name + email
    - **Subject**: Full subject (readonly)

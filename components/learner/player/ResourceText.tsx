@@ -83,10 +83,24 @@ export default function ResourceText({ resource, courseId, lessonId, userId }: R
     );
   }
 
+  // Detect content with custom elements (callouts, image-placeholders) that TipTap would strip
+  const hasCustomElements = resource.content.includes('class="callout') || resource.content.includes('class="image-placeholder');
+
+  if (hasCustomElements) {
+    return (
+      <div 
+        ref={containerRef}
+        className="prose prose-base max-w-none overflow-y-auto ProseMirror"
+        style={{ scrollBehavior: 'smooth' }}
+        dangerouslySetInnerHTML={{ __html: resource.content }}
+      />
+    );
+  }
+
   return (
     <div 
       ref={containerRef}
-      className="prose max-w-none overflow-y-auto max-h-[70vh]"
+      className="prose max-w-none overflow-y-auto"
       style={{ scrollBehavior: 'smooth' }}
     >
       <RichTextEditor

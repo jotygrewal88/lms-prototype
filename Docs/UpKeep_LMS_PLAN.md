@@ -1,5 +1,5 @@
-Project Summary – UpKeep LMS (Phase I & II)
-UpKeep LMS is a new product under the UpKeep platform — a compliance-focused Learning Management System (LMS) designed for operational and industrial teams.
+Project Summary – UpKeep Learn (Phase I & II)
+UpKeep Learn is a new product under the UpKeep platform — a compliance-focused Learning Management System (LMS) designed for operational and industrial teams.
 It will connect maintenance, safety, and training into one ecosystem, complementing UpKeep’s CMMS and EHS products.
 The LMS is being built as an AI-first, modular web application that starts simple (tracking compliance) and evolves into a full AI-driven learning platform.
 This project will be prototyped in Cursor to visualize UX, permissions, and workflows for two main phases:
@@ -353,7 +353,7 @@ Personalization, gamification, AI coaching
 
 
 
-UpKeep LMS Permission Hierarchy & Role Matrix
+UpKeep Learn Permission Hierarchy & Role Matrix
 🧭 Hierarchy Overview
 The LMS inherits UpKeep’s organizational structure, with additional logic for training assignment and reporting.
 Hierarchy Structure:

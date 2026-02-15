@@ -7,6 +7,14 @@ export function markdownToHtml(markdown: string): string {
   if (!markdown) return '';
   
   let html = markdown;
+
+  // Preserve <details>/<summary> HTML tags before escaping
+  const detailsPlaceholders: string[] = [];
+  html = html.replace(/<(\/?)(?:details|summary)(\s[^>]*)?>/gi, (match) => {
+    const idx = detailsPlaceholders.length;
+    detailsPlaceholders.push(match);
+    return `%%DETAILS_${idx}%%`;
+  });
   
   // Escape HTML entities first (but preserve our own conversions)
   html = html
@@ -14,12 +22,17 @@ export function markdownToHtml(markdown: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   
+  // Restore <details>/<summary> tags
+  html = html.replace(/%%DETAILS_(\d+)%%/g, (_, idx) => detailsPlaceholders[parseInt(idx)]);
+  
   // Split into lines for processing
   const lines = html.split('\n');
   const processedLines: string[] = [];
   let inList = false;
   let inOrderedList = false;
   let listItems: string[] = [];
+  let inTable = false;
+  let tableRows: string[][] = [];
   
   const flushList = () => {
     if (listItems.length > 0) {
@@ -29,6 +42,19 @@ export function markdownToHtml(markdown: string): string {
     }
     inList = false;
     inOrderedList = false;
+  };
+  
+  const flushTable = () => {
+    if (tableRows.length > 0) {
+      let tableHtml = '<table>';
+      tableRows.forEach((cells) => {
+        tableHtml += '<tr>' + cells.map(c => `<td>${processInlineFormatting(c.trim())}</td>`).join('') + '</tr>';
+      });
+      tableHtml += '</table>';
+      processedLines.push(tableHtml);
+      tableRows = [];
+    }
+    inTable = false;
   };
   
   for (let i = 0; i < lines.length; i++) {
@@ -92,23 +118,49 @@ export function markdownToHtml(markdown: string): string {
       continue;
     }
     
+    // Table rows (|...|...|)
+    const tableMatch = line.match(/^\|(.+)\|$/);
+    if (tableMatch) {
+      flushList();
+      const cellContent = tableMatch[1];
+      // Skip separator rows like |---|---|
+      if (/^[\s\-:|]+$/.test(cellContent)) {
+        continue;
+      }
+      inTable = true;
+      const cells = cellContent.split('|');
+      tableRows.push(cells);
+      continue;
+    }
+
     // Empty line
     if (line.trim() === '') {
       flushList();
+      flushTable();
       // Don't add empty paragraphs
       continue;
     }
     
+    // Pass through <details>/<summary> tags as-is
+    if (/^<\/?(?:details|summary)/.test(line.trim())) {
+      flushList();
+      flushTable();
+      processedLines.push(line);
+      continue;
+    }
+
     // Regular paragraph
     flushList();
+    flushTable();
     const content = processInlineFormatting(line);
     if (content.trim()) {
       processedLines.push(`<p>${content}</p>`);
     }
   }
   
-  // Flush any remaining list
+  // Flush any remaining list or table
   flushList();
+  flushTable();
   
   return processedLines.join('');
 }

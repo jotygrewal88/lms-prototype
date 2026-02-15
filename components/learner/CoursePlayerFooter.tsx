@@ -85,17 +85,15 @@ export default function CoursePlayerFooter({
               </div>
             )}
 
-            {/* Demo button - bypasses all thresholds */}
+            {/* Demo skip link - subtle text link for prototyping */}
             {onDemoComplete && !isCompleted && (
-              <Button
-                variant="primary"
+              <button
                 onClick={onDemoComplete}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
-                title="Demo: Complete lesson and move to next (bypasses thresholds)"
+                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+                title="Skip to next lesson (demo only)"
               >
-                <Zap className="w-4 h-4" />
-                Demo: Complete & Next
-              </Button>
+                Skip (demo)
+              </button>
             )}
           </div>
 

@@ -7,7 +7,7 @@ import RouteGuard from "@/components/RouteGuard";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
 import UploadModal from "@/components/library/UploadModal";
-import AddLinkModal from "@/components/library/AddLinkModal";
+import AddLibraryItemModal from "@/components/library/AddLibraryItemModal";
 import PreviewDrawer from "@/components/library/PreviewDrawer";
 import LibraryFiltersComponent from "@/components/library/LibraryFilters";
 import { 
@@ -37,7 +37,9 @@ import {
   FileText,
   Image as ImageIcon,
   Video,
-  File
+  File,
+  Sparkles,
+  Plus
 } from "lucide-react";
 import { formatFileSize } from "@/lib/library";
 
@@ -47,7 +49,7 @@ export default function LibraryPage() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isAddLinkModalOpen, setIsAddLinkModalOpen] = useState(false);
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<LibraryItem | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
@@ -194,19 +196,19 @@ export default function LibraryPage() {
             <div className="flex gap-3">
               <Button
                 variant="secondary"
-                onClick={() => setIsAddLinkModalOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <LinkIcon className="w-4 h-4" />
-                Add Link
-              </Button>
-              <Button
-                variant="primary"
                 onClick={() => setIsUploadModalOpen(true)}
                 className="flex items-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                Upload
+                Bulk Upload
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setIsAddItemModalOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add to Library
               </Button>
             </div>
           </div>
@@ -297,17 +299,17 @@ export default function LibraryPage() {
               <div className="flex gap-3 justify-center">
                 <Button
                   variant="secondary"
-                  onClick={() => setIsAddLinkModalOpen(true)}
-                >
-                  <LinkIcon className="w-4 h-4 mr-2" />
-                  Add Link
-                </Button>
-                <Button
-                  variant="primary"
                   onClick={() => setIsUploadModalOpen(true)}
                 >
                   <Upload className="w-4 h-4 mr-2" />
-                  Upload Files
+                  Bulk Upload
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => setIsAddItemModalOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add to Library
                 </Button>
               </div>
             </Card>
@@ -350,7 +352,18 @@ export default function LibraryPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             {getFileIcon(item)}
-                            <span className="text-sm font-medium text-gray-900">{item.title}</span>
+                            <button
+                              onClick={() => handlePreview(item)}
+                              className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline text-left"
+                            >
+                              {item.title}
+                            </button>
+                            {item.allowedForSynthesis && (
+                              <span title="AI Synthesis Enabled" className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-xs">
+                                <Sparkles className="w-3 h-3" />
+                                AI
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
@@ -444,7 +457,15 @@ export default function LibraryPage() {
                       />
                     </div>
                     
-                    <h3 className="font-medium text-gray-900 line-clamp-2">{item.title}</h3>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePreview(item);
+                      }}
+                      className="font-medium text-gray-900 line-clamp-2 hover:text-blue-600 hover:underline text-left"
+                    >
+                      {item.title}
+                    </button>
                     
                     {item.description && (
                       <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
@@ -503,9 +524,9 @@ export default function LibraryPage() {
           onComplete={() => {}}
         />
         
-        <AddLinkModal
-          isOpen={isAddLinkModalOpen}
-          onClose={() => setIsAddLinkModalOpen(false)}
+        <AddLibraryItemModal
+          isOpen={isAddItemModalOpen}
+          onClose={() => setIsAddItemModalOpen(false)}
           onComplete={() => {}}
         />
         

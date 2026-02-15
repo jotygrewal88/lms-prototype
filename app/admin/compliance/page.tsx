@@ -12,8 +12,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus } from "lucide-react";
+import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus, AlertCircle, Clock, Info } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -39,6 +40,8 @@ import {
   getUser as getUserById,
   subscribe,
   getCourseById,
+  getExpiringSkills,
+  getExpiredSkills,
 } from "@/lib/store";
 import { TrainingCompletion, CompletionStatus, getFullName } from "@/types";
 import { formatDate } from "@/lib/utils";
@@ -446,6 +449,55 @@ export default function CompliancePage() {
             </div>
           </div>
 
+          {/* Skill & Certification Expiry Alerts */}
+          {(() => {
+            const expiredSkills = getExpiredSkills();
+            const expiring30 = getExpiringSkills(30);
+            const expiring60 = getExpiringSkills(60);
+            const hasAlerts = expiredSkills.length > 0 || expiring30.length > 0 || expiring60.length > 0;
+            if (!hasAlerts) return null;
+            return (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Skill & Certification Expiry</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-gray-600">Expired Certifications</div>
+                        <div className="text-3xl font-bold text-red-600 mt-1">
+                          {expiredSkills.length}
+                        </div>
+                      </div>
+                      <AlertCircle className="w-12 h-12 text-red-600 opacity-20" />
+                    </div>
+                  </Card>
+                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-gray-600">Expiring in 30 Days</div>
+                        <div className="text-3xl font-bold text-yellow-600 mt-1">
+                          {expiring30.length}
+                        </div>
+                      </div>
+                      <Clock className="w-12 h-12 text-yellow-600 opacity-20" />
+                    </div>
+                  </Card>
+                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-gray-600">Expiring in 60 Days</div>
+                        <div className="text-3xl font-bold text-blue-600 mt-1">
+                          {expiring60.length}
+                        </div>
+                      </div>
+                      <Info className="w-12 h-12 text-blue-600 opacity-20" />
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bulk Action Toolbar */}
           {selectedCount > 0 && (
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
@@ -685,7 +737,7 @@ export default function CompliancePage() {
                             </div>
                             {training?.standardRef && <div className="text-xs text-gray-500 mt-1">{training.standardRef}</div>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "—"}</td>
+                          <td className="px-4 py-3 text-sm">{user ? <Link href={`/admin/users/${user.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(user)}</Link> : "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{site ? (site.region ? `${site.name} (${site.region})` : site.name) : "—"}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{dept?.name || "—"}</td>
                           <td className="px-4 py-3 text-sm">{getStatusBadge(completion)}</td>

@@ -17,6 +17,7 @@ import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import { resetToSeed, loadScenario, getCompletions, subscribe } from "@/lib/store";
+import { runFullSkillsMigration } from "@/lib/skillsMigration";
 
 interface DistributionStats {
   completed: number;
@@ -31,6 +32,8 @@ export default function DemoSettingsPage() {
   const [showConfirm, setShowConfirm] = useState<"reset" | "scenarioA" | "scenarioB" | "reseedA" | "reseedB" | null>(null);
   const [distribution, setDistribution] = useState<DistributionStats | null>(null);
   const [lastScenario, setLastScenario] = useState<"A" | "B" | null>(null);
+  const [migrationResult, setMigrationResult] = useState<any>(null);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   useEffect(() => {
     calculateDistribution();
@@ -262,6 +265,48 @@ export default function DemoSettingsPage() {
               </div>
             </Card>
           </div>
+
+          {/* Skills V2 Migration */}
+          <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Skills V2 Migration</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Migrate from old skills format to Skills V2 with user skill records, certifications, and expiry tracking.
+              This creates SkillV2 records from existing skills, converts Course.skills[] to Course.skillsGranted[],
+              and generates UserSkillRecords from completed trainings.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!confirm("Run Skills V2 migration? This will create UserSkillRecords from existing data.")) return;
+                  setIsMigrating(true);
+                  try {
+                    const result = runFullSkillsMigration();
+                    setMigrationResult(result);
+                  } catch (error) {
+                    setMigrationResult({ success: false, error: String(error) });
+                  } finally {
+                    setIsMigrating(false);
+                  }
+                }}
+                disabled={isMigrating}
+              >
+                {isMigrating ? "Migrating..." : "Run Migration"}
+              </Button>
+              {migrationResult && (
+                <Badge variant={migrationResult.success ? "success" : "error"}>
+                  {migrationResult.success ? "Success" : "Completed with errors"}
+                </Badge>
+              )}
+            </div>
+            {migrationResult && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg overflow-auto max-h-60">
+                <pre className="text-xs text-gray-700 whitespace-pre-wrap">
+                  {JSON.stringify(migrationResult, null, 2)}
+                </pre>
+              </div>
+            )}
+          </Card>
 
           {/* Confirmation Modal */}
           {showConfirm && (

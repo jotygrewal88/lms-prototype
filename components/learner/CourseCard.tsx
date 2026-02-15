@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { RotateCcw, Clock, Calendar, Play, CheckCircle2, AlertTriangle, BookOpen } from "lucide-react";
+import { RotateCcw, Clock, Calendar, Play, CheckCircle2, AlertTriangle, BookOpen, Trophy } from "lucide-react";
 import { Course, ProgressCourse, CourseAssignment } from "@/types";
 import { getCertificatesByUserId, getCurrentUser, getResumePointerForCourse, getSkillsByCourseId } from "@/lib/store";
 import CertificateModal from "./certificates/CertificateModal";
@@ -12,6 +12,30 @@ interface CourseCardProps {
   assignment: CourseAssignment | undefined;
   onOpen: () => void;
   onResume?: (lessonId: string) => void;
+}
+
+/** Circular progress ring SVG */
+function ProgressRing({ percent, size = 44, stroke = 4, color }: { percent: number; size?: number; stroke?: number; color: string }) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={stroke}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="transition-all duration-700"
+      />
+    </svg>
+  );
 }
 
 export default function CourseCard({ course, progress, assignment, onOpen, onResume }: CourseCardProps) {
@@ -42,6 +66,15 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
   const isOverdue = dueDate && dueDate < now && percentComplete < 100;
   const isCompleted = progress?.completedAt !== undefined || percentComplete === 100;
   const isInProgress = percentComplete > 0 && percentComplete < 100;
+
+  // Estimated time remaining
+  const estimatedTimeRemaining = () => {
+    if (!course.estimatedMinutes || isCompleted) return null;
+    const remaining = Math.round(course.estimatedMinutes * (1 - percentComplete / 100));
+    if (remaining <= 0) return null;
+    return `~${remaining} min remaining`;
+  };
+  const timeRemaining = estimatedTimeRemaining();
 
   // Status styling
   const getStatusConfig = () => {
@@ -84,6 +117,9 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
   const status = getStatusConfig();
   const StatusIcon = status.icon;
 
+  // Progress ring color
+  const ringColor = isCompleted ? "#10b981" : isOverdue ? "#ef4444" : "#3b82f6";
+
   // Days until due or days overdue
   const getDueText = () => {
     if (!dueDate) return null;
@@ -98,7 +134,7 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
 
   return (
     <>
-      <div className={`bg-white rounded-xl border ${isOverdue ? "border-red-200" : "border-gray-200"} shadow-sm hover:shadow-lg transition-all overflow-hidden group`}>
+      <div className={`bg-white rounded-xl border shadow-sm hover:shadow-lg transition-all overflow-hidden group ${isOverdue ? "border-l-4 border-l-red-500 border-red-200" : "border-gray-200"}`}>
         {/* Card Header with status */}
         <div className={`px-4 py-3 border-b ${isOverdue ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}>
           <div className="flex items-center justify-between">
@@ -107,6 +143,13 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
                 <StatusIcon className="w-3 h-3" />
                 {status.label}
               </span>
+              {/* Quiz score for completed courses */}
+              {isCompleted && progress?.scorePct !== undefined && progress.scorePct > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                  <Trophy className="w-3 h-3" />
+                  Score: {progress.scorePct}%
+                </span>
+              )}
             </div>
             {dueText && (
               <span className={`text-xs font-medium ${dueText.isOverdue ? "text-red-600" : "text-gray-500"}`}>
@@ -119,16 +162,25 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
 
         {/* Card Body */}
         <div className="p-4 space-y-3">
-          {/* Title */}
-          <div>
-            <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-emerald-700 transition-colors">
-              {course.title}
-            </h3>
-            {course.category && (
-              <span className="text-xs text-gray-500 uppercase tracking-wide">
-                {course.category}
+          {/* Title + Progress Ring */}
+          <div className="flex items-start gap-3">
+            {/* Circular progress ring */}
+            <div className="relative flex-shrink-0">
+              <ProgressRing percent={percentComplete} color={ringColor} />
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-gray-700">
+                {percentComplete}%
               </span>
-            )}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-emerald-700 transition-colors">
+                {course.title}
+              </h3>
+              {course.category && (
+                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                  {course.category}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Tags */}
@@ -167,21 +219,25 @@ export default function CourseCard({ course, progress, assignment, onOpen, onRes
             </div>
           )}
 
-          {/* Duration */}
-          {course.estimatedMinutes && (
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{course.estimatedMinutes} min</span>
-            </div>
-          )}
+          {/* Duration & time remaining */}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {course.estimatedMinutes && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{course.estimatedMinutes} min</span>
+              </div>
+            )}
+            {timeRemaining && (
+              <span className="text-gray-400">•</span>
+            )}
+            {timeRemaining && (
+              <span className="text-gray-500 font-medium">{timeRemaining}</span>
+            )}
+          </div>
 
           {/* Progress Bar */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">Progress</span>
-              <span className="font-semibold text-gray-700">{percentComplete}%</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   isCompleted ? "bg-emerald-500" :

@@ -10,7 +10,6 @@ import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
-import AIGenerateModal from "@/components/AIGenerateModal";
 import { 
   getCourses, 
   getLessonsByCourseId,
@@ -23,23 +22,19 @@ import {
   deleteCourse,
   subscribe,
   getCurrentUser,
-  isAIDraftCourse
 } from "@/lib/store";
-import { generateCourseFromPrompt, generateCourseFromFile } from "@/lib/ai/generateCourse";
-import { parseDocument } from "@/lib/ai/parseDocument";
-import { Course, AIInput, AICourseDraft } from "@/types";
+import { Course, CourseStatus } from "@/types";
 
 export default function CoursesPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newCourseDescription, setNewCourseDescription] = useState("");
   
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"" | "draft" | "published">("");
+  const [filterStatus, setFilterStatus] = useState<"" | CourseStatus>("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterDuration, setFilterDuration] = useState<"" | "short" | "medium" | "long" | "extended">("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -80,38 +75,6 @@ export default function CoursesPage() {
     e.stopPropagation(); // Prevent card click
     if (confirm(`Are you sure you want to delete "${courseTitle}"? All lessons, sections, quizzes, and progress will be removed.`)) {
       deleteCourse(courseId);
-    }
-  };
-
-  const handleAIGenerate = async (input: AIInput, file?: File) => {
-    try {
-      let draft: AICourseDraft;
-      
-      if (file) {
-        // File-based generation
-        console.log('Generating course from file:', file.name);
-        const parsedData = await parseDocument(file);
-        draft = await generateCourseFromFile(parsedData, input.prompt);
-        
-        // Store file metadata for preview
-        sessionStorage.setItem('aiCourseSourceFile', file.name);
-      } else {
-        // Prompt-based generation
-        console.log('Generating course from prompt:', input.prompt);
-        draft = await generateCourseFromPrompt(input);
-        sessionStorage.removeItem('aiCourseSourceFile');
-      }
-      
-      // Store draft in sessionStorage for preview page
-      sessionStorage.setItem('aiCourseDraft', JSON.stringify(draft));
-      sessionStorage.setItem('aiCoursePrompt', input.prompt || 'AI Generated');
-      
-      // Close modal and navigate to preview
-      setIsAIModalOpen(false);
-      router.push('/admin/courses/ai/preview');
-    } catch (error) {
-      console.error('AI generation error:', error);
-      alert('Failed to generate course. Please try again.');
     }
   };
 
@@ -247,7 +210,7 @@ export default function CoursesPage() {
             </div>
             {!isManager && (
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setIsAIModalOpen(true)}>
+                <Button variant="secondary" onClick={() => router.push("/admin/courses/generate")}>
                   <Sparkles className="w-4 h-4 mr-2" />
                   Generate Course
                 </Button>
@@ -285,12 +248,15 @@ export default function CoursesPage() {
               <div className="relative">
                 <select
                   value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value as "" | "draft" | "published")}
+                  onChange={(e) => setFilterStatus(e.target.value as "" | CourseStatus)}
                   className="w-full appearance-none pl-4 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent focus:bg-white transition-colors cursor-pointer"
                 >
                   <option value="">All Statuses</option>
                   <option value="published">Published</option>
                   <option value="draft">Draft</option>
+                  <option value="ai-draft">AI Draft</option>
+                  <option value="in-review">In Review</option>
+                  <option value="rejected">Rejected</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
               </div>
@@ -409,7 +375,7 @@ export default function CoursesPage() {
                   )}
                   {filterStatus && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs">
-                      Status: {filterStatus === "published" ? "Published" : "Draft"}
+                      Status: {filterStatus === "published" ? "Published" : filterStatus === "draft" ? "Draft" : filterStatus === "ai-draft" ? "AI Draft" : filterStatus === "in-review" ? "In Review" : "Rejected"}
                       <button onClick={() => setFilterStatus("")} className="hover:text-green-900">
                         <X className="w-3 h-3" />
                       </button>
@@ -492,6 +458,27 @@ export default function CoursesPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredCourses.map((course) => {
                 const stats = getCourseStats(course);
+                const isAI = course.aiGenerated === true;
+
+                const statusBadge = () => {
+                  switch (course.status) {
+                    case "published":
+                      return <Badge variant="success">Published</Badge>;
+                    case "ai-draft":
+                      return (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                          <Sparkles className="w-3 h-3" />
+                          AI Draft
+                        </span>
+                      );
+                    case "in-review":
+                      return <Badge variant="warning">In Review</Badge>;
+                    case "rejected":
+                      return <Badge variant="error">Rejected</Badge>;
+                    default:
+                      return <Badge variant="default">Draft</Badge>;
+                  }
+                };
 
                 return (
                   <Card 
@@ -503,13 +490,11 @@ export default function CoursesPage() {
                       {/* Header with status and delete */}
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <Badge variant={course.status === "published" ? "success" : "default"}>
-                            {course.status === "published" ? "Published" : "Draft"}
-                          </Badge>
-                          {isAIDraftCourse(course.id) && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-                              <Sparkles className="w-3 h-3" />
-                              AI Draft
+                          {statusBadge()}
+                          {isAI && course.status !== "ai-draft" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-500 text-[10px] font-medium rounded">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              AI
                             </span>
                           )}
                         </div>
@@ -539,6 +524,16 @@ export default function CoursesPage() {
                       {course.description && (
                         <p className="text-sm text-gray-600 mb-3 line-clamp-2 flex-grow">
                           {course.description}
+                        </p>
+                      )}
+
+                      {/* AI metadata line */}
+                      {isAI && course.sourceAttributions && course.sourceAttributions.length > 0 && (
+                        <p className="text-xs text-purple-600 mb-2">
+                          Generated from {course.sourceAttributions.length} source{course.sourceAttributions.length !== 1 ? "s" : ""}
+                          {course.confidenceScore != null && (
+                            <> · {Math.round(course.confidenceScore * 100)}% confidence</>
+                          )}
                         </p>
                       )}
 
@@ -674,14 +669,6 @@ export default function CoursesPage() {
             </Modal>
           )}
 
-          {/* AI Generate Course Modal */}
-          {!isManager && (
-            <AIGenerateModal
-              isOpen={isAIModalOpen}
-              onClose={() => setIsAIModalOpen(false)}
-              onGenerate={handleAIGenerate}
-            />
-          )}
         </div>
       </AdminLayout>
     </RouteGuard>

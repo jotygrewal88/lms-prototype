@@ -37,7 +37,7 @@ export default function Header() {
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between sticky top-0 z-40 shadow-sm px-4 md:px-6">
       <div className="flex items-center gap-2">
         <BookOpen className="w-5 h-5 text-gray-800" />
-        <span className="text-lg font-semibold tracking-tight text-gray-900">UpKeep LMS</span>
+        <span className="text-lg font-semibold tracking-tight text-gray-900">UpKeep Learn</span>
       </div>
 
       <div className="flex items-center gap-4">

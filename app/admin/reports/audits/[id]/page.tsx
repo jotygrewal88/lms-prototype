@@ -8,6 +8,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
@@ -114,7 +115,7 @@ export default function AuditSnapshotDetailPage() {
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900">Audit Snapshot: {snapshot.id}</h1>
             <p className="text-sm text-gray-600 mt-2">
-              Created by {creator ? getFullName(creator) : "Unknown"} on {formatDate(snapshot.createdAt)}
+              Created by {creator ? <Link href={`/admin/users/${creator.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(creator)}</Link> : "Unknown"} on {formatDate(snapshot.createdAt)}
             </p>
           </div>
 
@@ -176,7 +177,7 @@ export default function AuditSnapshotDetailPage() {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
                           {training?.title || "Unknown"}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{user ? getFullName(user) : "Unknown"}</td>
+                        <td className="px-4 py-3 text-sm">{user ? <Link href={`/admin/users/${user.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(user)}</Link> : "Unknown"}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{site?.name || "—"}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{dept?.name || "—"}</td>
                         <td className="px-4 py-3 text-sm">{getStatusBadge(row.status)}</td>
@@ -242,7 +243,7 @@ export default function AuditSnapshotDetailPage() {
                             </span>
                             {user && (
                               <span className="text-sm text-gray-500">
-                                • {getFullName(user)}
+                                • <Link href={`/admin/users/${user.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{getFullName(user)}</Link>
                               </span>
                             )}
                           </div>

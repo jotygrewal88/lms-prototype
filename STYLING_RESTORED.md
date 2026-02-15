@@ -2,7 +2,7 @@
 
 ## Summary
 
-All Tailwind CSS styling has been successfully restored across the UpKeep LMS application.
+All Tailwind CSS styling has been successfully restored across the UpKeep Learn application.
 
 ## Changes Made
 

@@ -1,8 +1,8 @@
-# UpKeep LMS - UI Refresh Summary
+# UpKeep Learn - UI Refresh Summary
 **Design Alignment Pass - EHS Style System**
 
 ## 🎯 Objective
-Modernize the UpKeep LMS UI to match the UpKeep EHS design system — purely aesthetic changes with zero functionality modifications.
+Modernize the UpKeep Learn UI to match the UpKeep EHS design system — purely aesthetic changes with zero functionality modifications.
 
 ---
 
@@ -13,7 +13,7 @@ Modernize the UpKeep LMS UI to match the UpKeep EHS design system — purely aes
 
 **Changes:**
 - ✅ Removed organization logo image
-- ✅ Replaced with clean text-based header: "📘 UpKeep LMS"
+- ✅ Replaced with clean text-based header: "📘 UpKeep Learn"
 - ✅ Changed from dark gray (`bg-gray-900`) to white background (`bg-white`)
 - ✅ Added subtle border-bottom (`border-gray-200`)
 - ✅ Updated role selector styling to match EHS (white background, gray border)
@@ -194,7 +194,7 @@ Demo → 🎭
 
 ## ✅ Acceptance Checklist
 
-- ✅ Header updated (no image logo; book + UpKeep LMS text)
+- ✅ Header updated (no image logo; book + UpKeep Learn text)
 - ✅ Left nav matches EHS style (white bg, icons, blue bar active state)
 - ✅ All cards/components use EHS design system (spacing, borders, shadows, fonts)
 - ✅ Dashboard fully modernized and visually compelling
@@ -252,7 +252,7 @@ These are NOT part of this UI refresh but could be future improvements:
 
 ## 🎉 Result
 
-The UpKeep LMS now has a **modern, professional appearance** that matches the **UpKeep EHS design system**. All changes are **purely aesthetic** with **zero functional regressions**.
+The UpKeep Learn now has a **modern, professional appearance** that matches the **UpKeep EHS design system**. All changes are **purely aesthetic** with **zero functional regressions**.
 
 The app now looks like a cohesive product family member alongside UpKeep EHS! 🚀
 

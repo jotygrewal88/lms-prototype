@@ -9,6 +9,7 @@ import CoursePlayerHeader from "@/components/learner/CoursePlayerHeader";
 import CoursePlayerSidebar from "@/components/learner/CoursePlayerSidebar";
 import LessonContentRenderer from "@/components/learner/LessonContentRenderer";
 import CoursePlayerFooter from "@/components/learner/CoursePlayerFooter";
+import CompletionCelebration from "@/components/learner/CompletionCelebration";
 import LessonTimer from "@/components/learner/LessonTimer";
 import VideoProgressTracker from "@/components/learner/VideoProgressTracker";
 import Toast from "@/components/Toast";
@@ -51,6 +52,8 @@ export default function CoursePlayerLessonPage() {
   const [hasAutoCompleted, setHasAutoCompleted] = useState(false);
   const [timeSpent, setTimeSpent] = useState(0);
   const [watchPct, setWatchPct] = useState(0);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationScore, setCelebrationScore] = useState<number | undefined>(undefined);
 
   // Load course and lessons
   useEffect(() => {
@@ -456,6 +459,16 @@ export default function CoursePlayerLessonPage() {
               progress={currentProgress}
               courseId={courseId}
               userId={currentUser.id}
+              onQuizComplete={() => {
+                // If this is an assessment lesson, show celebration
+                if (currentLesson.lessonType === "assessment") {
+                  const cp = getProgressCourseByCourseAndUser(courseId, currentUser.id);
+                  setCelebrationScore(cp?.scorePct);
+                  setShowCelebration(true);
+                } else {
+                  window.location.reload();
+                }
+              }}
             />
           </main>
         </div>
@@ -509,6 +522,16 @@ export default function CoursePlayerLessonPage() {
             message={toastMessage}
             onClose={() => setShowToast(false)}
             duration={3000}
+          />
+        )}
+
+        {/* Completion Celebration */}
+        {showCelebration && course && (
+          <CompletionCelebration
+            courseTitle={course.title}
+            skillName={course.skillsGranted?.[0]?.skillId ? course.skillsGranted[0].skillId : undefined}
+            scorePct={celebrationScore}
+            onReturnToDashboard={() => setShowCelebration(false)}
           />
         )}
       </div>

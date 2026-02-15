@@ -26,7 +26,13 @@ import {
   certificates as seedCertificates
 } from "@/data/seedCoursesV2";
 import { seedSkills } from "@/data/seedSkills";
+import { seedSkillsV2 } from "@/data/seedSkillsV2";
+import { seedUserSkillRecords } from "@/data/seedUserSkillRecords";
+import { seedRoleSkillRequirements, seedWorkContextSkillRequirements } from "@/data/seedRequirements";
 import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
+import { seedSynthesisHistory } from "@/data/seedSynthesisDrafts";
+import { lotoCourse, lotoLessons, lotoResources, lotoQuiz, lotoAssignment } from "@/data/seedLOTOCourse";
+import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings } from "@/types";
 import { markdownToHtml } from "./markdownToHtml";
 
 // Re-export Scope type for convenience
@@ -48,12 +54,12 @@ let auditSnapshots: AuditSnapshot[] = [];
 let notificationTemplates: NotificationTemplate[] = [...seedNotificationTemplates];
 
 // Phase II Epic 1 Fix Pass: Course Library state
-let courses: Course[] = [...seedCourses];
-let lessons: Lesson[] = [...seedLessons];
-let resources: Resource[] = [...seedResources];
-let quizzes: Quiz[] = [...seedQuizzes];
+let courses: Course[] = [...seedCourses, lotoCourse];
+let lessons: Lesson[] = [...seedLessons, ...lotoLessons];
+let resources: Resource[] = [...seedResources, ...lotoResources];
+let quizzes: Quiz[] = [...seedQuizzes, lotoQuiz];
 let questions: Question[] = [...seedQuestions];
-let assignments: CourseAssignment[] = [...seedAssignments];
+let assignments: CourseAssignment[] = [...seedAssignments, lotoAssignment];
 
 // Phase II — 1M.1: Skills Tagging state
 let skills: Skill[] = [...seedSkills];
@@ -79,6 +85,30 @@ let progressCourses: ProgressCourse[] = [...seedProgressCourses];
 let progressLessons: ProgressLesson[] = [...seedProgressLessons];
 let certificates: Certificate[] = [...seedCertificates];
 let certificateTemplates: CertificateTemplate[] = [...seedCertificateTemplates];
+
+// ============================================================================
+// SKILLS V2 STATE (New Implementation — Surgical Rebuild)
+// ============================================================================
+let skillsV2: SkillV2[] = [...seedSkillsV2];
+let userSkillRecords: UserSkillRecord[] = [...seedUserSkillRecords];
+let roleSkillRequirements: RoleSkillRequirement[] = [...seedRoleSkillRequirements];
+let workContextSkillRequirements: WorkContextSkillRequirement[] = [...seedWorkContextSkillRequirements];
+
+// ============================================================================
+// LEARNING SYNTHESIS STATE
+// ============================================================================
+let synthesisHistory: SynthesisHistory[] = [...seedSynthesisHistory];
+
+const DEFAULT_AI_SETTINGS: AISynthesisSettings = {
+  defaultSynthesisType: "full-course",
+  defaultIndustry: "Manufacturing",
+  complianceStrictness: "strict",
+  defaultTone: "professional",
+  autoSuggestSkills: true,
+  includeQuizzes: true,
+  maxLessonsPerCourse: 8,
+};
+let aiSynthesisSettings: AISynthesisSettings = { ...DEFAULT_AI_SETTINGS };
 
 // Scope state with localStorage persistence
 const SCOPE_STORAGE_KEY = "uklms_scope";
@@ -510,6 +540,13 @@ export function updateCompletion(id: string, updates: Partial<TrainingCompletion
   const index = completions.findIndex(c => c.id === id);
   if (index !== -1) {
     completions[index] = { ...completions[index], ...updates };
+    
+    // Skills V2: Auto-grant skills when marking complete
+    if (updates.status === "COMPLETED" && updates.completedAt) {
+      const completion = completions[index];
+      grantSkillsFromTraining(completion.userId, completion.trainingId, updates.completedAt);
+    }
+    
     notifyListeners();
   }
 }
@@ -769,6 +806,16 @@ export function resetToSeed(): void {
   certificates = [...seedCertificates];
   // Phase II — 1M.1: Reset skills
   skills = [...seedSkills];
+  
+  // Skills V2: Reset
+  skillsV2 = [...seedSkillsV2];
+  userSkillRecords = [...seedUserSkillRecords];
+  roleSkillRequirements = [...seedRoleSkillRequirements];
+  workContextSkillRequirements = [...seedWorkContextSkillRequirements];
+
+  // Learning Synthesis: Reset
+  synthesisHistory = [...seedSynthesisHistory];
+  aiSynthesisSettings = { ...DEFAULT_AI_SETTINGS };
   
   // Epic 1G.4: Initialize sample version snapshots and audit events
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -1405,7 +1452,8 @@ export function getQuizzes(): Quiz[] {
 }
 
 export function getQuizByCourseId(courseId: string): Quiz | undefined {
-  return quizzes.find(q => q.courseId === courseId);
+  // Return the course-level quiz (no lessonId), not a lesson quiz
+  return quizzes.find(q => q.courseId === courseId && !q.lessonId);
 }
 
 export function getQuizzesByCourseId(courseId: string): Quiz[] {
@@ -2222,6 +2270,13 @@ export function updateProgressCourse(id: string, updates: Partial<Omit<ProgressC
       ...updates,
       updatedAt: timestamp()
     };
+    
+    // Skills V2: Auto-grant skills when marking course complete
+    if (updates.status === "completed" && updates.completedAt) {
+      const progress = progressCourses[index];
+      grantSkillsFromCourse(progress.userId, progress.courseId, updates.completedAt, updates.scorePct);
+    }
+    
     notifyListeners();
   }
 }
@@ -2412,6 +2467,24 @@ export function updateLessonProgress(lessonId: string, userId: string, updates: 
   } else {
     upsertProgressLesson(lessonId, userId, updates);
   }
+}
+
+/**
+ * Save a knowledge check answer for a lesson
+ */
+export function saveKnowledgeCheckAnswer(lessonId: string, userId: string, checkId: string, selectedOptionId: string): void {
+  const existing = getProgressLessonByLessonAndUser(lessonId, userId) || getOrCreateProgressLesson(userId, lessonId);
+  const answers = existing.knowledgeCheckAnswers || {};
+  answers[checkId] = selectedOptionId;
+  updateLessonProgress(lessonId, userId, { knowledgeCheckAnswers: answers });
+}
+
+/**
+ * Get knowledge check answers for a lesson
+ */
+export function getKnowledgeCheckAnswers(lessonId: string, userId: string): Record<string, string> {
+  const progress = getProgressLessonByLessonAndUser(lessonId, userId);
+  return progress?.knowledgeCheckAnswers || {};
 }
 
 /**
@@ -3037,14 +3110,6 @@ export function createCourseFromAIDraft(
   
   notifyListeners();
   return courseId;
-}
-
-/**
- * Checks if a course is an AI-generated draft
- */
-export function isAIDraftCourse(courseId: string): boolean {
-  const course = getCourseById(courseId);
-  return course?.status === "draft" && course?.ai?.source === "AI";
 }
 
 // ===================================================================
@@ -3790,6 +3855,8 @@ export interface LibraryFilters {
   dateTo?: string;
   search?: string;
   includeArchived?: boolean;
+  sourceType?: "policy" | "sop" | "manual" | "regulation" | "text";
+  allowedForSynthesis?: boolean;
 }
 
 /**
@@ -3861,6 +3928,14 @@ export function getLibraryItems(filters?: LibraryFilters): LibraryItem[] {
       items = items.filter(item => item.createdAt <= filters.dateTo!);
     }
     
+    if (filters.sourceType) {
+      items = items.filter(item => item.sourceType === filters.sourceType);
+    }
+
+    if (filters.allowedForSynthesis !== undefined) {
+      items = items.filter(item => (item.allowedForSynthesis || false) === filters.allowedForSynthesis);
+    }
+
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       items = items.filter(item => 
@@ -3879,6 +3954,13 @@ export function getLibraryItems(filters?: LibraryFilters): LibraryItem[] {
   }
   
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/**
+ * Get Library items that are allowed for AI synthesis (not archived)
+ */
+export function getSynthesisReadyLibraryItems(): LibraryItem[] {
+  return libraryItems.filter((i) => i.allowedForSynthesis && !i.archivedAt);
 }
 
 /**
@@ -4093,4 +4175,501 @@ export function getLibraryItemVersions(libraryItemId: string): LibraryItem[] {
   );
   
   return versions.sort((a, b) => a.version - b.version);
+}
+
+// ============================================================================
+// SKILLS V2 GETTERS
+// ============================================================================
+
+export const getSkillsV2 = (): SkillV2[] => skillsV2;
+export const getSkillV2ById = (id: string): SkillV2 | undefined => skillsV2.find((s) => s.id === id);
+export const getActiveSkillsV2 = (): SkillV2[] => skillsV2.filter((s) => s.active);
+export const getSkillsV2ByType = (type: "skill" | "certification"): SkillV2[] =>
+  skillsV2.filter((s) => s.type === type);
+export const getSkillsV2ByCategory = (category: string): SkillV2[] =>
+  skillsV2.filter((s) => s.category === category);
+
+export const getUserSkillRecords = (): UserSkillRecord[] => userSkillRecords;
+export const getUserSkillRecordById = (id: string): UserSkillRecord | undefined =>
+  userSkillRecords.find((r) => r.id === id);
+export const getUserSkillRecordsByUserId = (userId: string): UserSkillRecord[] =>
+  userSkillRecords.filter((r) => r.userId === userId);
+export const getActiveUserSkillRecordsByUserId = (userId: string): UserSkillRecord[] =>
+  userSkillRecords.filter((r) => r.userId === userId && r.status === "active");
+export const getUserSkillRecordsBySkillId = (skillId: string): UserSkillRecord[] =>
+  userSkillRecords.filter((r) => r.skillId === skillId);
+
+export const getRoleSkillRequirements = (): RoleSkillRequirement[] => roleSkillRequirements;
+export const getRoleSkillRequirementsByScope = (
+  siteId?: string,
+  departmentId?: string,
+  jobTitle?: string
+): RoleSkillRequirement[] =>
+  roleSkillRequirements.filter(
+    (r) =>
+      (!r.siteId || r.siteId === siteId) &&
+      (!r.departmentId || r.departmentId === departmentId) &&
+      (!r.jobTitle || r.jobTitle === jobTitle)
+  );
+export const getRequiredSkillsByScope = (
+  siteId?: string,
+  departmentId?: string,
+  jobTitle?: string
+): RoleSkillRequirement[] =>
+  roleSkillRequirements.filter(
+    (r) =>
+      r.required &&
+      (!r.siteId || r.siteId === siteId) &&
+      (!r.departmentId || r.departmentId === departmentId) &&
+      (!r.jobTitle || r.jobTitle === jobTitle)
+  );
+
+export const getWorkContextSkillRequirements = (): WorkContextSkillRequirement[] => workContextSkillRequirements;
+export const getWorkContextSkillRequirementsByContext = (
+  contextType: string,
+  contextKey: string
+): WorkContextSkillRequirement[] =>
+  workContextSkillRequirements.filter(
+    (r) => r.contextType === contextType && r.contextKey === contextKey
+  );
+
+// ============================================================================
+// SKILLS V2 CRUD
+// ============================================================================
+
+export function createSkillV2(
+  skill: Omit<SkillV2, "createdAt" | "updatedAt"> & Partial<Pick<SkillV2, "createdAt" | "updatedAt">>
+): SkillV2 {
+  const now = new Date().toISOString();
+  const newSkill: SkillV2 = {
+    ...skill,
+    id: skill.id || `skl_${Date.now()}`,
+    createdAt: skill.createdAt || now,
+    updatedAt: skill.updatedAt || now,
+  };
+  skillsV2.push(newSkill);
+  notifyListeners();
+  return newSkill;
+}
+
+export function updateSkillV2(id: string, updates: Partial<SkillV2>): SkillV2 | null {
+  const idx = skillsV2.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+  skillsV2[idx] = {
+    ...skillsV2[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  notifyListeners();
+  return skillsV2[idx];
+}
+
+export function deleteSkillV2(id: string): boolean {
+  const hasRecords = userSkillRecords.some((r) => r.skillId === id);
+  if (hasRecords) {
+    console.error("Cannot delete skill — users have this skill");
+    return false;
+  }
+  const prev = skillsV2.length;
+  skillsV2 = skillsV2.filter((s) => s.id !== id);
+  if (skillsV2.length < prev) notifyListeners();
+  return skillsV2.length < prev;
+}
+
+// ============================================================================
+// USER SKILL RECORDS CRUD
+// ============================================================================
+
+export function createUserSkillRecord(
+  record: Omit<UserSkillRecord, "id" | "createdAt" | "updatedAt">
+): UserSkillRecord {
+  const skill = getSkillV2ById(record.skillId);
+  if (!skill) {
+    throw new Error(`Skill ${record.skillId} not found`);
+  }
+
+  const now = new Date().toISOString();
+  const newRecord: UserSkillRecord = {
+    ...record,
+    id: `usr_${Date.now()}_${record.userId}_${record.skillId}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Auto-calculate expiry if skill has expiryDays and achievedDate exists
+  if (skill.expiryDays && record.achievedDate) {
+    const achieved = new Date(record.achievedDate);
+    achieved.setDate(achieved.getDate() + skill.expiryDays);
+    newRecord.expiryDate = achieved.toISOString().split("T")[0];
+
+    // Set renewal date (30 days before expiry)
+    const renewal = new Date(achieved);
+    renewal.setDate(renewal.getDate() - 30);
+    newRecord.renewalDate = renewal.toISOString().split("T")[0];
+  }
+
+  // Auto-set status based on expiry
+  if (newRecord.expiryDate) {
+    const today = new Date().toISOString().split("T")[0];
+    newRecord.status = newRecord.expiryDate < today ? "expired" : "active";
+  } else if (!newRecord.status) {
+    newRecord.status = "active";
+  }
+
+  userSkillRecords.push(newRecord);
+  notifyListeners();
+  return newRecord;
+}
+
+export function updateUserSkillRecord(
+  id: string,
+  updates: Partial<UserSkillRecord>
+): UserSkillRecord | null {
+  const idx = userSkillRecords.findIndex((r) => r.id === id);
+  if (idx === -1) return null;
+
+  const record = userSkillRecords[idx];
+  const skill = getSkillV2ById(record.skillId);
+
+  userSkillRecords[idx] = {
+    ...record,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Recalculate expiry if achievedDate changed
+  if (updates.achievedDate && skill?.expiryDays) {
+    const achieved = new Date(updates.achievedDate);
+    achieved.setDate(achieved.getDate() + skill.expiryDays);
+    userSkillRecords[idx].expiryDate = achieved.toISOString().split("T")[0];
+
+    const renewal = new Date(achieved);
+    renewal.setDate(renewal.getDate() - 30);
+    userSkillRecords[idx].renewalDate = renewal.toISOString().split("T")[0];
+  }
+
+  // Update status if expired
+  const updatedRecord = userSkillRecords[idx];
+  if (updatedRecord.expiryDate) {
+    const today = new Date().toISOString().split("T")[0];
+    if (updatedRecord.status !== "revoked") {
+      updatedRecord.status = updatedRecord.expiryDate < today ? "expired" : "active";
+    }
+  }
+
+  notifyListeners();
+  return userSkillRecords[idx];
+}
+
+export function deleteUserSkillRecord(id: string): boolean {
+  const prev = userSkillRecords.length;
+  userSkillRecords = userSkillRecords.filter((r) => r.id !== id);
+  if (userSkillRecords.length < prev) notifyListeners();
+  return userSkillRecords.length < prev;
+}
+
+export function revokeUserSkillRecord(id: string, reason: string): UserSkillRecord | null {
+  return updateUserSkillRecord(id, {
+    status: "revoked",
+    revokedDate: new Date().toISOString(),
+    revokedReason: reason,
+  });
+}
+
+// ============================================================================
+// ROLE SKILL REQUIREMENTS CRUD
+// ============================================================================
+
+export function createRoleSkillRequirement(
+  req: Omit<RoleSkillRequirement, "id" | "createdAt" | "updatedAt">
+): RoleSkillRequirement {
+  const now = new Date().toISOString();
+  const newReq: RoleSkillRequirement = {
+    ...req,
+    id: `rsr_${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  roleSkillRequirements.push(newReq);
+  notifyListeners();
+  return newReq;
+}
+
+export function deleteRoleSkillRequirement(id: string): boolean {
+  const prev = roleSkillRequirements.length;
+  roleSkillRequirements = roleSkillRequirements.filter((r) => r.id !== id);
+  if (roleSkillRequirements.length < prev) notifyListeners();
+  return roleSkillRequirements.length < prev;
+}
+
+// ============================================================================
+// WORK CONTEXT SKILL REQUIREMENTS CRUD
+// ============================================================================
+
+export function createWorkContextSkillRequirement(
+  req: Omit<WorkContextSkillRequirement, "id" | "createdAt" | "updatedAt">
+): WorkContextSkillRequirement {
+  const now = new Date().toISOString();
+  const newReq: WorkContextSkillRequirement = {
+    ...req,
+    id: `wsr_${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  workContextSkillRequirements.push(newReq);
+  notifyListeners();
+  return newReq;
+}
+
+export function deleteWorkContextSkillRequirement(id: string): boolean {
+  const prev = workContextSkillRequirements.length;
+  workContextSkillRequirements = workContextSkillRequirements.filter((r) => r.id !== id);
+  if (workContextSkillRequirements.length < prev) notifyListeners();
+  return workContextSkillRequirements.length < prev;
+}
+
+// ============================================================================
+// AUTO-GRANT SKILLS ON COMPLETION
+// ============================================================================
+
+export function grantSkillsFromTraining(
+  userId: string,
+  trainingId: string,
+  completedDate: string
+): void {
+  const training = getTrainingById(trainingId);
+  if (!training?.skillsGranted?.length) return;
+
+  const currentUsr = getCurrentUser();
+
+  training.skillsGranted.forEach((skillGrant) => {
+    // Check if user already has active skill
+    const existing = userSkillRecords.find(
+      (r) =>
+        r.userId === userId &&
+        r.skillId === skillGrant.skillId &&
+        r.status === "active"
+    );
+
+    if (existing) return;
+
+    try {
+      createUserSkillRecord({
+        userId,
+        skillId: skillGrant.skillId,
+        status: "active",
+        achievedDate: completedDate,
+        evidenceType: "training",
+        evidenceId: trainingId,
+        verifiedByUserId: currentUsr?.id,
+        verificationDate: new Date().toISOString(),
+        level: skillGrant.level,
+      });
+    } catch {
+      // Skill may not exist in V2 yet — silently skip
+    }
+  });
+}
+
+export function grantSkillsFromCourse(
+  userId: string,
+  courseId: string,
+  completedDate: string,
+  assessmentScore?: number
+): void {
+  const course = getCourseById(courseId);
+  if (!course?.skillsGranted?.length) return;
+
+  const currentUsr = getCurrentUser();
+
+  course.skillsGranted.forEach((skillGrant) => {
+    const existing = userSkillRecords.find(
+      (r) =>
+        r.userId === userId &&
+        r.skillId === skillGrant.skillId &&
+        r.status === "active"
+    );
+
+    if (existing) return;
+
+    try {
+      createUserSkillRecord({
+        userId,
+        skillId: skillGrant.skillId,
+        status: "active",
+        achievedDate: completedDate,
+        evidenceType: "course",
+        evidenceId: courseId,
+        verifiedByUserId: currentUsr?.id,
+        verificationDate: new Date().toISOString(),
+        level: skillGrant.level,
+        assessmentScore,
+      });
+    } catch {
+      // Skill may not exist in V2 yet — silently skip
+    }
+  });
+}
+
+// ============================================================================
+// SKILL EXPIRY HELPERS
+// ============================================================================
+
+export function getExpiringSkills(daysAhead: number): UserSkillRecord[] {
+  const today = new Date();
+  const futureDate = new Date();
+  futureDate.setDate(today.getDate() + daysAhead);
+
+  return userSkillRecords.filter((r) => {
+    if (!r.expiryDate || r.status === "expired" || r.status === "revoked") {
+      return false;
+    }
+    const expiry = new Date(r.expiryDate);
+    return expiry >= today && expiry <= futureDate;
+  });
+}
+
+export function getExpiredSkills(): UserSkillRecord[] {
+  const today = new Date().toISOString().split("T")[0];
+  return userSkillRecords.filter(
+    (r) => r.expiryDate && r.expiryDate < today && r.status !== "revoked"
+  );
+}
+
+export function updateExpiredSkillStatuses(): void {
+  const today = new Date().toISOString().split("T")[0];
+  let updated = false;
+
+  userSkillRecords.forEach((record) => {
+    if (
+      record.expiryDate &&
+      record.expiryDate < today &&
+      record.status === "active"
+    ) {
+      record.status = "expired";
+      record.updatedAt = new Date().toISOString();
+      updated = true;
+    }
+  });
+
+  if (updated) notifyListeners();
+}
+
+export function getUserSkillGaps(userId: string): {
+  skill: SkillV2;
+  requirement: RoleSkillRequirement;
+}[] {
+  const user = getUser(userId);
+  if (!user) return [];
+
+  const requiredSkills = getRequiredSkillsByScope(user.siteId, user.departmentId, user.jobTitle);
+  const userActiveSkills = getActiveUserSkillRecordsByUserId(userId);
+  const activeSkillIds = new Set(userActiveSkills.map((r) => r.skillId));
+
+  return requiredSkills
+    .filter((req) => !activeSkillIds.has(req.skillId))
+    .map((req) => ({
+      skill: getSkillV2ById(req.skillId)!,
+      requirement: req,
+    }))
+    .filter((gap) => gap.skill);
+}
+
+// ============================================================================
+// SYNTHESIS HISTORY — CRUD
+// ============================================================================
+
+export const createSynthesisHistory = (
+  history: Omit<SynthesisHistory, "id" | "createdAt" | "updatedAt">
+): SynthesisHistory => {
+  const newHistory: SynthesisHistory = {
+    ...history,
+    id: `syn_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  synthesisHistory.push(newHistory);
+  notifyListeners();
+  return newHistory;
+};
+
+export const getSynthesisHistory = (): SynthesisHistory[] => synthesisHistory;
+export const getAllSynthesisHistory = (): SynthesisHistory[] => synthesisHistory;
+export const getRecentSynthesisHistory = (limit: number = 20): SynthesisHistory[] =>
+  synthesisHistory.slice(-limit).reverse();
+
+export const getSynthesisHistoryByDraftId = (draftId: string): SynthesisHistory | undefined =>
+  synthesisHistory.find((h) => h.draftId === draftId);
+
+// ============================================================================
+// AI SYNTHESIS SETTINGS
+// ============================================================================
+
+export const getAISynthesisSettings = (): AISynthesisSettings => ({ ...aiSynthesisSettings });
+
+export function updateAISynthesisSettings(updates: Partial<AISynthesisSettings>): AISynthesisSettings {
+  aiSynthesisSettings = { ...aiSynthesisSettings, ...updates };
+  notifyListeners();
+  return { ...aiSynthesisSettings };
+}
+
+// ============================================================================
+// AI CONTEXT DATA — Aggregated data for the mock AI agent
+// ============================================================================
+
+export function getAIContextData() {
+  const readySources = getSynthesisReadyLibraryItems();
+  const activeSkills = getActiveSkillsV2();
+  const roleReqs = getRoleSkillRequirements();
+  const workContextReqs = getWorkContextSkillRequirements();
+
+  // Compute skill gap summary across all users
+  const allUsers = getUsers();
+  let usersWithGaps = 0;
+  const gapSkillCounts: Record<string, number> = {};
+
+  allUsers.forEach((user) => {
+    const userRecords = getUserSkillRecordsByUserId(user.id);
+    const hasGap = roleReqs.some(
+      (req) => !userRecords.some((r) => r.skillId === req.skillId && r.status === "active")
+    );
+    if (hasGap) usersWithGaps++;
+    roleReqs.forEach((req) => {
+      const met = userRecords.some((r) => r.skillId === req.skillId && r.status === "active");
+      if (!met) {
+        gapSkillCounts[req.skillId] = (gapSkillCounts[req.skillId] || 0) + 1;
+      }
+    });
+  });
+
+  // Expiring certifications in next 90 days
+  const now = Date.now();
+  const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+  const allRecords = getUserSkillRecords();
+  const expiringSoon = allRecords.filter((r) => {
+    if (!r.expiryDate || r.status !== "active") return false;
+    const expiry = new Date(r.expiryDate).getTime();
+    return expiry > now && expiry < now + ninetyDays;
+  });
+
+  return {
+    readySources,
+    activeSkills,
+    roleRequirements: roleReqs,
+    workContextRequirements: workContextReqs,
+    skillGapSummary: {
+      totalUsers: allUsers.length,
+      usersWithGaps,
+      topGapSkills: Object.entries(gapSkillCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([skillId, count]) => ({
+          skillId,
+          skillName: activeSkills.find((s) => s.id === skillId)?.name ?? skillId,
+          usersLacking: count,
+        })),
+    },
+    expiringCertifications: expiringSoon.length,
+    settings: getAISynthesisSettings(),
+  };
 }

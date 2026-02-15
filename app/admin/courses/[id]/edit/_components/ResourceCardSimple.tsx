@@ -24,6 +24,7 @@ import {
 import RichTextEditor from "@/components/editor/RichTextEditor";
 import AIPreviewModal from "@/components/editor/AIPreviewModal";
 import { aiRewrite, aiExpand, aiSimplify } from "@/lib/ai/inlineTransforms";
+import { markdownToHtml } from "@/lib/markdownToHtml";
 
 // Simple time ago formatter
 function timeAgo(dateString: string): string {
@@ -98,6 +99,7 @@ function getTypeBadgeColor(type: Resource['type']): string {
 interface ResourceCardSimpleProps {
   resource: Resource;
   isReadOnly: boolean;
+  isAIDraft?: boolean;
   onEdit: (updatedResource: Resource) => void;
   onPreview: () => void;
   onDelete: () => void;
@@ -107,12 +109,31 @@ interface ResourceCardSimpleProps {
 export default function ResourceCardSimple({
   resource,
   isReadOnly,
+  isAIDraft,
   onEdit,
   onPreview,
   onDelete,
   dragHandleProps,
 }: ResourceCardSimpleProps) {
-  const [isExpanded, setIsExpanded] = React.useState(true); // Start expanded by default
+  const [isExpanded, setIsExpanded] = React.useState(true); // Start expanded so content is readable and editable
+  const [editMode, setEditMode] = useState(false); // For AI drafts: false = rendered preview, true = editor
+
+  // Helper: detect if content is raw Markdown (no HTML tags, has heading syntax)
+  const isMarkdownContent = (text: string) =>
+    text.length > 0 && !text.trim().startsWith('<') && /^#{1,6}\s/m.test(text);
+
+  // When switching to edit mode on an AI draft, convert Markdown → HTML first
+  // so TipTap gets proper rich text, not raw markup
+  const handleToggleEdit = () => {
+    if (!editMode && isAIDraft) {
+      const raw = resource.content || '';
+      if (isMarkdownContent(raw)) {
+        const converted = markdownToHtml(raw);
+        onEdit({ ...resource, content: converted });
+      }
+    }
+    setEditMode(!editMode);
+  };
   
   const metadata = [];
   if (resource.durationSec) {
@@ -278,12 +299,91 @@ export default function ResourceCardSimple({
     }
   };
 
+  // Extract a plain-text snippet from HTML content for collapsed preview
+  const getTextSnippet = (html: string, maxLen = 160): string => {
+    const text = html
+      .replace(/<[^>]*>/g, " ")    // strip HTML tags
+      .replace(/&[^;]+;/g, " ")     // strip HTML entities
+      .replace(/\s+/g, " ")         // collapse whitespace
+      .trim();
+    if (text.length <= maxLen) return text;
+    return text.substring(0, maxLen).trimEnd() + "…";
+  };
+
+  // Count headings/sections within content for a structural hint
+  const getContentStructure = (html: string): { headings: string[]; wordCount: number } => {
+    const headingMatches = html.match(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi) || [];
+    const headings = headingMatches
+      .map((h) => h.replace(/<[^>]*>/g, "").trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const wordCount = text ? text.split(" ").length : 0;
+    return { headings, wordCount };
+  };
+
+  // Collapsed preview for text content
+  const renderCollapsedPreview = () => {
+    if (isExpanded || resource.type !== "text" || !resource.content) return null;
+
+    const { headings, wordCount } = getContentStructure(resource.content);
+    const snippet = getTextSnippet(resource.content);
+
+    return (
+      <div className="mt-2 pt-2 border-t border-gray-100">
+        {/* Structural outline if there are headings */}
+        {headings.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {headings.map((h, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center px-2 py-0.5 bg-gray-50 border border-gray-200 rounded text-[11px] text-gray-600 font-medium"
+              >
+                {h}
+              </span>
+            ))}
+            {headings.length < (resource.content.match(/<h[1-6]/gi) || []).length && (
+              <span className="text-[11px] text-gray-400 self-center">
+                +{(resource.content.match(/<h[1-6]/gi) || []).length - headings.length} more
+              </span>
+            )}
+          </div>
+        )}
+        {/* Text snippet */}
+        <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{snippet}</p>
+        {wordCount > 0 && (
+          <span className="text-[10px] text-gray-300 mt-1 inline-block">{wordCount} words</span>
+        )}
+      </div>
+    );
+  };
+
   // Render content preview based on type
   const renderContent = () => {
     if (!isExpanded) return null;
 
     switch (resource.type) {
       case 'text':
+        // AI Draft preview mode: render formatted HTML so the admin reviews final output
+        if (isAIDraft && !editMode) {
+          const rawContent = resource.content || '';
+          const htmlToRender = isMarkdownContent(rawContent) ? markdownToHtml(rawContent) : rawContent;
+          return (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              {showAIBadge && (
+                <div className="mb-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded animate-pulse">
+                  <Sparkles className="w-3 h-3" />
+                  AI-updated
+                </div>
+              )}
+              <div
+                className="ProseMirror prose prose-base max-w-none min-h-[120px] p-5 prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:text-gray-700 prose-p:leading-relaxed prose-li:text-gray-700 prose-strong:text-gray-900 prose-blockquote:border-indigo-300 prose-blockquote:text-gray-600"
+                dangerouslySetInnerHTML={{ __html: htmlToRender || '<p class="text-gray-400 italic">No content yet.</p>' }}
+              />
+            </div>
+          );
+        }
+        // Editor mode (default for non-AI drafts, or when toggled on for AI drafts)
         return (
           <div className="mt-3 pt-3 border-t border-gray-100">
             {showAIBadge && (
@@ -383,7 +483,7 @@ export default function ResourceCardSimple({
 
   return (
     <div 
-      className={`group flex flex-col gap-4 p-5 bg-white rounded-xl border-l-4 ${accentColor} border-2 border-gray-200 shadow-md hover:shadow-lg transition-all duration-200 ease-in-out animate-in fade-in slide-in-from-bottom-2`}
+      className={`group flex flex-col gap-2 p-4 bg-white rounded-lg border-l-3 ${accentColor} border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 ease-in-out ${isExpanded ? 'pb-5' : ''}`}
     >
       {/* Header Row */}
       <div className="flex items-center gap-4">
@@ -440,6 +540,31 @@ export default function ResourceCardSimple({
             )}
           </div>
         </div>
+
+        {/* AI Draft: Edit / Preview toggle */}
+        {isAIDraft && resource.type === 'text' && isExpanded && (
+          <button
+            onClick={handleToggleEdit}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              editMode
+                ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+            }`}
+            title={editMode ? 'Switch to preview' : 'Switch to editor'}
+          >
+            {editMode ? (
+              <>
+                <Eye className="w-3.5 h-3.5" />
+                Preview
+              </>
+            ) : (
+              <>
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </>
+            )}
+          </button>
+        )}
 
         {/* Expand/Collapse Toggle */}
         <button
@@ -521,8 +646,9 @@ export default function ResourceCardSimple({
         </div>
       </div>
 
-      {/* Content Preview */}
+      {/* Content Preview (expanded) or Collapsed snippet */}
       {renderContent()}
+      {renderCollapsedPreview()}
 
       {/* Epic 1G.5: AI Preview Modal */}
       <AIPreviewModal

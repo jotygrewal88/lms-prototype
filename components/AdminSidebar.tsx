@@ -20,9 +20,11 @@ import {
   Award,
   BarChart3,
   Library,
-  MapPin
+  MapPin,
+  Shield,
+  Sparkles
 } from "lucide-react";
-import { getCurrentUser, subscribe } from "@/lib/store";
+import { getCurrentUser, getCourses, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
 import { NavItem } from "@/types";
 
@@ -35,6 +37,8 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Compliance": ClipboardList,
   "Notifications": Bell,
   "Users": Users,
+  "Skills": Shield,
+  "Learning Model": Sparkles,
   "Audit Snapshots": FileStack,
   "Locations": MapPin,
   "Brand": Palette,
@@ -49,13 +53,16 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [navItems, setNavItems] = useState<NavItem[]>(getNavigationItems(currentUser.role));
+  const [aiDraftCount, setAiDraftCount] = useState(0);
 
   useEffect(() => {
     const unsubscribe = subscribe(() => {
       const user = getCurrentUser();
       setCurrentUser(user);
       setNavItems(getNavigationItems(user.role));
+      setAiDraftCount(getCourses().filter((c) => c.status === "ai-draft" || c.status === "in-review").length);
     });
+    setAiDraftCount(getCourses().filter((c) => c.status === "ai-draft" || c.status === "in-review").length);
     return unsubscribe;
   }, []);
 
@@ -103,6 +110,11 @@ export default function AdminSidebar() {
                         )}
                         {Icon && <Icon className="w-[18px] h-[18px] text-gray-500" />}
                         <span>{child.label}</span>
+                        {child.label === "Courses" && aiDraftCount > 0 && (
+                          <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-purple-100 text-purple-700 text-[10px] font-semibold">
+                            {aiDraftCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
@@ -124,6 +136,11 @@ export default function AdminSidebar() {
                 )}
                 {NAV_ICONS[item.label] && React.createElement(NAV_ICONS[item.label], { className: "w-[18px] h-[18px] text-gray-500" })}
                 <span>{item.label}</span>
+                {item.label === "Courses" && aiDraftCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-purple-100 text-purple-700 text-[10px] font-semibold">
+                    {aiDraftCount}
+                  </span>
+                )}
               </Link>
             )}
           </div>

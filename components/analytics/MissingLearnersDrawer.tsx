@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { X, Users, BookOpen } from "lucide-react";
 import { Scope, User, Course, getFullName } from "@/types";
 import { learnersMissingSkill } from "@/lib/stats";
@@ -69,8 +70,10 @@ export default function MissingLearnersDrawer({
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="text-base font-semibold text-gray-900">
-                        {getFullName(user)}
+                      <h3 className="text-base font-semibold">
+                        <Link href={`/admin/users/${user.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                          {getFullName(user)}
+                        </Link>
                       </h3>
                       <div className="flex gap-4 mt-1 text-sm text-gray-600">
                         {siteName && (

@@ -11,7 +11,7 @@ export default function HealthPage() {
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-green-600">✓ OK</h1>
           <p className="text-sm text-gray-600">
-            UpKeep LMS is running successfully.
+            UpKeep Learn is running successfully.
           </p>
           <div className="flex gap-3 justify-center">
             <Button variant="primary" onClick={() => window.location.href = "/"}>

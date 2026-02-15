@@ -1,7 +1,7 @@
 # Phase I – Full Polish Pack Implementation Summary
 
 ## Overview
-This document summarizes the implementation of all 12 Polish Pack features for the UpKeep LMS prototype. All features are fully functional with in-memory data, permissions enforcement, and visual polish.
+This document summarizes the implementation of all 12 Polish Pack features for the UpKeep Learn prototype. All features are fully functional with in-memory data, permissions enforcement, and visual polish.
 
 ---
 

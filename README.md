@@ -1,4 +1,4 @@
-# UpKeep LMS Prototype
+# UpKeep Learn Prototype
 
 A compliance-focused Learning Management System integrated with EHS and CMMS.
 

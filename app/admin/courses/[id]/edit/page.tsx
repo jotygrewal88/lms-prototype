@@ -2,12 +2,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Save, Plus, Trash2, GripVertical, X, 
   FileText, Link as LinkIcon, Video, Image, FileImage,
   Calendar, User, RotateCcw, Upload, Sparkles, Eye, Clock,
-  Copy, Edit2, History, Undo2, Redo2, ChevronDown
+  Copy, Edit2, History, Undo2, Redo2, ChevronDown, PanelRightOpen, MessageSquare
 } from "lucide-react";
 import { 
   DndContext, 
@@ -82,6 +83,7 @@ import {
   getLastUndoSummary,
   getLastRedoSummary,
   // Epic 1G.6: Quiz functions
+  getQuizById,
   upsertQuiz,
   createEmptyQuizFor,
   addQuestion,
@@ -102,19 +104,27 @@ import {
   getSkills,
   createSkill,
   assignSkillsToCourse,
-  getSkillsByCourseId
+  getSkillsByCourseId,
+  createSynthesisHistory,
+  // AI Agent support
+  getSynthesisReadyLibraryItems,
+  getActiveSkillsV2,
+  getAIContextData,
+  getLibraryItemById,
 } from "@/lib/store";
 import { generateQuestionsFromScope, GenScope } from "@/lib/ai/quizGen";
 import EditQuestionModal from "@/components/quiz/EditQuestionModal";
 import PreviewQuizModal from "@/components/quiz/PreviewQuizModal";
 import AIQuizGeneratorModal from "@/components/quiz/AIQuizGeneratorModal"; // Phase II 1I.2: AI Quiz Generator
 import StandardsEditModal from "@/components/quiz/StandardsEditModal";
-import MetadataAIPanel from "./_components/MetadataAIPanel";
-import StyleAuditPanel from "./_components/StyleAuditPanel";
+import ChatArea from "@/components/admin/courses/generate/ChatArea";
+import { generateAgentResponse } from "@/lib/mockAIAgent";
+import type { AgentContext } from "@/lib/mockAIAgent";
+import { markdownToHtml } from "@/lib/markdownToHtml";
 import Toast from "@/components/Toast";
 import { getFileAccept, formatFileSize } from "@/lib/uploads";
 import { logChange } from "@/lib/changeLog"; // Phase II 1I.2: ChangeLog for AI generation
-import { Course, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType, Quiz, Question, QuestionType, CourseStandards, StyleAuditIssue, CourseScope } from "@/types";
+import { Course, CourseStatus, Lesson, Resource, CoursePolicy, CourseAssignment, ResourceType, VersionedEntityType, Quiz, Question, QuestionType, CourseStandards, StyleAuditIssue, CourseScope, ChatMessage } from "@/types";
 import HistoryDrawer from "@/components/history/HistoryDrawer";
 import CourseAssignmentModal from "@/components/admin/courses/CourseAssignmentModal";
 import AssignmentResolveModal from "@/components/admin/courses/AssignmentResolveModal";
@@ -134,6 +144,19 @@ export default function CourseEditPage() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [hasChanges, setHasChanges] = useState(false);
 
+  // AI Conversation modal state
+  const [isConversationModalOpen, setIsConversationModalOpen] = useState(false);
+  // AI Rejection modal state
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectNotes, setRejectNotes] = useState("");
+
+  // AI Agent chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatTyping, setIsChatTyping] = useState(false);
+  const [chatInitialized, setChatInitialized] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(true);
+
   // Epic 1G.4: History & Versioning state
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyEntity, setHistoryEntity] = useState<{
@@ -148,7 +171,7 @@ export default function CourseEditPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | undefined>();
-  const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [status, setStatus] = useState<CourseStatus>("draft");
   const [standards, setStandards] = useState<string[]>([]);
   const [standardInput, setStandardInput] = useState("");
   // Epic 1G.7: Metadata fields
@@ -341,8 +364,13 @@ export default function CourseEditPage() {
   }, [selectedLessonId]);
 
   // Epic 1E: Ensure at least one lesson exists and set active lesson
+  // Skip auto-creation for new AI courses — the agent will create all lessons
+  // Also skip if course hasn't loaded yet (course === undefined) to prevent
+  // creating an empty "Lesson 1" before we know if it's an AI-generated course
+  const isNewAIBuild = course?.aiGenerated && course?.status === "ai-draft" && lessons.length === 0;
   useEffect(() => {
-    if (lessons.length === 0 && !isManager) {
+    if (!course) return; // Wait for course data to load before deciding
+    if (lessons.length === 0 && !isManager && !isNewAIBuild) {
       // Auto-create first lesson
       const firstLesson = ensureFirstLesson(courseId);
       setActiveLessonId(firstLesson.id);
@@ -350,7 +378,397 @@ export default function CourseEditPage() {
       // Set first lesson as active
       setActiveLessonId(lessons[0].id);
     }
-  }, [lessons, courseId, isManager, activeLessonId]);
+  }, [course, lessons, courseId, isManager, activeLessonId, isNewAIBuild]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // AI AGENT — Chat initialization & auto-build for new AI courses
+  // ══════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!course || chatInitialized) return;
+    setChatInitialized(true);
+
+    // Load any existing conversation history
+    if (course.conversationHistory && course.conversationHistory.length > 0) {
+      setChatMessages(course.conversationHistory);
+
+      // If this is a new AI course with only the setup context message, auto-trigger the build
+      const hasSetupMsg = course.conversationHistory.some(
+        (m) => m.role === "system" && m.content.startsWith("Setup context:")
+      );
+      const hasAssistantMsg = course.conversationHistory.some(
+        (m) => m.role === "assistant"
+      );
+
+      console.log("[AI-AGENT] Init check:", {
+        aiGenerated: course.aiGenerated,
+        status: course.status,
+        hasSetupMsg,
+        hasAssistantMsg,
+        convHistoryLen: course.conversationHistory?.length,
+      });
+
+      if (course.aiGenerated && course.status === "ai-draft" && hasSetupMsg && !hasAssistantMsg) {
+        console.log("[AI-AGENT] Auto-build will fire in 500ms");
+        // Auto-send a build trigger after a short delay
+        setTimeout(() => {
+          console.log("[AI-AGENT] triggerAutoBuild firing now");
+          triggerAutoBuild(course);
+        }, 500);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course, chatInitialized]);
+
+  const buildChatAgentContext = (isNew: boolean): AgentContext => {
+    const sources = getSynthesisReadyLibraryItems();
+    const skills = getActiveSkillsV2();
+    const contextData = getAIContextData();
+
+    const selectedSourceTitles = sources
+      .filter((s) => course?.sourceIds?.includes(s.id))
+      .map((s) => s.title);
+    const targetSkill = course?.suggestedSkillIds?.[0]
+      ? skills.find((s) => s.id === course.suggestedSkillIds![0])
+      : undefined;
+
+    return {
+      selectedSourceTitles,
+      selectedSourceIds: course?.sourceIds || [],
+      targetSkillName: targetSkill?.name,
+      targetRole: undefined, // extracted from setup message by agent
+      synthesisType: course?.synthesisType || "full-course",
+      skillGapSummary: contextData.skillGapSummary,
+      expiringCertifications: contextData.expiringCertifications,
+      isNewCourse: isNew,
+      currentCourseTitle: title,
+      currentCourseDescription: description,
+      currentLessonCount: lessons.length,
+      currentObjectives: objectives,
+    };
+  };
+
+  // Shared helper to create lessons (and quizzes) from an agent outline
+  const createLessonsFromOutline = (outline: NonNullable<Awaited<ReturnType<typeof generateAgentResponse>>["attachedOutline"]>, startOrder = 0) => {
+    for (let i = 0; i < outline.length; i++) {
+      const gl = outline[i];
+      const lesson = createLesson({
+        courseId,
+        title: gl.title,
+        order: startOrder + i,
+        resourceIds: [],
+        sourceAttributions: gl.sourceAttributions,
+      });
+
+      // Create the text/content resource — convert markdown to HTML for proper rendering
+      const htmlContent = gl.content ? markdownToHtml(gl.content) : '';
+      createResource({
+        lessonId: lesson.id,
+        courseId,
+        type: "text",
+        title: gl.title,
+        content: htmlContent,
+      });
+
+      // Add supplementary image and PDF resources based on lesson content keywords
+      const titleLower = gl.title.toLowerCase();
+      const contentLower = (gl.content || '').toLowerCase();
+      const combined = `${titleLower} ${contentLower}`;
+
+      type SupplementaryResource = { type: "image" | "pdf"; title: string; url: string; fileName?: string };
+      const supplements: SupplementaryResource[] = [];
+
+      if (/lockout|tagout|loto|energy isolation|hazardous energy/.test(combined) && !/assessment|final/.test(titleLower)) {
+        if (/introduc|overview|energy source|energy type|hazardous energy/.test(combined)) {
+          supplements.push({ type: "image", title: "Hazardous Energy Sources — Electrical Panel Lockout", url: "https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=900&auto=format&fit=crop" });
+          supplements.push({ type: "pdf", title: "OSHA Fact Sheet — Lockout/Tagout", url: "https://www.osha.gov/sites/default/files/publications/factsheet-lockout-tagout.pdf", fileName: "OSHA_LOTO_FactSheet.pdf" });
+        }
+        if (/6.step|procedure|step 1|shutdown|isolation|verification/.test(combined)) {
+          supplements.push({ type: "image", title: "LOTO Devices — Padlocks, Hasps, and Tags on Equipment", url: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=900&auto=format&fit=crop" });
+          supplements.push({ type: "pdf", title: "OSHA Quick Card — Lockout/Tagout Steps", url: "https://www.osha.gov/sites/default/files/publications/osha3120.pdf", fileName: "OSHA_LOTO_QuickCard.pdf" });
+        }
+        if (/1910\.147|regulatory|compliance|employer|penalt|osha standard/.test(combined)) {
+          supplements.push({ type: "pdf", title: "OSHA 1910.147 — Control of Hazardous Energy (Full Text)", url: "https://www.osha.gov/sites/default/files/publications/osha3151.pdf", fileName: "OSHA_1910_147_Standard.pdf" });
+        }
+        if (/group lockout|lockbox|shift change|complex equipment|multiple/.test(combined)) {
+          supplements.push({ type: "image", title: "Group Lockbox System — Multiple Locks on Shared Lockout", url: "https://images.unsplash.com/photo-1590959651373-a3db0f38a961?w=900&auto=format&fit=crop" });
+          supplements.push({ type: "image", title: "Complex Industrial Equipment — Multiple Energy Sources", url: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=900&auto=format&fit=crop" });
+        }
+        if (/equipment|device|padlock|hasp|cable lock|tag/.test(combined) && /device|lock type|equipment/.test(titleLower)) {
+          supplements.push({ type: "image", title: "Lockout/Tagout Device Kit — Assorted Safety Locks and Tags", url: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=900&auto=format&fit=crop" });
+        }
+        if (/case study|scenario|incident|real.world|near.miss/.test(combined)) {
+          supplements.push({ type: "image", title: "Maintenance Worker Following LOTO Procedures", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=900&auto=format&fit=crop" });
+          supplements.push({ type: "pdf", title: "OSHA LOTO Inspection Procedures Guide", url: "https://www.osha.gov/sites/default/files/publications/osha3151.pdf", fileName: "OSHA_LOTO_Inspection_Guide.pdf" });
+        }
+      } else if (/confined space/.test(combined) && !/assessment|final/.test(titleLower)) {
+        supplements.push({ type: "image", title: "Confined Space Entry — Manhole with Safety Equipment", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=900&auto=format&fit=crop" });
+        if (/permit|atmospheric|testing/.test(combined)) {
+          supplements.push({ type: "pdf", title: "OSHA Permit-Required Confined Spaces Guide", url: "https://www.osha.gov/sites/default/files/publications/osha3138.pdf", fileName: "OSHA_Confined_Space_Guide.pdf" });
+        }
+      } else if (/ppe|protective equipment/.test(combined) && !/assessment|final/.test(titleLower)) {
+        supplements.push({ type: "image", title: "Personal Protective Equipment — Safety Gear Overview", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=900&auto=format&fit=crop" });
+        if (/selection|hazard assessment/.test(combined)) {
+          supplements.push({ type: "pdf", title: "OSHA PPE Selection Guide", url: "https://www.osha.gov/sites/default/files/publications/osha3151.pdf", fileName: "OSHA_PPE_Selection_Guide.pdf" });
+        }
+      } else if (/forklift|powered industrial/.test(combined) && !/assessment|final/.test(titleLower)) {
+        supplements.push({ type: "image", title: "Forklift Operating in Warehouse", url: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=900&auto=format&fit=crop" });
+        if (/stability|load/.test(combined)) {
+          supplements.push({ type: "pdf", title: "OSHA Powered Industrial Trucks Quick Reference", url: "https://www.osha.gov/sites/default/files/publications/osha3949.pdf", fileName: "OSHA_Forklift_Reference.pdf" });
+        }
+      } else if (/fire|extinguish|evacuat/.test(combined) && !/assessment|final/.test(titleLower)) {
+        supplements.push({ type: "image", title: "Fire Extinguisher Station", url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=900&auto=format&fit=crop" });
+        if (/evacuat|emergency/.test(combined)) {
+          supplements.push({ type: "pdf", title: "OSHA Emergency Action Plan Guide", url: "https://www.osha.gov/sites/default/files/publications/osha3088.pdf", fileName: "OSHA_Emergency_Plan.pdf" });
+        }
+      }
+
+      for (const sup of supplements) {
+        createResource({
+          lessonId: lesson.id,
+          courseId,
+          type: sup.type,
+          title: sup.title,
+          url: sup.url,
+          ...(sup.fileName ? { fileName: sup.fileName } : {}),
+        });
+      }
+
+      // Create quiz from quizQuestions if present
+      if (gl.quizQuestions && gl.quizQuestions.length > 0) {
+        const isQuizLesson = gl.contentType === "quiz";
+        // Final assessment (contentType=quiz) becomes a course-level quiz (no lessonId)
+        // Lesson knowledge checks get lessonId set
+        const quiz = isQuizLesson
+          ? createEmptyQuizFor(courseId)
+          : createEmptyQuizFor(courseId, lesson.id);
+        const now = new Date().toISOString();
+        const questions = gl.quizQuestions.map((qq, qIdx) => ({
+          id: `q_${Date.now()}_${qIdx}_${Math.random().toString(36).substring(2, 7)}`,
+          type: "mcq" as const,
+          prompt: qq.question,
+          options: qq.options.map((optText, optIdx) => ({
+            id: `opt_${Date.now()}_${qIdx}_${optIdx}`,
+            text: optText,
+            correct: optIdx === qq.correctIndex,
+          })),
+          explanation: qq.explanation,
+          required: true,
+          points: 1,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        updateQuiz(quiz.id, {
+          title: isQuizLesson ? gl.title : `${gl.title} — Knowledge Check`,
+          description: isQuizLesson
+            ? "Complete this assessment to demonstrate your understanding. Minimum 80% required to pass."
+            : "Quick knowledge check for this lesson.",
+          questions,
+          config: {
+            passingScore: isQuizLesson ? 80 : 70,
+            shuffleQuestions: true,
+            shuffleOptions: true,
+            showRationales: true,
+          },
+        });
+      }
+    }
+    setLessons(getLessonsByCourseId(courseId));
+  };
+
+  // Shared helper to apply agent fieldUpdates to both React state AND the store
+  // (Must persist to store because the store subscription re-reads the entity on every store change)
+  const applyFieldUpdates = (fu: NonNullable<Awaited<ReturnType<typeof generateAgentResponse>>["fieldUpdates"]>) => {
+    // 1. Update React state for immediate UI feedback
+    if (fu.title) setTitle(fu.title);
+    if (fu.description) setDescription(fu.description);
+    if (fu.objectives) setObjectives(fu.objectives);
+    if (fu.skillIds) setSelectedSkills(fu.skillIds);
+    if (fu.category) setCategory(fu.category);
+    if (fu.difficulty) setDifficulty(fu.difficulty);
+    if (fu.estimatedMinutes) setEstimatedMinutes(fu.estimatedMinutes);
+    if (fu.readingLevel) setReadingLevel(fu.readingLevel);
+    if (fu.language) setLanguage(fu.language);
+    if (fu.tags) setTags(fu.tags);
+    if (fu.standards) setStandards(fu.standards);
+
+    // 2. Also persist to the course entity in the store so the store subscription
+    //    doesn't overwrite these values when it re-reads the entity
+    updateCourse(courseId, {
+      ...(fu.title ? { title: fu.title } : {}),
+      ...(fu.description ? { description: fu.description } : {}),
+      ...(fu.category ? { category: fu.category } : {}),
+      ...(fu.tags ? { tags: fu.tags } : {}),
+      ...(fu.standards ? { standards: fu.standards } : {}),
+      ...(fu.estimatedMinutes ? { estimatedMinutes: fu.estimatedMinutes } : {}),
+      ...(fu.skillIds ? { skills: fu.skillIds } : {}),
+      metadata: {
+        ...(fu.objectives ? { objectives: fu.objectives } : {}),
+        ...(fu.tags ? { tags: fu.tags } : {}),
+        ...(fu.estimatedMinutes ? { estimatedMinutes: fu.estimatedMinutes } : {}),
+        ...(fu.difficulty ? { difficulty: fu.difficulty } : {}),
+        ...(fu.readingLevel ? { readingLevel: fu.readingLevel } : {}),
+        ...(fu.language ? { language: fu.language } : {}),
+      },
+    });
+
+    setHasChanges(false); // Already saved to store
+  };
+
+  const triggerAutoBuild = async (courseData: Course) => {
+    console.log("[AI-AGENT] triggerAutoBuild called with course:", courseData.id);
+    setIsChatTyping(true);
+    try {
+      const buildMsg: ChatMessage = {
+        id: `msg_user_auto_${Date.now()}`,
+        role: "user",
+        content: "Build this course based on my setup context.",
+        timestamp: new Date().toISOString(),
+      };
+      setChatMessages((prev) => [...prev, buildMsg]);
+
+      const sources = getSynthesisReadyLibraryItems();
+      const skills = getActiveSkillsV2();
+      const contextData = getAIContextData();
+      const selectedSourceTitles = sources
+        .filter((s) => courseData.sourceIds?.includes(s.id))
+        .map((s) => s.title);
+
+      // Extract target skill name from suggestedSkillIds
+      const targetSkillId = courseData.suggestedSkillIds?.[0];
+      const targetSkill = targetSkillId ? skills.find((s) => s.id === targetSkillId) : undefined;
+
+      // Extract target role from setup context message
+      const setupMsg = courseData.conversationHistory?.find(
+        (m) => m.role === "system" && m.content.startsWith("Setup context:")
+      );
+      const targetRoleMatch = setupMsg?.content.match(/Target Job Title:\s*(.+)/);
+      const targetRole = targetRoleMatch?.[1]?.trim();
+
+      const agentCtx: AgentContext = {
+        selectedSourceTitles,
+        selectedSourceIds: courseData.sourceIds || [],
+        targetSkillName: targetSkill?.name,
+        targetRole,
+        synthesisType: courseData.synthesisType || "full-course",
+        skillGapSummary: contextData.skillGapSummary,
+        expiringCertifications: contextData.expiringCertifications,
+        isNewCourse: true,
+        currentCourseTitle: courseData.title,
+        currentLessonCount: 0,
+      };
+
+      const allMessages = [...(courseData.conversationHistory || []), buildMsg];
+
+      const response = await generateAgentResponse({
+        userMessage: buildMsg.content,
+        conversationHistory: allMessages,
+        context: agentCtx,
+      });
+
+      const assistantMsg: ChatMessage = {
+        id: `msg_ai_${Date.now()}`,
+        role: "assistant",
+        content: response.message,
+        timestamp: new Date().toISOString(),
+        attachedOutline: response.attachedOutline,
+        attachedSources: response.attachedSources,
+      };
+
+      setChatMessages((prev) => [...prev, assistantMsg]);
+
+      console.log("[AI-AGENT] Agent response received:", {
+        hasFieldUpdates: !!response.fieldUpdates,
+        fieldUpdateKeys: response.fieldUpdates ? Object.keys(response.fieldUpdates) : [],
+        outlineLength: response.attachedOutline?.length || 0,
+        messagePreview: response.message.substring(0, 100),
+      });
+
+      // Apply field updates (persists to both React state and the store)
+      if (response.fieldUpdates) {
+        console.log("[AI-AGENT] Applying field updates:", response.fieldUpdates);
+        applyFieldUpdates(response.fieldUpdates);
+      }
+
+      // Create lessons (with quizzes) from outline
+      if (response.attachedOutline && response.attachedOutline.length > 0) {
+        console.log("[AI-AGENT] Creating", response.attachedOutline.length, "lessons");
+        createLessonsFromOutline(response.attachedOutline, 0);
+      }
+
+      // Persist conversation history to the store
+      const finalMessages = [...allMessages, assistantMsg];
+      updateCourse(courseId, { conversationHistory: finalMessages });
+    } catch (err) {
+      console.error("[AI-AGENT] Auto-build error:", err);
+      const errMsg: ChatMessage = {
+        id: `msg_err_${Date.now()}`,
+        role: "assistant",
+        content: "I encountered an error building the course. Please try sending a message to retry.",
+        timestamp: new Date().toISOString(),
+      };
+      setChatMessages((prev) => [...prev, errMsg]);
+    } finally {
+      setIsChatTyping(false);
+    }
+  };
+
+  const handleChatSend = async () => {
+    if (!chatInput.trim() || isChatTyping) return;
+
+    const userMsg: ChatMessage = {
+      id: `msg_user_${Date.now()}`,
+      role: "user",
+      content: chatInput.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput("");
+    setIsChatTyping(true);
+
+    try {
+      const isNewAICourse = !!(course?.aiGenerated && course?.status === "ai-draft");
+      const agentCtx = buildChatAgentContext(isNewAICourse);
+      const allMessages = [...chatMessages, userMsg];
+
+      const response = await generateAgentResponse({
+        userMessage: userMsg.content,
+        conversationHistory: allMessages,
+        context: agentCtx,
+      });
+
+      const assistantMsg: ChatMessage = {
+        id: `msg_ai_${Date.now()}`,
+        role: "assistant",
+        content: response.message,
+        timestamp: new Date().toISOString(),
+        attachedOutline: response.attachedOutline,
+        attachedSources: response.attachedSources,
+      };
+
+      setChatMessages((prev) => [...prev, assistantMsg]);
+
+      // Apply field updates from agent
+      if (response.fieldUpdates) {
+        applyFieldUpdates(response.fieldUpdates);
+      }
+
+      // Create lessons (with quizzes) from outline
+      if (response.attachedOutline && response.attachedOutline.length > 0) {
+        createLessonsFromOutline(response.attachedOutline, lessons.length);
+      }
+    } catch {
+      const errMsg: ChatMessage = {
+        id: `msg_err_${Date.now()}`,
+        role: "assistant",
+        content: "I encountered an error. Please try again.",
+        timestamp: new Date().toISOString(),
+      };
+      setChatMessages((prev) => [...prev, errMsg]);
+    } finally {
+      setIsChatTyping(false);
+    }
+  };
 
   const handleSave = () => {
     if (!course || isManager) return;
@@ -376,6 +794,8 @@ export default function CourseEditPage() {
         readingLevel,
         standards: course.metadata?.standards, // Preserve standards from metadata
       },
+      // AI Agent: Persist conversation history
+      conversationHistory: chatMessages.length > 0 ? chatMessages : undefined,
     });
 
     setHasChanges(false);
@@ -1092,10 +1512,18 @@ export default function CourseEditPage() {
 
   const handleDeleteQuestion = (questionId: string) => {
     if (!quiz || !confirm("Delete this question?")) return;
+    // Remove from inline questions array
+    const updatedQuestions = quiz.questions.filter(q => q.id !== questionId);
+    updateQuiz(quiz.id, { questions: updatedQuestions });
+    // Also clean up legacy store
     deleteQuestion(questionId);
-    // Refresh from store
-    const refreshedQuiz = getQuizByCourseId(courseId);
-    setQuiz(refreshedQuiz);
+    // Refresh quiz from store based on current quizType
+    if (quizType === "course") {
+      setQuiz(getQuizByCourseId(courseId));
+    } else if (selectedLessonIdForQuiz) {
+      const lessonQuizzes = getQuizzesByLessonId(selectedLessonIdForQuiz);
+      setQuiz(lessonQuizzes[0] || undefined);
+    }
     setToast({ message: "Question deleted", type: "success" });
     setTimeout(() => setToast(null), 3000);
   };
@@ -1110,7 +1538,9 @@ export default function CourseEditPage() {
       prompt: `${question.prompt} (Copy)`,
     };
     addQuestion(quiz.id, duplicated);
-    setQuiz({ ...quiz });
+    // Refresh quiz from store to pick up the new question
+    const refreshed = getQuizById(quiz.id);
+    if (refreshed) setQuiz(refreshed);
     setToast({ message: "Question duplicated", type: "success" });
     setTimeout(() => setToast(null), 3000);
   };
@@ -1417,85 +1847,107 @@ export default function CourseEditPage() {
   return (
     <RouteGuard allowedRoles={["ADMIN", "MANAGER"]}>
       <AdminLayout>
+        {/* Outer flex: page content left, agent panel right */}
+        <div className="flex -mt-6 -mr-6 -mb-6 min-h-[calc(100vh-56px)]">
+          {/* Left: all page content */}
+          <div className="flex-1 min-w-0 py-6 pr-6 overflow-y-auto max-h-[calc(100vh-56px)]">
         <div>
           {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
+          <div className="mb-5">
+            {/* Row 1: Back + Title + Badges */}
+            <div className="flex items-start gap-2 mb-1">
               <button
                 onClick={() => router.push("/admin/courses")}
-                className="text-gray-600 hover:text-gray-900"
+                className="text-gray-600 hover:text-gray-900 mt-1 flex-shrink-0"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <h1 className="text-3xl font-bold text-gray-900">{course.title}</h1>
-              <Badge variant={course.status === "published" ? "success" : "default"}>
-                {course.status === "published" ? "Published" : "Draft"}
-              </Badge>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-bold text-gray-900 truncate max-w-[420px]">{course.title}</h1>
+                  <Badge variant={course.status === "published" ? "success" : course.status === "rejected" ? "error" : course.status === "in-review" ? "warning" : course.status === "ai-draft" ? "info" : "default"}>
+                    {course.status === "published" ? "Published" : course.status === "ai-draft" ? "AI Draft" : course.status === "in-review" ? "In Review" : course.status === "rejected" ? "Rejected" : "Draft"}
+                  </Badge>
+                  {course.aiGenerated && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-600 text-xs font-medium rounded-full">
+                      <Sparkles className="w-3 h-3" />
+                      AI Generated
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
+
             {isManager && (
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
                 <strong>Read-Only Mode:</strong> You are viewing this course as a Manager and cannot make edits.
               </div>
             )}
-            <div className="flex items-center justify-between mt-4">
-              <div className="flex items-center gap-4 text-sm text-gray-600">
+
+            {/* Row 2: Meta + Actions */}
+            {/* AI Review Banners moved to bottom of overview tab */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3">
+              {/* Meta info */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                 {ownerUser && (
                   <div className="flex items-center gap-1">
-                    <User className="w-4 h-4" />
-                    <span>Owner: {ownerUser.firstName} {ownerUser.lastName}</span>
+                    <User className="w-3.5 h-3.5" />
+                    <span>Owner: <Link href={`/admin/users/${ownerUser.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">{ownerUser.firstName} {ownerUser.lastName}</Link></span>
                   </div>
                 )}
                 <div className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3.5 h-3.5" />
                   <span>Created {formatDate(course.createdAt)}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3.5 h-3.5" />
                   <span>Updated {formatDate(course.updatedAt)}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Epic 1G.4: Undo/Redo/History Buttons */}
+
+              {/* Spacer pushes actions right when room allows */}
+              <div className="flex-1" />
+
+              {/* Actions */}
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={handleUndo}
                   disabled={!canUndo(historyEntity?.type || 'course', historyEntity?.id || courseId)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title={getLastUndoSummary(historyEntity?.type || 'course', historyEntity?.id || courseId) || 'Undo'}
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </button>
-                
                 <button
                   onClick={handleRedo}
                   disabled={!canRedo(historyEntity?.type || 'course', historyEntity?.id || courseId)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title={getLastRedoSummary(historyEntity?.type || 'course', historyEntity?.id || courseId) || 'Redo'}
                 >
-                  <RotateCcw className="w-4 h-4 transform scale-x-[-1]" />
+                  <RotateCcw className="w-3.5 h-3.5 transform scale-x-[-1]" />
                 </button>
-
-                <Button variant="secondary" onClick={handleOpenHistory}>
-                  <Clock className="w-4 h-4 mr-2" />
+                <Button variant="secondary" onClick={handleOpenHistory} className="!text-xs !py-1.5 !px-3">
+                  <Clock className="w-3.5 h-3.5 mr-1.5" />
                   History
                 </Button>
-
-                <div className="w-px h-6 bg-gray-300" />
-
+                <div className="w-px h-5 bg-gray-200" />
                 <Button
                   variant="secondary"
                   onClick={() => router.push(`/admin/courses/${courseId}/preview`)}
+                  className="!text-xs !py-1.5 !px-3"
                 >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Preview as Learner
+                  <Eye className="w-3.5 h-3.5 mr-1.5" />
+                  Preview
                 </Button>
                 {!isManager && (
                   <Button
                     variant="primary"
                     onClick={handleSave}
                     disabled={!hasChanges}
+                    className="!text-xs !py-1.5 !px-3"
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    Save
                   </Button>
                 )}
               </div>
@@ -1538,55 +1990,90 @@ export default function CourseEditPage() {
             </nav>
           </div>
 
+          {/* AI Review Banner — visible across all tabs */}
+          {course.aiGenerated && (course.status === "ai-draft" || course.status === "in-review") && (
+            <div className="-mx-1 mb-6">
+              <div className="bg-purple-50/95 backdrop-blur-sm border-l-4 border-purple-500 border-y border-r border-purple-200 rounded-r-xl px-5 py-4 shadow-sm">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-purple-900 text-sm">AI-Generated Course — Ready for Review</h3>
+                      <p className="text-xs text-purple-600 mt-0.5">
+                        Generated {new Date(course.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} from {course.sourceAttributions?.length ?? 0} source{(course.sourceAttributions?.length ?? 0) !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {course.conversationHistory && course.conversationHistory.length > 0 && (
+                      <button
+                        onClick={() => setIsConversationModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 hover:text-purple-900 hover:bg-purple-100 rounded-lg transition-colors"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        View Conversation
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsRejectModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-red-600 border border-red-300 bg-white hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateCourse(courseId, { status: "published", reviewedByUserId: currentUser.id, reviewedAt: new Date().toISOString() });
+                        createSynthesisHistory({
+                          draftId: courseId,
+                          synthesisType: course.synthesisType || "full-course",
+                          status: "success",
+                          sourceCount: course.sourceIds?.length ?? 0,
+                          lessonCount: lessons.length,
+                          generatedByUserId: course.ownerUserId || "unknown",
+                          generatedTitle: course.title,
+                          outcome: "approved",
+                          publishedCourseId: courseId,
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+                    >
+                      Approve & Publish
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Published/Rejected AI info bar */}
+          {course.aiGenerated && (course.status === "published" || course.status === "rejected") && course.reviewedAt && (
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg mb-6 text-sm ${
+              course.status === "published"
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-red-50 border border-red-200 text-red-700"
+            }`}>
+              <Sparkles className="w-4 h-4 flex-shrink-0" />
+              <span>
+                AI-Generated · {course.status === "published" ? "Published" : "Rejected"} {new Date(course.reviewedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {course.reviewNotes && <> · {course.reviewNotes}</>}
+              </span>
+              {course.conversationHistory && course.conversationHistory.length > 0 && (
+                <button
+                  onClick={() => setIsConversationModalOpen(true)}
+                  className="ml-auto text-xs font-medium underline underline-offset-2 hover:no-underline flex-shrink-0"
+                >
+                  View Conversation
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Tab Content */}
           <div>
             {activeTab === "overview" && (
-              <div className="flex gap-6">
+              <div>
                 {/* Main Content */}
-                <div className="flex-1 space-y-6 max-w-5xl">
-                {/* Course Header Card */}
-                <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 rounded-2xl shadow-lg border-2 border-indigo-100 overflow-hidden">
-                  <div className="p-8">
-                    <div className="flex items-start justify-between gap-6">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="p-2 bg-indigo-100 rounded-lg">
-                            <FileText className="w-6 h-6 text-indigo-600" />
-                          </div>
-                          <div className="flex-1">
-                            <h2 className="text-3xl font-bold text-gray-900 mb-2">{title || "Untitled Course"}</h2>
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                              status === "published" 
-                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
-                                : "bg-gray-100 text-gray-600 border border-gray-200"
-                            }`}>
-                              {status === "published" ? "✓ Published" : "📝 Draft"}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600 mt-4">
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
-                            <User className="w-4 h-4 text-indigo-600" />
-                            <span className="font-medium">{ownerUser ? `${ownerUser.firstName} ${ownerUser.lastName}` : "Unknown"}</span>
-                          </div>
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
-                            <Calendar className="w-4 h-4 text-indigo-600" />
-                            <span>Created {formatDate(course.createdAt)}</span>
-                          </div>
-                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white/60 rounded-lg border border-gray-200">
-                            <Calendar className="w-4 h-4 text-indigo-600" />
-                            <span>Updated {formatDate(course.updatedAt)}</span>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Thumbnail placeholder */}
-                      <div className="w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center text-indigo-400 border-2 border-indigo-200 shadow-md">
-                        <FileText className="w-16 h-16" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
+                <div className="space-y-6">
                 {/* Title & Description */}
                 <div className="bg-white rounded-2xl shadow-md border-2 border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-gray-200">
@@ -1758,7 +2245,7 @@ export default function CourseEditPage() {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {selectedSkills.map(skillId => {
-                          const skill = getSkills().find(s => s.id === skillId);
+                          const skill = getSkills().find(s => s.id === skillId) || (() => { const v2 = getActiveSkillsV2().find(s => s.id === skillId); return v2 ? { id: v2.id, name: v2.name, category: v2.category } : null; })();
                           if (!skill) return null;
                           return (
                             <div
@@ -1839,7 +2326,7 @@ export default function CourseEditPage() {
                     <select
                       value={status}
                       onChange={(e) => {
-                        setStatus(e.target.value as "draft" | "published");
+                        setStatus(e.target.value as CourseStatus);
                         setHasChanges(true);
                       }}
                       disabled={isManager}
@@ -1849,6 +2336,13 @@ export default function CourseEditPage() {
                     >
                       <option value="draft">📝 Draft</option>
                       <option value="published">✓ Published</option>
+                      {course?.aiGenerated && (
+                        <>
+                          <option value="ai-draft">✨ AI Draft</option>
+                          <option value="in-review">🔍 In Review</option>
+                          <option value="rejected">✗ Rejected</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -2068,30 +2562,14 @@ export default function CourseEditPage() {
                     </div>
                   </div>
                 </div>
+
                 </div>
 
-                {/* Right Sidebar */}
-                <div className="w-80 flex-shrink-0">
-                  <div className="sticky top-6 space-y-6">
-                    <MetadataAIPanel
-                      courseId={courseId}
-                      currentMetadata={course?.metadata}
-                      isManager={isManager}
-                      onMetadataUpdated={handleMetadataUpdated}
-                    />
-                    <StyleAuditPanel
-                      courseId={courseId}
-                      isManager={isManager}
-                      onViewInContext={handleViewInContext}
-                      onQuickFix={handleQuickFix}
-                    />
-                  </div>
-                </div>
               </div>
             )}
 
             {activeTab === "lessons" && (
-              <div className="flex flex-col min-h-screen bg-gray-50">
+              <div className="flex flex-col min-h-0 bg-gray-50 rounded-lg">
                 {/* Epic 1G.5: Manager Read-Only Banner */}
                 {isManager && (
                   <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border-b-2 border-amber-200">
@@ -2106,8 +2584,8 @@ export default function CourseEditPage() {
                   </div>
                 )}
                 
-                {/* Stepper - Sticky Top */}
-                <div className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 shadow-sm">
+                {/* Stepper */}
+                <div className="bg-white border-b-2 border-gray-200">
                   <LessonStepper
                     courseId={courseId}
                     lessons={lessons}
@@ -2121,36 +2599,41 @@ export default function CourseEditPage() {
 
                 {/* Main Content Area */}
                 {activeLessonId ? (
-                  <div className="flex flex-1 gap-6 p-6">
-                    {/* Focused Lesson View */}
-                    <div className="flex-1 overflow-auto">
-                      <LessonFocusedView
-                        lesson={getLessonById(activeLessonId)!}
-                        resources={getResourcesByLessonId(activeLessonId)}
-                        totalLessons={lessons.length}
-                        isReadOnly={isManager}
-                        onUpdateTitle={handleUpdateLessonTitle}
-                        onMoveUp={handleMoveLessonUp}
-                        onMoveDown={handleMoveLessonDown}
-                        onAddResource={handleAddResource}
-                        onEditResource={handleEditResource}
-                        onUpdateResource={handleUpdateResourceInline}
-                        onPreviewResource={handlePreviewResource}
-                        onDeleteResource={handleDeleteResource}
-                        onReorderResources={handleReorderResources}
-                        onPreviewLesson={() => setIsLessonPreviewOpen(true)}
-                        onSave={handleSaveLesson}
-                        onSaveAndNext={handleSaveAndNext}
-                      />
-                    </div>
+                  <div className="flex-1 p-6 space-y-4">
+                    {/* Lesson Summary — compact horizontal bar */}
+                    <LessonSummaryPanelStepper
+                      lessonId={activeLessonId}
+                      isReadOnly={isManager}
+                    />
 
-                    {/* Right Sidebar */}
-                    <div className="w-80 flex-shrink-0 overflow-auto">
-                      <LessonSummaryPanelStepper
-                        lessonId={activeLessonId}
-                        isReadOnly={isManager}
-                      />
-                    </div>
+                    {/* Focused Lesson View */}
+                    <LessonFocusedView
+                      lesson={getLessonById(activeLessonId)!}
+                      resources={getResourcesByLessonId(activeLessonId)}
+                      totalLessons={lessons.length}
+                      isReadOnly={isManager}
+                      isAIDraft={!!(course?.aiGenerated && (course.status === "ai-draft" || course.status === "in-review"))}
+                      sourceLabels={(() => {
+                        const lesson = getLessonById(activeLessonId);
+                        if (!lesson?.sourceAttributions || !course?.aiGenerated) return undefined;
+                        return lesson.sourceAttributions.map(id => {
+                          const item = getLibraryItemById(id);
+                          return item ? `${item.title}${item.regulatoryRef ? ` (${item.regulatoryRef})` : ""}` : id;
+                        }).filter((v, i, a) => a.indexOf(v) === i);
+                      })()}
+                      onUpdateTitle={handleUpdateLessonTitle}
+                      onMoveUp={handleMoveLessonUp}
+                      onMoveDown={handleMoveLessonDown}
+                      onAddResource={handleAddResource}
+                      onEditResource={handleEditResource}
+                      onUpdateResource={handleUpdateResourceInline}
+                      onPreviewResource={handlePreviewResource}
+                      onDeleteResource={handleDeleteResource}
+                      onReorderResources={handleReorderResources}
+                      onPreviewLesson={() => setIsLessonPreviewOpen(true)}
+                      onSave={handleSaveLesson}
+                      onSaveAndNext={handleSaveAndNext}
+                    />
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-96 text-gray-500 bg-white rounded-2xl mx-6 my-6 border-2 border-dashed border-gray-200">
@@ -3320,6 +3803,52 @@ export default function CourseEditPage() {
             )}
           </div>
         </div>
+          </div>
+          {/* Right: AI Agent Panel — full height, collapsible */}
+          {agentPanelOpen ? (
+            <div className="w-[38%] min-w-[340px] flex-shrink-0 border-l border-gray-200 bg-white transition-all duration-300 ease-in-out">
+              <div className="h-[calc(100vh-56px)] overflow-hidden">
+                <ChatArea
+                  messages={chatMessages}
+                  isTyping={isChatTyping}
+                  inputValue={chatInput}
+                  onInputChange={setChatInput}
+                  onSend={handleChatSend}
+                  mode="editor"
+                  courseTitle={title || "Untitled Course"}
+                  userName={currentUser.firstName}
+                  onCollapse={() => setAgentPanelOpen(false)}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex-shrink-0 border-l border-gray-200 bg-white">
+              <div className="h-[calc(100vh-56px)] flex flex-col items-center pt-3 px-1.5">
+                <button
+                  onClick={() => setAgentPanelOpen(true)}
+                  className="group flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                  title="Open AI Assistant"
+                >
+                  <PanelRightOpen className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                </button>
+                <button
+                  onClick={() => setAgentPanelOpen(true)}
+                  className="mt-2 group"
+                  title="Open AI Assistant"
+                >
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                      <MessageSquare className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <span className="text-[10px] font-medium text-gray-400 group-hover:text-blue-500 transition-colors [writing-mode:vertical-lr] tracking-wider uppercase">
+                      AI Assistant
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </AdminLayout>
 
       {/* Phase II 1H.4: Assignment Modals */}
@@ -3416,6 +3945,88 @@ export default function CourseEditPage() {
               </Button>
             </div>
           </div>
+        </div>
+      </Modal>
+
+      {/* Rejection Modal */}
+      <Modal
+        isOpen={isRejectModalOpen}
+        onClose={() => { setIsRejectModalOpen(false); setRejectNotes(""); }}
+        title="Reject AI-Generated Course"
+        size="small"
+      >
+        <div className="px-6 py-6 space-y-4">
+          <p className="text-sm text-gray-600">Please provide notes on why this course is being rejected. This helps improve future AI generations.</p>
+          <textarea
+            value={rejectNotes}
+            onChange={(e) => setRejectNotes(e.target.value)}
+            placeholder="e.g., Content accuracy issues, missing key topics, incorrect difficulty level..."
+            rows={4}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-sm resize-none"
+            autoFocus
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setIsRejectModalOpen(false); setRejectNotes(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectNotes.trim()}
+              onClick={() => {
+                updateCourse(courseId, { status: "rejected", reviewNotes: rejectNotes.trim(), reviewedByUserId: currentUser.id, reviewedAt: new Date().toISOString() });
+                createSynthesisHistory({
+                  draftId: courseId,
+                  synthesisType: course?.synthesisType || "full-course",
+                  status: "success",
+                  sourceCount: course?.sourceIds?.length ?? 0,
+                  lessonCount: lessons.length,
+                  generatedByUserId: course?.ownerUserId || "unknown",
+                  generatedTitle: course?.title || "",
+                  outcome: "rejected",
+                });
+                setIsRejectModalOpen(false);
+                setRejectNotes("");
+              }}
+            >
+              Reject Course
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Conversation History Modal */}
+      <Modal
+        isOpen={isConversationModalOpen}
+        onClose={() => setIsConversationModalOpen(false)}
+        title="AI Generation Conversation"
+        size="large"
+      >
+        <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+          {course?.conversationHistory && course.conversationHistory.length > 0 ? (
+            <div className="space-y-4">
+              {course.conversationHistory.filter(m => m.role !== "system").map((msg) => (
+                <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                    msg.role === "user" ? "bg-blue-100 text-blue-600" : "bg-purple-100 text-purple-600"
+                  }`}>
+                    {msg.role === "user" ? "U" : "AI"}
+                  </div>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white rounded-tr-sm"
+                      : "bg-gray-100 text-gray-800 rounded-tl-sm"
+                  }`}>
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <div className={`text-xs mt-1.5 ${msg.role === "user" ? "text-blue-200" : "text-gray-400"}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">No conversation history available.</p>
+          )}
         </div>
       </Modal>
 

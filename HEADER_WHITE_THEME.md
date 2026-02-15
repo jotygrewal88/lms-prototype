@@ -68,7 +68,7 @@ The global header has been successfully updated from a dark theme to a clean whi
 **Header Layout (h-14):**
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ 📖 UpKeep LMS          [All Sites ▼] [All Departments ▼] Role: [Select ▼] │
+│ 📖 UpKeep Learn          [All Sites ▼] [All Departments ▼] Role: [Select ▼] │
 └────────────────────────────────────────────────────────────┘
 │ White bg, gray border bottom, subtle shadow
 ```
@@ -153,7 +153,7 @@ The global header has been successfully updated from a dark theme to a clean whi
 <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between sticky top-0 z-40 shadow-sm px-4 md:px-6">
   <div class="flex items-center gap-2">
     <svg class="lucide lucide-book-open w-5 h-5 text-gray-800">...</svg>
-    <span class="text-lg font-semibold tracking-tight text-gray-900">UpKeep LMS</span>
+    <span class="text-lg font-semibold tracking-tight text-gray-900">UpKeep Learn</span>
   </div>
   <div class="flex items-center gap-4">
     <!-- Scope Selector with light theme pills -->
