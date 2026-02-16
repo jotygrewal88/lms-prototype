@@ -11,7 +11,7 @@
  */
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus, AlertCircle, Clock, Info, Shield } from "lucide-react";
@@ -56,7 +56,7 @@ import { runReminderEvaluation } from "@/lib/reminders";
 import { useScope } from "@/hooks/useScope";
 import { getScopedData } from "@/lib/stats";
 
-export default function CompliancePage() {
+function CompliancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { scope } = useScope();
@@ -1047,3 +1047,18 @@ export default function CompliancePage() {
   );
 }
 
+export default function CompliancePage() {
+  return (
+    <Suspense
+      fallback={
+        <RouteGuard allowedRoles={["ADMIN", "MANAGER"]}>
+          <AdminLayout>
+            <div className="max-w-7xl mx-auto py-12 text-center text-gray-500">Loading...</div>
+          </AdminLayout>
+        </RouteGuard>
+      }
+    >
+      <CompliancePageContent />
+    </Suspense>
+  );
+}

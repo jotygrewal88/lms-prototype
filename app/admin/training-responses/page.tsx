@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Zap,
@@ -42,7 +42,7 @@ function getTabResponses(all: TrainingResponse[], tab: TabKey): TrainingResponse
   }
 }
 
-export default function TrainingResponsesListPage() {
+function TrainingResponsesListContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [, setTick] = useState(0);
@@ -152,5 +152,21 @@ export default function TrainingResponsesListPage() {
         </div>
       </AdminLayout>
     </RouteGuard>
+  );
+}
+
+export default function TrainingResponsesListPage() {
+  return (
+    <Suspense
+      fallback={
+        <RouteGuard allowedRoles={["ADMIN"]}>
+          <AdminLayout>
+            <div className="max-w-7xl mx-auto py-12 text-center text-gray-500">Loading...</div>
+          </AdminLayout>
+        </RouteGuard>
+      }
+    >
+      <TrainingResponsesListContent />
+    </Suspense>
   );
 }
