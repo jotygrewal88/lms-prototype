@@ -787,7 +787,7 @@ export interface SkillV2 extends Timestamped {
   active: boolean;                      // Can be granted/used
 }
 
-export type UserSkillStatus = "active" | "expired" | "pending" | "revoked";
+export type UserSkillStatus = "active" | "expired" | "pending" | "revoked" | "suspended" | "renewing" | "expiring";
 export type EvidenceType = "training" | "course" | "manual" | "import" | "assessment";
 
 export interface UserSkillRecord extends Timestamped {
@@ -818,6 +818,13 @@ export interface UserSkillRecord extends Timestamped {
 
   // Admin
   notes?: string;
+
+  // Suspension (set by OperationalSignal)
+  suspendedAt?: string;
+  suspendedReason?: string;
+  suspendedBySignalId?: string;
+  renewalTrainingId?: string;
+  contentCurrencyAtRenewal?: number;
 }
 
 export type EnforcementMode = "none" | "warn" | "block";
@@ -942,6 +949,31 @@ export interface AISynthesisSettings {
 }
 
 // ============================================================================
+// ORGANIZATION PROFILE (singleton)
+// ============================================================================
+
+export interface OrganizationProfile {
+  companyName: string;
+  industry: string;
+  industrySubtype: string;
+  companySize: string;
+  description: string;
+  primaryCountry: string;
+  stateRegion: string;
+  additionalCountries: string[];
+  primaryLanguage: string;
+  additionalLanguages: string[];
+  regulatoryFrameworks: string[];
+  otherRegulations: string;
+  defaultPassingScore: number;
+  defaultRecertPeriod: string;
+  trainingLanguageReq: string;
+  customAIInstructions: string;
+  updatedAt: string;
+  updatedByUserId: string;
+}
+
+// ============================================================================
 // JOB TITLE TYPES
 // ============================================================================
 
@@ -972,4 +1004,271 @@ export interface UserSkillGapResult {
   gaps: JobTitleSkillRequirement[];
   covered: JobTitleSkillRequirement[];
   compliancePct: number;
+}
+
+// ============================================================================
+// ONBOARDING PATH TYPES
+// ============================================================================
+
+export type OnboardingPathStatus = "draft" | "published" | "archived";
+
+export interface OnboardingPhaseCourse {
+  id: string;
+  title: string;
+  category: string;
+  estimatedMinutes: number;
+  skillsGranted: string[];
+  sourceAttributions: string[];
+  passingScore?: number;
+  lessons: { title: string; estimatedMinutes: number; isAssessment: boolean }[];
+}
+
+export interface OnboardingPhase {
+  id: string;
+  name: string;
+  description: string;
+  timeline: string;
+  dayStart: number;
+  dayEnd: number;
+  courses: OnboardingPhaseCourse[];
+}
+
+export interface OnboardingPath extends Timestamped {
+  id: string;
+  jobTitleId: string;
+  title: string;
+  description: string;
+  status: OnboardingPathStatus;
+  durationDays: number;
+  totalEstimatedMinutes: number;
+  phases: OnboardingPhase[];
+  skillsCovered: string[];
+  skillsGap: string[];
+  confidenceScore: number;
+  sourceIds: string[];
+  additionalInstructions?: string;
+  industryContext?: string;
+  generatedByUserId: string;
+  publishedAt?: string;
+  publishedByUserId?: string;
+}
+
+export type OnboardingAssignmentStatus = "active" | "completed" | "cancelled";
+export type OnboardingPhaseStatus = "locked" | "in_progress" | "completed";
+
+export interface OnboardingAssignment extends Timestamped {
+  id: string;
+  pathId: string;
+  userId: string;
+  status: OnboardingAssignmentStatus;
+  startDate: string;
+  completedAt?: string;
+  phaseProgress: {
+    phaseId: string;
+    status: OnboardingPhaseStatus;
+    coursesCompleted: number;
+    coursesTotal: number;
+  }[];
+  skillsEarned: string[];
+  assignedByUserId: string;
+}
+
+// ============================================================================
+// OPERATIONAL SIGNALS
+// ============================================================================
+
+export type SignalType =
+  | "incident"
+  | "near_miss"
+  | "regulatory_change"
+  | "source_update"
+  | "equipment_change"
+  | "process_change"
+  | "assessment_anomaly";
+
+export type SignalSeverity = "critical" | "high" | "medium" | "low";
+
+export type SignalStatus = "open" | "acknowledged" | "training_generated" | "resolved";
+
+export type RecommendedAction =
+  | "individual_retraining"
+  | "corrective_training"
+  | "micro_lesson"
+  | "content_review"
+  | "delta_renewal"
+  | "full_regeneration"
+  | "none";
+
+export interface OperationalSignal extends Timestamped {
+  id: string;
+  type: SignalType;
+  severity: SignalSeverity;
+  status: SignalStatus;
+
+  title: string;
+  description: string;
+  occurredAt: string;
+
+  affectedSkillIds: string[];
+  affectedSiteId?: string;
+  affectedDepartmentId?: string;
+  affectedRoleIds?: string[];
+  affectedAssetId?: string;
+
+  involvedUserIds?: string[];
+  incidentWorkContext?: string;
+
+  regulatoryRef?: string;
+  effectiveDate?: string;
+
+  sourceId?: string;
+  previousVersion?: number;
+  newVersion?: number;
+
+  recommendedAction: RecommendedAction;
+  recommendedActionReason?: string;
+
+  acknowledgedByUserId?: string;
+  acknowledgedAt?: string;
+  trainingIds?: string[];
+  resolvedAt?: string;
+  resolutionNotes?: string;
+
+  reportedByUserId: string;
+}
+
+// ============================================================================
+// CONTENT CURRENCY
+// ============================================================================
+
+export type CurrencyStatus = "current" | "aging" | "stale" | "outdated";
+
+export interface ContentCurrency extends Timestamped {
+  id: string;
+  artifactId: string;
+  artifactType: "course" | "onboarding_path" | "micro_lesson";
+
+  currentScore: number;
+  status: CurrencyStatus;
+  lastEvaluatedAt: string;
+  lastRefreshedAt?: string;
+
+  activeSignals: Array<{
+    signalId: string;
+    signalType: SignalType;
+    impact: number;
+    appliedAt: string;
+  }>;
+
+  sourceVersionsAtGeneration: Array<{
+    sourceId: string;
+    sourceTitle: string;
+    versionAtGeneration: number;
+    currentVersion: number;
+    isOutdated: boolean;
+  }>;
+}
+
+// ============================================================================
+// TRAINING RESPONSES
+// ============================================================================
+
+export type TrainingResponseType =
+  | "incident_retraining"
+  | "corrective_training"
+  | "near_miss_briefing"
+  | "regulatory_update"
+  | "delta_renewal"
+  | "rebuilt_renewal"
+  | "clean_renewal"
+  | "path_refresh"
+  | "role_change_gap"
+  | "new_equipment_process";
+
+export type TrainingResponseStatus = "draft" | "approved" | "assigned" | "completed" | "rejected";
+
+export type SkillAction = "suspend_until_complete" | "flag_until_complete" | "renew" | "grant" | "none";
+
+export type TrainingResponseUrgency = "immediate" | "urgent" | "standard" | "blocking";
+
+export type TrainingResponseTrigger = "signal" | "renewal" | "role_change" | "path_refresh" | "manual";
+
+export interface TrainingResponseLesson {
+  title: string;
+  estimatedMinutes: number;
+  isAssessment: boolean;
+}
+
+export interface TrainingResponseSection {
+  id: string;
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  lessons: TrainingResponseLesson[];
+  isAssessment: boolean;
+  sourceAttributions: string[];
+}
+
+export type TrainingResponseTargetStatus = "pending" | "in_progress" | "completed" | "failed";
+
+export interface TrainingResponseTarget {
+  userId: string;
+  status: TrainingResponseTargetStatus;
+  assignedAt?: string;
+  completedAt?: string;
+  assessmentScore?: number;
+  skillActions: Array<{
+    skillId: string;
+    action: SkillAction;
+  }>;
+}
+
+export interface DeltaChange {
+  changeType: "incident" | "regulatory" | "source_update" | "process_change" | "equipment_change";
+  description: string;
+  before?: string;
+  after?: string;
+  signalId?: string;
+}
+
+export interface TrainingResponse extends Timestamped {
+  id: string;
+  type: TrainingResponseType;
+  status: TrainingResponseStatus;
+  title: string;
+  description: string;
+  urgency: TrainingResponseUrgency;
+
+  triggerType: TrainingResponseTrigger;
+  triggeredBySignalId?: string;
+  triggeredByRenewalSkillId?: string;
+  triggeredByRoleChangeUserId?: string;
+
+  sections: TrainingResponseSection[];
+  totalEstimatedMinutes: number;
+  assessmentRequired: boolean;
+  passingScore?: number;
+
+  targetUserIds: string[];
+  targets: TrainingResponseTarget[];
+
+  affectedSkillIds: string[];
+  skillAction: SkillAction;
+
+  sourceIds: string[];
+  sourceAttributions: string[];
+
+  deltaChanges?: DeltaChange[];
+
+  generatedByUserId: string;
+  approvedByUserId?: string;
+  approvedAt?: string;
+  rejectedByUserId?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+
+  deadline?: string;
+
+  pathId?: string;
+  refreshType?: "supplemental" | "partial" | "full";
 }

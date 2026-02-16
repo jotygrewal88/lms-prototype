@@ -22,9 +22,12 @@ import {
   Library,
   MapPin,
   Shield,
-  Sparkles
+  Sparkles,
+  Milestone,
+  AlertTriangle,
+  Zap
 } from "lucide-react";
-import { getCurrentUser, getCourses, subscribe } from "@/lib/store";
+import { getCurrentUser, getCourses, getActiveOnboardingAssignmentCount, getOpenSignals, getPendingTrainingResponses, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
 import { NavItem } from "@/types";
 
@@ -39,6 +42,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Users": Users,
   "Skills": Shield,
   "Learning Model": Sparkles,
+  "Onboarding": Milestone,
   "Audit Snapshots": FileStack,
   "Locations": MapPin,
   "Brand": Palette,
@@ -47,6 +51,8 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Style Guide": Paintbrush2,
   "Certificates": Award,
   "Demo": TestTube,
+  "Signals": AlertTriangle,
+  "Training Responses": Zap,
 };
 
 export default function AdminSidebar() {
@@ -54,15 +60,27 @@ export default function AdminSidebar() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [navItems, setNavItems] = useState<NavItem[]>(getNavigationItems(currentUser.role));
   const [aiDraftCount, setAiDraftCount] = useState(0);
+  const [activeOnboardingCount, setActiveOnboardingCount] = useState(0);
+  const [openSignalCount, setOpenSignalCount] = useState(0);
+  const [hasCriticalSignal, setHasCriticalSignal] = useState(false);
+  const [pendingResponseCount, setPendingResponseCount] = useState(0);
 
   useEffect(() => {
+    const updateCounts = () => {
+      setAiDraftCount(getCourses().filter((c) => c.status === "ai-draft" || c.status === "in-review").length);
+      setActiveOnboardingCount(getActiveOnboardingAssignmentCount());
+      const open = getOpenSignals();
+      setOpenSignalCount(open.length);
+      setHasCriticalSignal(open.some((s) => s.severity === "critical"));
+      setPendingResponseCount(getPendingTrainingResponses().length);
+    };
     const unsubscribe = subscribe(() => {
       const user = getCurrentUser();
       setCurrentUser(user);
       setNavItems(getNavigationItems(user.role));
-      setAiDraftCount(getCourses().filter((c) => c.status === "ai-draft" || c.status === "in-review").length);
+      updateCounts();
     });
-    setAiDraftCount(getCourses().filter((c) => c.status === "ai-draft" || c.status === "in-review").length);
+    updateCounts();
     return unsubscribe;
   }, []);
 
@@ -115,6 +133,15 @@ export default function AdminSidebar() {
                             {aiDraftCount}
                           </span>
                         )}
+                        {child.label === "Signals" && openSignalCount > 0 && (
+                          <span className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold ${
+                            hasCriticalSignal
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {openSignalCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
@@ -139,6 +166,16 @@ export default function AdminSidebar() {
                 {item.label === "Courses" && aiDraftCount > 0 && (
                   <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-purple-100 text-purple-700 text-[10px] font-semibold">
                     {aiDraftCount}
+                  </span>
+                )}
+                {item.label === "Onboarding" && activeOnboardingCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
+                    {activeOnboardingCount}
+                  </span>
+                )}
+                {item.label === "Training Responses" && pendingResponseCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-violet-100 text-violet-700 text-[10px] font-semibold">
+                    {pendingResponseCount}
                   </span>
                 )}
               </Link>

@@ -4,31 +4,23 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Sparkles,
-  ArrowRight,
-  BookOpen,
   Briefcase,
   Wrench,
   Library,
-  GraduationCap,
-  FileText,
+  Building2,
 } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
-import Card from "@/components/Card";
-import Button from "@/components/Button";
-import { getCurrentUser, getCourses, subscribe } from "@/lib/store";
-import HistoryTab from "@/components/admin/learningmodel/HistoryTab";
+import { getCurrentUser } from "@/lib/store";
 import JobTitlesTab from "@/components/admin/learningmodel/JobTitlesTab";
 import SkillsTab from "@/components/admin/learningmodel/SkillsTab";
+import OrganizationTab from "@/components/admin/learningmodel/OrganizationTab";
+import SourcesTab from "@/components/admin/learningmodel/SourcesTab";
 
 const TABS = [
-  // Config group
-  { id: "jobtitles", label: "Job Titles", icon: Briefcase, group: "config" },
-  { id: "skills", label: "Skills", icon: Wrench, group: "config" },
-  { id: "sources", label: "Sources", icon: Library, group: "config" },
-  // Workflow group
-  { id: "generate", label: "Generate", icon: Sparkles, group: "workflow" },
-  { id: "onboarding", label: "Onboarding", icon: GraduationCap, group: "workflow" },
-  { id: "drafts", label: "Drafts", icon: FileText, group: "workflow" },
+  { id: "organization", label: "Organization", icon: Building2 },
+  { id: "jobtitles", label: "Job Titles", icon: Briefcase },
+  { id: "skills", label: "Skills", icon: Wrench },
+  { id: "sources", label: "Sources", icon: Library },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -40,7 +32,6 @@ function LearningModelContent() {
   const tabParam = searchParams.get("tab") as TabId | null;
   const validTab = TABS.find((t) => t.id === tabParam)?.id;
   const [activeTab, setActiveTab] = useState<TabId>(validTab || "jobtitles");
-  const [aiDraftCount, setAiDraftCount] = useState(0);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === "ADMIN";
@@ -59,17 +50,6 @@ function LearningModelContent() {
     },
     [router]
   );
-
-  useEffect(() => {
-    const refresh = () => {
-      const courses = getCourses();
-      setAiDraftCount(
-        courses.filter((c) => c.status === "ai-draft" || c.status === "in-review").length
-      );
-    };
-    refresh();
-    return subscribe(refresh);
-  }, []);
 
   if (!isAdmin) {
     return (
@@ -99,118 +79,34 @@ function LearningModelContent() {
         {/* Tab Bar */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="flex items-center">
-            {TABS.map((tab, idx) => {
+            {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
-              // Add a divider between config and workflow groups
-              const showDivider =
-                idx > 0 && TABS[idx - 1].group !== tab.group;
-
               return (
-                <div key={tab.id} className="flex items-center">
-                  {showDivider && (
-                    <div className="mx-3 h-6 w-px bg-gray-300" />
-                  )}
-                  <button
-                    onClick={() => switchTab(tab.id)}
-                    className={`flex items-center gap-1.5 py-4 px-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                      isActive
-                        ? "border-purple-600 text-purple-600"
-                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                    {tab.id === "drafts" && aiDraftCount > 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-                        {aiDraftCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
+                <button
+                  key={tab.id}
+                  onClick={() => switchTab(tab.id)}
+                  className={`flex items-center gap-1.5 py-4 px-3 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                    isActive
+                      ? "border-purple-600 text-purple-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
               );
             })}
           </nav>
         </div>
 
         {/* Tab Content */}
+        {activeTab === "organization" && <OrganizationTab />}
         {activeTab === "jobtitles" && <JobTitlesTab />}
         {activeTab === "skills" && <SkillsTab />}
-        {activeTab === "sources" && <SourcesPlaceholder onNavigate={() => router.push("/admin/library")} />}
-        {activeTab === "generate" && <GeneratePlaceholder onNavigate={() => router.push("/admin/courses/generate")} aiDraftCount={aiDraftCount} />}
-        {activeTab === "onboarding" && <OnboardingPlaceholder />}
-        {activeTab === "drafts" && <HistoryTab />}
+        {activeTab === "sources" && <SourcesTab />}
       </div>
     </AdminLayout>
-  );
-}
-
-/* ─── Placeholder tabs ──────────────────────────────────────────────────── */
-
-function SourcesPlaceholder({ onNavigate }: { onNavigate: () => void }) {
-  return (
-    <Card className="p-8 text-center border-gray-200">
-      <Library className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Knowledge Sources</h3>
-      <p className="text-gray-600 mb-6 max-w-md mx-auto">
-        Your library contains the documents, SOPs, and reference materials that feed into AI course
-        generation. Manage sources in the Library.
-      </p>
-      <Button variant="primary" onClick={onNavigate}>
-        <Library className="w-4 h-4" />
-        Go to Library
-        <ArrowRight className="w-4 h-4" />
-      </Button>
-    </Card>
-  );
-}
-
-function GeneratePlaceholder({
-  onNavigate,
-  aiDraftCount,
-}: {
-  onNavigate: () => void;
-  aiDraftCount: number;
-}) {
-  return (
-    <Card className="p-8 border-purple-200 bg-gradient-to-r from-purple-50 to-white">
-      <div className="text-center">
-        <Sparkles className="w-12 h-12 text-purple-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Generate a New Course</h3>
-        <p className="text-gray-600 mb-6 max-w-md mx-auto">
-          Use AI to build training from your library sources, skills data, and compliance context.
-        </p>
-        <div className="flex items-center justify-center gap-4">
-          <Button variant="primary" onClick={onNavigate}>
-            <Sparkles className="w-4 h-4" />
-            Generate Course
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-          {aiDraftCount > 0 && (
-            <span className="text-sm text-purple-600 font-medium flex items-center gap-1">
-              <BookOpen className="w-4 h-4" />
-              {aiDraftCount} draft{aiDraftCount !== 1 ? "s" : ""} pending review
-            </span>
-          )}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function OnboardingPlaceholder() {
-  return (
-    <Card className="p-8 text-center border-gray-200">
-      <GraduationCap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Onboarding Paths</h3>
-      <p className="text-gray-600 mb-2 max-w-md mx-auto">
-        Create phased onboarding programs for each job title — automatically sequencing courses
-        based on skill priority and timeline requirements.
-      </p>
-      <span className="inline-block mt-4 px-3 py-1 text-sm bg-gray-100 text-gray-500 rounded-full">
-        Coming soon
-      </span>
-    </Card>
   );
 }
 

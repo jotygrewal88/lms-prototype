@@ -13,8 +13,9 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus, AlertCircle, Clock, Info } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Printer, Paperclip, FileText, Camera, Bell, Upload, Download, Sparkles, Settings, Mail, Plus, AlertCircle, Clock, Info, Shield } from "lucide-react";
+import UserSkillsPanel from "@/components/admin/skills/UserSkillsPanel";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
@@ -42,7 +43,13 @@ import {
   getCourseById,
   getExpiringSkills,
   getExpiredSkills,
+  getSuspendedUserSkillRecords,
+  getActiveSkillsV2,
+  getOperationalSignalById,
+  getUpcomingRenewals,
+  getSkillV2ById,
 } from "@/lib/store";
+import RenewalGenerateModal from "@/components/admin/compliance/RenewalGenerateModal";
 import { TrainingCompletion, CompletionStatus, getFullName } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { runReminderEvaluation } from "@/lib/reminders";
@@ -51,7 +58,9 @@ import { getScopedData } from "@/lib/stats";
 
 export default function CompliancePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { scope } = useScope();
+  const activeTab = searchParams.get("tab") || "completions";
   const [completions, setCompletions] = useState<TrainingCompletion[]>([]);
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [selectedCompletion, setSelectedCompletion] = useState<TrainingCompletion | null>(null);
@@ -79,6 +88,12 @@ export default function CompliancePage() {
   const [selectedCompletions, setSelectedCompletions] = useState<Set<string>>(new Set());
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [historyCompletionId, setHistoryCompletionId] = useState<string>("");
+  const [renewalModal, setRenewalModal] = useState<{
+    userId: string;
+    skillId: string;
+    renewalType: "clean" | "delta" | "rebuilt";
+    reason: string;
+  } | null>(null);
 
   const [trainings, setTrainings] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -369,7 +384,7 @@ export default function CompliancePage() {
               <h1 className="text-3xl font-bold text-gray-900">Compliance</h1>
               <p className="text-gray-500 mt-1">Track and manage training completion status for all employees</p>
             </div>
-            <div className="flex gap-2">
+            {activeTab === "completions" && <div className="flex gap-2">
               {/* Primary CTA: Add Training Record */}
               <Button variant="primary" onClick={() => setIsManualImportOpen(true)}>
                 <Plus className="w-4 h-4" />
@@ -446,8 +461,67 @@ export default function CompliancePage() {
                   },
                 ]}
               />
-            </div>
+            </div>}
           </div>
+
+          {/* Tab Navigation */}
+          <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+            <button
+              onClick={() => router.push("/admin/compliance?tab=completions")}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "completions"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Training Completions
+            </button>
+            <button
+              onClick={() => router.push("/admin/compliance?tab=skills")}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === "skills"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Skill Records
+              {(() => {
+                const count = getSuspendedUserSkillRecords().length;
+                if (count === 0) return null;
+                return (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">
+                    {count}
+                  </span>
+                );
+              })()}
+            </button>
+          </div>
+
+          {activeTab === "skills" ? (
+            <UserSkillsPanel initialFilter={(searchParams.get("filter") || "") as import("@/components/admin/skills/UserSkillsPanel").SkillsPanelFilter} />
+          ) : (
+          <>
+
+          {/* Suspended Skills Summary */}
+          {(() => {
+            const suspendedCount = getSuspendedUserSkillRecords().length;
+            if (suspendedCount === 0) return null;
+            return (
+              <div className="flex items-center gap-3 p-3 mb-6 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-800">
+                  <span className="font-medium">{suspendedCount} skill{suspendedCount !== 1 ? "s" : ""} suspended</span> due to operational signals.
+                </p>
+                <button
+                  onClick={() => router.push("/admin/compliance?tab=skills")}
+                  className="ml-auto text-xs font-medium text-red-700 hover:text-red-900 underline whitespace-nowrap"
+                >
+                  View in Skill Records →
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Skill & Certification Expiry Alerts */}
           {(() => {
@@ -460,7 +534,10 @@ export default function CompliancePage() {
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Skill & Certification Expiry</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <Card
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => router.push("/admin/compliance?tab=skills&filter=expired")}
+                  >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm text-gray-600">Expired Certifications</div>
@@ -471,7 +548,10 @@ export default function CompliancePage() {
                       <AlertCircle className="w-12 h-12 text-red-600 opacity-20" />
                     </div>
                   </Card>
-                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <Card
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => router.push("/admin/compliance?tab=skills&filter=expiring30")}
+                  >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm text-gray-600">Expiring in 30 Days</div>
@@ -482,7 +562,10 @@ export default function CompliancePage() {
                       <Clock className="w-12 h-12 text-yellow-600 opacity-20" />
                     </div>
                   </Card>
-                  <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <Card
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => router.push("/admin/compliance?tab=skills&filter=expiring60")}
+                  >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm text-gray-600">Expiring in 60 Days</div>
@@ -493,6 +576,67 @@ export default function CompliancePage() {
                       <Info className="w-12 h-12 text-blue-600 opacity-20" />
                     </div>
                   </Card>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Upcoming Renewals */}
+          {(() => {
+            const renewals = getUpcomingRenewals(60);
+            if (renewals.length === 0) return null;
+            return (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Upcoming Renewals</h3>
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden bg-white">
+                  {renewals.map((r) => {
+                    const user = getUserById(r.userId);
+                    const skill = getSkillV2ById(r.skillId);
+                    const typeColor =
+                      r.renewalType === "clean"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : r.renewalType === "delta"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-red-100 text-red-700";
+                    const typeLabel =
+                      r.renewalType === "clean"
+                        ? "Clean"
+                        : r.renewalType === "delta"
+                        ? "Delta"
+                        : "Rebuilt";
+                    const daysUntil = Math.ceil(
+                      (new Date(r.expiryDate).getTime() - Date.now()) / 86400000
+                    );
+                    return (
+                      <div key={`${r.userId}-${r.skillId}`} className="flex items-center gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">
+                            {user ? getFullName(user) : r.userId}
+                          </p>
+                          <p className="text-xs text-gray-500">{skill?.name || r.skillId}</p>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Expires in {daysUntil} day{daysUntil !== 1 ? "s" : ""}
+                        </div>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeColor}`}>
+                          {typeLabel}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setRenewalModal({
+                              userId: r.userId,
+                              skillId: r.skillId,
+                              renewalType: r.renewalType,
+                              reason: r.reason,
+                            })
+                          }
+                          className="text-xs font-medium text-violet-600 hover:text-violet-800 whitespace-nowrap"
+                        >
+                          {r.renewalType === "clean" ? "Auto-Assign" : "Generate Training"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -805,6 +949,9 @@ export default function CompliancePage() {
             </div>
           </Card>
 
+          </>
+          )}
+
           {/* Modals */}
           <CompletionModal
             isOpen={isCompletionModalOpen}
@@ -878,6 +1025,20 @@ export default function CompliancePage() {
               setToastType("success");
             }}
           />
+
+          {renewalModal && (
+            <RenewalGenerateModal
+              userId={renewalModal.userId}
+              skillId={renewalModal.skillId}
+              renewalType={renewalModal.renewalType}
+              reason={renewalModal.reason}
+              onClose={() => setRenewalModal(null)}
+              onGenerated={(responseId) => {
+                setRenewalModal(null);
+                router.push(`/admin/training-responses/${responseId}`);
+              }}
+            />
+          )}
 
           {toastMessage && <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />}
         </div>

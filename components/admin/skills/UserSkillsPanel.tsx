@@ -17,6 +17,9 @@ const STATUS_OPTIONS: { label: string; value: UserSkillStatus | "" }[] = [
   { label: "Expired", value: "expired" },
   { label: "Pending", value: "pending" },
   { label: "Revoked", value: "revoked" },
+  { label: "Suspended", value: "suspended" },
+  { label: "Renewing", value: "renewing" },
+  { label: "Expiring", value: "expiring" },
 ];
 
 const TYPE_OPTIONS = [
@@ -34,10 +37,15 @@ const EVIDENCE_OPTIONS: { label: string; value: EvidenceType | "" }[] = [
   { label: "Assessment", value: "assessment" },
 ];
 
-export default function UserSkillsPanel() {
+export type SkillsPanelFilter = "" | "expired" | "expiring30" | "expiring60" | "suspended";
+
+export default function UserSkillsPanel({ initialFilter }: { initialFilter?: SkillsPanelFilter } = {}) {
   const [records, setRecords] = useState<UserSkillRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialFilter === "suspended" ? "suspended" : initialFilter === "expired" ? "expired" : "");
+  const [expiryFilter, setExpiryFilter] = useState<"" | "expiring30" | "expiring60">(
+    initialFilter === "expiring30" ? "expiring30" : initialFilter === "expiring60" ? "expiring60" : ""
+  );
   const [typeFilter, setTypeFilter] = useState("");
   const [evidenceFilter, setEvidenceFilter] = useState("");
 
@@ -46,6 +54,22 @@ export default function UserSkillsPanel() {
     update();
     return subscribe(update);
   }, []);
+
+  useEffect(() => {
+    if (initialFilter === "suspended") {
+      setStatusFilter("suspended");
+      setExpiryFilter("");
+    } else if (initialFilter === "expired") {
+      setStatusFilter("expired");
+      setExpiryFilter("");
+    } else if (initialFilter === "expiring30") {
+      setStatusFilter("");
+      setExpiryFilter("expiring30");
+    } else if (initialFilter === "expiring60") {
+      setStatusFilter("");
+      setExpiryFilter("expiring60");
+    }
+  }, [initialFilter]);
 
   const users = getUsers();
 
@@ -66,6 +90,24 @@ export default function UserSkillsPanel() {
       // Status filter
       if (statusFilter && record.status !== statusFilter) return false;
 
+      // Expiry date filter (normalize to date-only to avoid time-of-day issues)
+      if (expiryFilter) {
+        if (!record.expiryDate) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expiry = new Date(record.expiryDate);
+        expiry.setHours(0, 0, 0, 0);
+        if (expiryFilter === "expiring30") {
+          const future = new Date(today);
+          future.setDate(today.getDate() + 30);
+          if (expiry < today || expiry > future) return false;
+        } else if (expiryFilter === "expiring60") {
+          const future = new Date(today);
+          future.setDate(today.getDate() + 60);
+          if (expiry < today || expiry > future) return false;
+        }
+      }
+
       // Type filter (certification vs skill)
       if (typeFilter && skill.type !== typeFilter) return false;
 
@@ -74,7 +116,7 @@ export default function UserSkillsPanel() {
 
       return true;
     });
-  }, [records, users, searchQuery, statusFilter, typeFilter, evidenceFilter]);
+  }, [records, users, searchQuery, statusFilter, expiryFilter, typeFilter, evidenceFilter]);
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -82,11 +124,14 @@ export default function UserSkillsPanel() {
       case "expired": return "error" as const;
       case "pending": return "warning" as const;
       case "revoked": return "default" as const;
+      case "suspended": return "error" as const;
+      case "renewing": return "info" as const;
+      case "expiring": return "warning" as const;
       default: return "default" as const;
     }
   };
 
-  const hasActiveFilters = searchQuery || statusFilter || typeFilter || evidenceFilter;
+  const hasActiveFilters = searchQuery || statusFilter || expiryFilter || typeFilter || evidenceFilter;
 
   return (
     <div className="space-y-4">
@@ -123,6 +168,17 @@ export default function UserSkillsPanel() {
             ))}
           </select>
 
+          {/* Expiry */}
+          <select
+            value={expiryFilter}
+            onChange={(e) => setExpiryFilter(e.target.value as "" | "expiring30" | "expiring60")}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          >
+            <option value="">All Expiry</option>
+            <option value="expiring30">Expiring in 30 days</option>
+            <option value="expiring60">Expiring in 60 days</option>
+          </select>
+
           {/* Type */}
           <select
             value={typeFilter}
@@ -144,29 +200,28 @@ export default function UserSkillsPanel() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+        </div>
 
-          {/* Clear filters */}
-          {hasActiveFilters && (
+        {/* Result count + Clear filters */}
+        {hasActiveFilters && (
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-gray-500">
+              Showing {filteredRecords.length} of {records.length} records
+            </p>
             <button
               type="button"
               onClick={() => {
                 setSearchQuery("");
                 setStatusFilter("");
+                setExpiryFilter("");
                 setTypeFilter("");
                 setEvidenceFilter("");
               }}
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+              className="text-sm text-primary hover:underline whitespace-nowrap"
             >
               Clear filters
             </button>
-          )}
-        </div>
-
-        {/* Result count */}
-        {hasActiveFilters && (
-          <p className="text-xs text-gray-500 mb-3">
-            Showing {filteredRecords.length} of {records.length} records
-          </p>
+          </div>
         )}
 
         {records.length === 0 ? (
@@ -190,36 +245,57 @@ export default function UserSkillsPanel() {
               if (!skill || !user) return null;
 
               return (
-                <tr key={record.id}>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    <Link
-                      href={`/admin/users/${user.id}`}
-                      className="text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      {getFullName(user)}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{skill.name}</td>
-                  <td className="px-6 py-4">
-                    <Badge variant={skill.type === "certification" ? "info" : "default"}>
-                      {skill.type === "certification" ? "Certification" : "Skill"}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4">
-                    <Badge variant={getStatusVariant(record.status)}>
-                      {record.status}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {record.achievedDate || "—"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {record.expiryDate || "No expiry"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {record.evidenceType}
-                  </td>
-                </tr>
+                <React.Fragment key={record.id}>
+                  <tr className={record.status === "suspended" ? "bg-red-50/50" : undefined}>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      <Link
+                        href={`/admin/users/${user.id}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {getFullName(user)}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{skill.name}</td>
+                    <td className="px-6 py-4">
+                      <Badge variant={skill.type === "certification" ? "info" : "default"}>
+                        {skill.type === "certification" ? "Certification" : "Skill"}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge variant={getStatusVariant(record.status)}>
+                        {record.status === "suspended" ? "Suspended" : record.status}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {record.achievedDate || "—"}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {record.expiryDate || "No expiry"}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {record.evidenceType}
+                    </td>
+                  </tr>
+                  {record.status === "suspended" && record.suspendedReason && (
+                    <tr className="bg-red-50/30">
+                      <td colSpan={7} className="px-6 py-2 text-xs text-red-700">
+                        <span className="font-medium">Suspended:</span>{" "}
+                        {record.suspendedReason}
+                        {record.suspendedBySignalId && (
+                          <>
+                            {" — "}
+                            <Link
+                              href="/admin/signals"
+                              className="text-red-600 underline hover:text-red-800"
+                            >
+                              View Signal →
+                            </Link>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </Table>

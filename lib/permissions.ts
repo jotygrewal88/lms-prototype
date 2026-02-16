@@ -40,6 +40,14 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/courses",
     },
     {
+      label: "Onboarding",
+      path: "/admin/onboarding",
+    },
+    {
+      label: "Training Responses",
+      path: "/admin/training-responses",
+    },
+    {
       label: "Library",
       path: "/admin/library",
     },
@@ -70,6 +78,10 @@ export function getNavigationItems(role: Role): NavItem[] {
         {
           label: "Audit Snapshots",
           path: "/admin/reports/audits",
+        },
+        {
+          label: "Signals",
+          path: "/admin/signals",
         },
       ],
     },

@@ -17,6 +17,8 @@ import {
   getCourseById,
   getLessonById,
   subscribe,
+  getOnboardingAssignmentsByUserId,
+  getOnboardingPathById,
 } from "@/lib/store";
 import { Course, ProgressCourse, CourseAssignment } from "@/types";
 import { 
@@ -25,7 +27,12 @@ import {
   Clock, 
   ArrowRight,
   BookOpen,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  Lock,
+  GraduationCap,
 } from "lucide-react";
 
 export default function LearnerDashboard() {
@@ -226,6 +233,9 @@ export default function LearnerDashboard() {
             </div>
           </div>
 
+          {/* Onboarding Section */}
+          <OnboardingSection userId={currentUser.id} />
+
           {/* Alert Banners */}
           {(overdueCourses.length > 0 || dueSoonCourses.length > 0) && (
             <div className="space-y-3">
@@ -335,5 +345,165 @@ export default function LearnerDashboard() {
         </div>
       </LearnerLayout>
     </RouteGuard>
+  );
+}
+
+/* ─── Onboarding Section ──────────────────────────────────────────────── */
+
+function OnboardingSection({ userId }: { userId: string }) {
+  const assignments = getOnboardingAssignmentsByUserId(userId).filter((a) => a.status === "active");
+
+  // Compute initial expanded phases (current in-progress phase)
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(() => {
+    if (assignments.length === 0) return new Set<string>();
+    const a0 = assignments[0];
+    const inProg = a0.phaseProgress.find((p) => p.status === "in_progress");
+    return inProg ? new Set([inProg.phaseId]) : new Set<string>();
+  });
+
+  if (assignments.length === 0) return null;
+
+  const a = assignments[0];
+  const path = getOnboardingPathById(a.pathId);
+  if (!path) return null;
+
+  const today = new Date();
+  const dayNum = Math.max(1, Math.ceil((today.getTime() - new Date(a.startDate).getTime()) / 86400000));
+  const totalCompletedCourses = a.phaseProgress.reduce((s, p) => s + p.coursesCompleted, 0);
+  const totalCourses = a.phaseProgress.reduce((s, p) => s + p.coursesTotal, 0);
+  const progressPct = totalCourses > 0 ? Math.round((totalCompletedCourses / totalCourses) * 100) : 0;
+
+  const togglePhase = (phaseId: string) => {
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
+      return next;
+    });
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
+        <GraduationCap className="w-5 h-5 text-emerald-600" />
+        <h2 className="text-base font-bold text-gray-900">Your Onboarding Plan</h2>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 mb-3">
+        <span>{path.title.replace(" Onboarding", "")}</span>
+        <span>&bull;</span>
+        <span>Started {new Date(a.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+        <span>&bull;</span>
+        <span>Day {dayNum} of {path.durationDays}</span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="flex items-center gap-2 mb-5">
+        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        <span className="text-sm font-medium text-gray-600">{progressPct}% complete</span>
+      </div>
+
+      {/* Phases */}
+      <div className="space-y-2">
+        {path.phases.map((phase, i) => {
+          const pp = a.phaseProgress.find((p) => p.phaseId === phase.id);
+          if (!pp) return null;
+
+          const isExpanded = expandedPhases.has(phase.id);
+          const prevPhase = i > 0 ? path.phases[i - 1] : null;
+          const prevPP = prevPhase ? a.phaseProgress.find((p) => p.phaseId === prevPhase.id) : null;
+
+          const statusIcon =
+            pp.status === "completed" ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            ) : pp.status === "in_progress" ? (
+              <Clock className="w-4 h-4 text-blue-500" />
+            ) : (
+              <Lock className="w-4 h-4 text-gray-300" />
+            );
+
+          const statusLabel =
+            pp.status === "completed"
+              ? "Complete"
+              : pp.status === "in_progress"
+              ? "In Progress"
+              : prevPP
+              ? `Complete ${prevPhase?.name} to unlock`
+              : "Locked";
+
+          const startDate = new Date(a.startDate);
+          const phaseDueDate = new Date(startDate.getTime() + phase.dayEnd * 86400000);
+
+          return (
+            <div key={phase.id} className="border border-gray-200 rounded-lg overflow-hidden">
+              {/* Phase header */}
+              <button
+                onClick={() => pp.status !== "locked" && togglePhase(phase.id)}
+                className={`w-full flex items-center gap-2 px-4 py-3 text-left ${
+                  pp.status === "locked" ? "opacity-60 cursor-default" : "hover:bg-gray-50"
+                }`}
+              >
+                {pp.status !== "locked" ? (
+                  isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  )
+                ) : (
+                  <Lock className="w-4 h-4 text-gray-300" />
+                )}
+                <span className="text-sm font-medium text-gray-900 flex-1">
+                  Phase {i + 1}: {phase.timeline} — {phase.name}
+                </span>
+                {statusIcon}
+                <span className="text-xs text-gray-500">{statusLabel}</span>
+              </button>
+
+              {/* Phase content */}
+              {isExpanded && pp.status !== "locked" && (
+                <div className="border-t border-gray-100 divide-y divide-gray-50">
+                  {phase.courses.map((course, ci) => {
+                    const isCompleted = ci < pp.coursesCompleted;
+                    const isCurrent = ci === pp.coursesCompleted && pp.status === "in_progress";
+
+                    return (
+                      <div
+                        key={course.id}
+                        className="flex items-center gap-3 px-4 py-3"
+                      >
+                        {isCompleted ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        ) : (
+                          <BookOpen className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${isCompleted ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                            {course.title}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {course.estimatedMinutes} min — Due{" "}
+                            {phaseDueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </p>
+                        </div>
+                        {isCurrent && (
+                          <button className="px-3 py-1 text-xs font-medium bg-emerald-600 text-white rounded-full hover:bg-emerald-700">
+                            {ci === 0 ? "Start" : "Continue"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

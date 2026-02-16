@@ -27,8 +27,14 @@ import {
   deleteUserAccessGrant,
   getJobTitles,
   getJobTitleById,
+  getOnboardingPathByJobTitleId,
+  createOnboardingAssignment,
+  analyzeRoleChangeGaps,
+  getSkillV2ById,
+  createTrainingResponse,
 } from "@/lib/store";
-import { User, Role, AccessGrantRelationship, UserAdditionalManager, UserAccessGrant } from "@/types";
+import { generateTrainingResponse } from "@/lib/mockTrainingGenerator";
+import { User, Role, AccessGrantRelationship, UserAdditionalManager, UserAccessGrant, getFullName } from "@/types";
 
 interface NewUserModalProps {
   isOpen: boolean;
@@ -66,6 +72,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
   const [jobTitle, setJobTitle] = useState("");
   const [selectedJobTitleId, setSelectedJobTitleId] = useState<string>("");
   const [useCustomTitle, setUseCustomTitle] = useState(false);
+  const [assignOnboarding, setAssignOnboarding] = useState(true);
+  const [onboardingStartDate, setOnboardingStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [jtSearch, setJtSearch] = useState("");
   const [jtDropdownOpen, setJtDropdownOpen] = useState(false);
   const [role, setRole] = useState<Role>("LEARNER");
@@ -99,6 +107,16 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
   // Training assignment state
   const [showAssignTrainings, setShowAssignTrainings] = useState(false);
   const [newlyCreatedUser, setNewlyCreatedUser] = useState<User | null>(null);
+
+  // Role change gap state
+  const [roleChangeGap, setRoleChangeGap] = useState<{
+    userId: string;
+    userName: string;
+    newJobTitle: string;
+    existingSkills: string[];
+    missingSkills: string[];
+  } | null>(null);
+  const [generatingGapTraining, setGeneratingGapTraining] = useState(false);
 
   // Initialize form with edit data
   useEffect(() => {
@@ -303,9 +321,26 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       };
 
       if (isEditing && editUser) {
+        const oldJobTitleId = editUser.jobTitleId;
         updateUser(editUser.id, userData);
+
+        // Check for role change gaps
+        if (selectedJobTitleId && selectedJobTitleId !== oldJobTitleId) {
+          const gaps = analyzeRoleChangeGaps(editUser.id, selectedJobTitleId);
+          if (gaps.gapCount > 0) {
+            const jt = getJobTitleById(selectedJobTitleId);
+            setRoleChangeGap({
+              userId: editUser.id,
+              userName: getFullName(editUser),
+              newJobTitle: jt?.name || selectedJobTitleId,
+              existingSkills: gaps.existingSkills,
+              missingSkills: gaps.missingSkills,
+            });
+            return;
+          }
+        }
+
         setToast({ message: "User updated successfully", type: "success" });
-        // Close modal after short delay for edits
         setTimeout(() => {
           onClose();
           setToast(null);
@@ -328,6 +363,27 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
           });
         }
         
+        // Create onboarding assignment if applicable
+        if (assignOnboarding && selectedJobTitleId && !isEditing) {
+          const obPath = getOnboardingPathByJobTitleId(selectedJobTitleId);
+          if (obPath) {
+            createOnboardingAssignment({
+              pathId: obPath.id,
+              userId: newUser.id,
+              status: "active",
+              startDate: onboardingStartDate,
+              phaseProgress: obPath.phases.map((ph, i) => ({
+                phaseId: ph.id,
+                status: i === 0 ? "in_progress" : "locked",
+                coursesCompleted: 0,
+                coursesTotal: ph.courses.length,
+              })),
+              skillsEarned: [],
+              assignedByUserId: currentUser.id,
+            });
+          }
+        }
+
         setNewlyCreatedUser(newUser);
         
         // Show training assignment modal for new learners
@@ -620,6 +676,57 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
                     />
                   )}
                   <p className="mt-1 text-xs text-gray-500">The employee&apos;s position or job function</p>
+
+                  {/* Onboarding path card */}
+                  {selectedJobTitleId && !isEditing && (() => {
+                    const obPath = getOnboardingPathByJobTitleId(selectedJobTitleId);
+                    if (!obPath) return null;
+                    const startD = new Date(onboardingStartDate);
+                    return (
+                      <div className="mt-3 border border-emerald-200 bg-emerald-50 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-emerald-800 mb-1.5 flex items-center gap-1.5">
+                          🎓 Onboarding Path Available
+                        </h4>
+                        <p className="text-sm text-emerald-700 font-medium">{obPath.title}</p>
+                        <div className="flex items-center gap-3 text-xs text-emerald-600 mt-1 mb-3">
+                          <span>📅 {obPath.durationDays} days</span>
+                          <span>📘 {obPath.phases.reduce((s, p) => s + p.courses.length, 0)} courses</span>
+                          <span>🎯 {obPath.skillsCovered.length} skills</span>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={assignOnboarding}
+                            onChange={(e) => setAssignOnboarding(e.target.checked)}
+                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          Assign this onboarding path to the new user
+                        </label>
+                        {assignOnboarding && (
+                          <div className="mt-2">
+                            <label className="text-xs text-gray-600 mb-1 block">Start date:</label>
+                            <input
+                              type="date"
+                              value={onboardingStartDate}
+                              onChange={(e) => setOnboardingStartDate(e.target.value)}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm"
+                            />
+                            <div className="mt-2 text-xs text-gray-500 space-y-0.5">
+                              <p className="font-medium text-gray-600">Phase due dates:</p>
+                              {obPath.phases.map((ph, i) => {
+                                const due = new Date(startD.getTime() + ph.dayEnd * 86400000);
+                                return (
+                                  <p key={ph.id}>
+                                    Phase {i + 1} ({ph.timeline}): {due.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -949,6 +1056,105 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
           user={newlyCreatedUser}
           onAssign={handleAssignTrainings}
         />
+      )}
+
+      {/* Role Change Gap Modal */}
+      {roleChangeGap && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            {generatingGapTraining ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin mb-4" />
+                <p className="text-gray-700 font-medium">Generating gap training...</p>
+              </div>
+            ) : (
+              <>
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Role Change Gap Detected
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  <strong>{roleChangeGap.userName}</strong> is transitioning to{" "}
+                  <strong>{roleChangeGap.newJobTitle}</strong>. They have{" "}
+                  {roleChangeGap.existingSkills.length} of{" "}
+                  {roleChangeGap.existingSkills.length + roleChangeGap.missingSkills.length} required
+                  skills.
+                </p>
+
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-700 mb-1.5">
+                    Gap training will cover:
+                  </p>
+                  <div className="space-y-1">
+                    {roleChangeGap.missingSkills.map((sid) => {
+                      const skill = getSkillV2ById(sid);
+                      return (
+                        <div key={sid} className="flex items-center gap-2 text-sm text-red-700 bg-red-50 px-3 py-1.5 rounded">
+                          <Shield className="w-3.5 h-3.5 text-red-500" />
+                          {skill?.name || sid}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {roleChangeGap.existingSkills.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-700 mb-1.5">Already covered:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {roleChangeGap.existingSkills.map((sid) => {
+                        const skill = getSkillV2ById(sid);
+                        return (
+                          <span key={sid} className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded">
+                            {skill?.name || sid}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setRoleChangeGap(null);
+                      setToast({ message: "User updated. No gap training generated.", type: "info" });
+                      setTimeout(() => { onClose(); setToast(null); }, 1500);
+                    }}
+                  >
+                    Skip
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={async () => {
+                      setGeneratingGapTraining(true);
+                      try {
+                        const result = await generateTrainingResponse({
+                          type: "role_change_gap",
+                          targetUserIds: [roleChangeGap.userId],
+                          sourceIds: [],
+                          affectedSkillIds: roleChangeGap.missingSkills,
+                          generatedByUserId: currentUser.id,
+                          triggerType: "role_change",
+                          triggeredByRoleChangeUserId: roleChangeGap.userId,
+                        });
+                        createTrainingResponse(result);
+                        setGeneratingGapTraining(false);
+                        setRoleChangeGap(null);
+                        setToast({ message: "User updated. Gap training created and ready for review.", type: "success" });
+                        setTimeout(() => { onClose(); setToast(null); }, 2000);
+                      } catch {
+                        setGeneratingGapTraining(false);
+                      }
+                    }}
+                  >
+                    Generate Gap Training
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {toast && (

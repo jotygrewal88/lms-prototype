@@ -64,6 +64,7 @@ export const seedJobTitles: JobTitle[] = [
       { skillId: "skl_fall_protection", required: true, priority: "critical", targetTimelineDays: 7 },
       { skillId: "skl_first_aid", required: true, priority: "critical", targetTimelineDays: 7 },
     ],
+    onboardingPathId: "obp_safety_manager",
     active: true,
     createdAt: daysAgo(90),
     updatedAt: daysAgo(10),

@@ -32,8 +32,12 @@ import { seedRoleSkillRequirements, seedWorkContextSkillRequirements } from "@/d
 import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
 import { seedSynthesisHistory } from "@/data/seedSynthesisDrafts";
 import { lotoCourse, lotoLessons, lotoResources, lotoQuiz, lotoAssignment } from "@/data/seedLOTOCourse";
-import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult } from "@/types";
+import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult, OnboardingPath, OnboardingAssignment, OrganizationProfile, OperationalSignal, ContentCurrency, SignalType, SignalSeverity, SignalStatus, TrainingResponse, TrainingResponseStatus, TrainingResponseType } from "@/types";
 import { seedJobTitles } from "@/data/seedJobTitles";
+import { seedOnboardingPaths, seedOnboardingAssignments } from "@/data/seedOnboarding";
+import { seedOperationalSignals, seedContentCurrencies } from "@/data/seedSignals";
+import { seedTrainingResponses } from "@/data/seedTrainingResponses";
+import { calculateCurrencyScore, scoreToStatus } from "@/lib/contentCurrency";
 import { markdownToHtml } from "./markdownToHtml";
 
 // Re-export Scope type for convenience
@@ -105,6 +109,15 @@ let jobTitles: JobTitle[] = [...seedJobTitles];
 // ============================================================================
 let synthesisHistory: SynthesisHistory[] = [...seedSynthesisHistory];
 
+// ============================================================================
+// ONBOARDING STATE
+// ============================================================================
+let onboardingPaths: OnboardingPath[] = [...seedOnboardingPaths];
+let onboardingAssignments: OnboardingAssignment[] = [...seedOnboardingAssignments];
+let operationalSignals: OperationalSignal[] = [...seedOperationalSignals];
+let contentCurrencies: ContentCurrency[] = [...seedContentCurrencies];
+let trainingResponses: TrainingResponse[] = [...seedTrainingResponses];
+
 const DEFAULT_AI_SETTINGS: AISynthesisSettings = {
   defaultSynthesisType: "full-course",
   defaultIndustry: "Manufacturing",
@@ -115,6 +128,31 @@ const DEFAULT_AI_SETTINGS: AISynthesisSettings = {
   maxLessonsPerCourse: 8,
 };
 let aiSynthesisSettings: AISynthesisSettings = { ...DEFAULT_AI_SETTINGS };
+
+// ============================================================================
+// ORGANIZATION PROFILE (singleton)
+// ============================================================================
+const DEFAULT_ORG_PROFILE: OrganizationProfile = {
+  companyName: "UpKeep Demo Co",
+  industry: "Manufacturing",
+  industrySubtype: "Discrete Manufacturing — Metal Fabrication",
+  companySize: "200-500 employees",
+  description: "Mid-size metal fabrication facility producing precision parts for automotive and aerospace customers. 24/7 operations with 3 shifts. ISO 9001 certified. Two production facilities and one warehouse.",
+  primaryCountry: "United States",
+  stateRegion: "California",
+  additionalCountries: [],
+  primaryLanguage: "English",
+  additionalLanguages: ["Spanish"],
+  regulatoryFrameworks: ["OSHA", "ANSI", "NFPA", "ISO 9001", "ISO 45001"],
+  otherRegulations: "ASME Boiler and Pressure Vessel Code, API 510",
+  defaultPassingScore: 85,
+  defaultRecertPeriod: "annual",
+  trainingLanguageReq: "bilingual",
+  customAIInstructions: "We refer to maintenance workers as \"Maintenance Partners\". We operate 24/7 with 3 shifts (Day, Swing, Graveyard). Plant A handles heavy fabrication, Plant B is light assembly. All safety training must reference our company motto: \"Everyone goes home safe\". Spanish is spoken by approximately 40% of floor workers.",
+  updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  updatedByUserId: "usr_admin_1",
+};
+let organizationProfile: OrganizationProfile = { ...DEFAULT_ORG_PROFILE };
 
 // Scope state with localStorage persistence
 const SCOPE_STORAGE_KEY = "uklms_scope";
@@ -825,6 +863,32 @@ export function resetToSeed(): void {
   // Learning Synthesis: Reset
   synthesisHistory = [...seedSynthesisHistory];
   aiSynthesisSettings = { ...DEFAULT_AI_SETTINGS };
+
+  // Organization Profile: Reset
+  organizationProfile = { ...DEFAULT_ORG_PROFILE };
+
+  // Onboarding: Reset
+  onboardingPaths = [...seedOnboardingPaths];
+  onboardingAssignments = [...seedOnboardingAssignments];
+
+  // Operational Signals & Currency: Reset
+  operationalSignals = [...seedOperationalSignals];
+  contentCurrencies = [...seedContentCurrencies];
+
+  // Training Responses: Reset
+  trainingResponses = [...seedTrainingResponses];
+
+  // Seed: Suspend Marcus Johnson's LOTO cert based on signal sig_001
+  const marcusLoto = userSkillRecords.find(
+    (r) => r.userId === "usr_lrn_a_pkg_1" && r.skillId === "skl_loto"
+  );
+  if (marcusLoto) {
+    marcusLoto.status = "suspended";
+    marcusLoto.suspendedAt = new Date(Date.now() - 2 * 86400000).toISOString();
+    marcusLoto.suspendedReason =
+      "Incident: Improper LOTO procedure on Compressor Unit #7. Failed to verify zero energy state.";
+    marcusLoto.suspendedBySignalId = "sig_001";
+  }
   
   // Epic 1G.4: Initialize sample version snapshots and audit events
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -4108,6 +4172,37 @@ export function createNewVersion(
   };
   
   libraryItems.push(newVersion);
+
+  // Auto-detect: create source_update signal when a knowledge source version changes
+  if (parent.allowedForSynthesis && newVersion.version > parent.version) {
+    const versionDiff = newVersion.version - parent.version;
+    const affectedSkillIds: string[] = [];
+    for (const path of onboardingPaths) {
+      if (path.sourceIds.includes(parent.id)) {
+        for (const sid of path.skillsCovered) {
+          if (!affectedSkillIds.includes(sid)) affectedSkillIds.push(sid);
+        }
+      }
+    }
+    createOperationalSignal({
+      type: "source_update",
+      severity: versionDiff >= 2 ? "high" : "medium",
+      status: "open",
+      title: `${parent.title} Updated to v${newVersion.version}`,
+      description: `Knowledge source "${parent.title}" has been updated from v${parent.version} to v${newVersion.version}. Training content generated from earlier versions may be outdated.`,
+      occurredAt: now,
+      affectedSkillIds,
+      sourceId: parent.id,
+      previousVersion: parent.version,
+      newVersion: newVersion.version,
+      recommendedAction: versionDiff >= 2 ? "full_regeneration" : "content_review",
+      recommendedActionReason: versionDiff >= 2
+        ? `Major revision detected. Full regeneration of affected training content is recommended.`
+        : `Minor revision detected. Review affected training content for accuracy.`,
+      reportedByUserId: "system",
+    });
+  }
+
   notifyListeners();
   return newVersion;
 }
@@ -4623,6 +4718,18 @@ export function updateAISynthesisSettings(updates: Partial<AISynthesisSettings>)
 }
 
 // ============================================================================
+// ORGANIZATION PROFILE
+// ============================================================================
+
+export const getOrganizationProfile = (): OrganizationProfile => ({ ...organizationProfile, additionalCountries: [...organizationProfile.additionalCountries], additionalLanguages: [...organizationProfile.additionalLanguages], regulatoryFrameworks: [...organizationProfile.regulatoryFrameworks] });
+
+export function updateOrganizationProfile(updates: Partial<OrganizationProfile>): OrganizationProfile {
+  organizationProfile = { ...organizationProfile, ...updates, updatedAt: new Date().toISOString() };
+  notifyListeners();
+  return getOrganizationProfile();
+}
+
+// ============================================================================
 // JOB TITLES — CRUD + COMPUTED HELPERS
 // ============================================================================
 
@@ -4756,4 +4863,667 @@ export function getAIContextData() {
     expiringCertifications: expiringSoon.length,
     settings: getAISynthesisSettings(),
   };
+}
+
+// ============================================================================
+// ONBOARDING PATHS CRUD
+// ============================================================================
+
+export const getOnboardingPaths = (): OnboardingPath[] => onboardingPaths;
+export const getOnboardingPathById = (id: string): OnboardingPath | undefined =>
+  onboardingPaths.find((p) => p.id === id);
+export const getOnboardingPathByJobTitleId = (jobTitleId: string): OnboardingPath | undefined =>
+  onboardingPaths.find((p) => p.jobTitleId === jobTitleId && p.status === "published");
+export const getPublishedOnboardingPaths = (): OnboardingPath[] =>
+  onboardingPaths.filter((p) => p.status === "published");
+
+export function createOnboardingPath(
+  data: Omit<OnboardingPath, "id" | "createdAt" | "updatedAt">
+): OnboardingPath {
+  const now = new Date().toISOString();
+  const path: OnboardingPath = {
+    ...data,
+    id: `obp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  onboardingPaths.push(path);
+  notifyListeners();
+  return path;
+}
+
+export function updateOnboardingPath(id: string, updates: Partial<OnboardingPath>): OnboardingPath | null {
+  const idx = onboardingPaths.findIndex((p) => p.id === id);
+  if (idx === -1) return null;
+  onboardingPaths[idx] = {
+    ...onboardingPaths[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  notifyListeners();
+  return onboardingPaths[idx];
+}
+
+export function deleteOnboardingPath(id: string): boolean {
+  const prev = onboardingPaths.length;
+  onboardingPaths = onboardingPaths.filter((p) => p.id !== id);
+  if (onboardingPaths.length < prev) {
+    notifyListeners();
+    return true;
+  }
+  return false;
+}
+
+export function publishOnboardingPath(id: string, publishedByUserId: string): OnboardingPath | null {
+  const path = updateOnboardingPath(id, {
+    status: "published",
+    publishedAt: new Date().toISOString(),
+    publishedByUserId,
+  });
+  if (path) {
+    const jtIdx = jobTitles.findIndex((jt) => jt.id === path.jobTitleId);
+    if (jtIdx !== -1) {
+      jobTitles[jtIdx] = { ...jobTitles[jtIdx], onboardingPathId: path.id, updatedAt: new Date().toISOString() };
+    }
+    notifyListeners();
+  }
+  return path;
+}
+
+export function archiveOnboardingPath(id: string): OnboardingPath | null {
+  return updateOnboardingPath(id, { status: "archived" });
+}
+
+// ============================================================================
+// ONBOARDING ASSIGNMENTS CRUD
+// ============================================================================
+
+export const getOnboardingAssignments = (): OnboardingAssignment[] => onboardingAssignments;
+export const getActiveOnboardingAssignments = (): OnboardingAssignment[] =>
+  onboardingAssignments.filter((a) => a.status === "active");
+export const getCompletedOnboardingAssignments = (): OnboardingAssignment[] =>
+  onboardingAssignments.filter((a) => a.status === "completed");
+export const getOnboardingAssignmentsByUserId = (userId: string): OnboardingAssignment[] =>
+  onboardingAssignments.filter((a) => a.userId === userId);
+export const getOnboardingAssignmentsByPathId = (pathId: string): OnboardingAssignment[] =>
+  onboardingAssignments.filter((a) => a.pathId === pathId);
+export const getActiveOnboardingAssignmentCount = (): number =>
+  onboardingAssignments.filter((a) => a.status === "active").length;
+
+export function createOnboardingAssignment(
+  data: Omit<OnboardingAssignment, "id" | "createdAt" | "updatedAt">
+): OnboardingAssignment {
+  const now = new Date().toISOString();
+  const assignment: OnboardingAssignment = {
+    ...data,
+    id: `oba_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  onboardingAssignments.push(assignment);
+  notifyListeners();
+  return assignment;
+}
+
+export function updateOnboardingAssignment(
+  id: string,
+  updates: Partial<OnboardingAssignment>
+): OnboardingAssignment | null {
+  const idx = onboardingAssignments.findIndex((a) => a.id === id);
+  if (idx === -1) return null;
+  onboardingAssignments[idx] = {
+    ...onboardingAssignments[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  notifyListeners();
+  return onboardingAssignments[idx];
+}
+
+// ============================================================================
+// OPERATIONAL SIGNALS CRUD
+// ============================================================================
+
+export const getOperationalSignals = (filters?: {
+  type?: SignalType;
+  severity?: SignalSeverity;
+  status?: SignalStatus;
+}): OperationalSignal[] => {
+  let result = operationalSignals;
+  if (filters?.type) result = result.filter((s) => s.type === filters.type);
+  if (filters?.severity) result = result.filter((s) => s.severity === filters.severity);
+  if (filters?.status) result = result.filter((s) => s.status === filters.status);
+  return result;
+};
+
+export const getOperationalSignalById = (id: string): OperationalSignal | undefined =>
+  operationalSignals.find((s) => s.id === id);
+
+export function createOperationalSignal(
+  data: Omit<OperationalSignal, "id" | "createdAt" | "updatedAt">
+): OperationalSignal {
+  const now = new Date().toISOString();
+  const signal: OperationalSignal = {
+    ...data,
+    id: `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  operationalSignals.push(signal);
+  recalculateAllCurrencies();
+  notifyListeners();
+  return signal;
+}
+
+export function updateOperationalSignal(
+  id: string,
+  updates: Partial<OperationalSignal>
+): OperationalSignal | null {
+  const idx = operationalSignals.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+  operationalSignals[idx] = {
+    ...operationalSignals[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  notifyListeners();
+  return operationalSignals[idx];
+}
+
+export function acknowledgeSignal(id: string, userId: string): OperationalSignal | null {
+  return updateOperationalSignal(id, {
+    status: "acknowledged",
+    acknowledgedByUserId: userId,
+    acknowledgedAt: new Date().toISOString(),
+  });
+}
+
+export function resolveSignal(id: string, userId: string, notes: string): OperationalSignal | null {
+  return updateOperationalSignal(id, {
+    status: "resolved",
+    resolvedAt: new Date().toISOString(),
+    resolutionNotes: notes,
+  });
+}
+
+export const getOpenSignals = (): OperationalSignal[] =>
+  operationalSignals.filter((s) => s.status === "open" || s.status === "acknowledged");
+
+export const getSignalsForSkill = (skillId: string): OperationalSignal[] =>
+  operationalSignals.filter((s) => s.affectedSkillIds.includes(skillId));
+
+export const getSignalsForUser = (userId: string): OperationalSignal[] =>
+  operationalSignals.filter((s) => s.involvedUserIds?.includes(userId));
+
+// ============================================================================
+// CONTENT CURRENCY CRUD
+// ============================================================================
+
+export const getContentCurrency = (artifactId: string): ContentCurrency | undefined =>
+  contentCurrencies.find((c) => c.artifactId === artifactId);
+
+export const getAllContentCurrencies = (): ContentCurrency[] => contentCurrencies;
+
+export function recalculateCurrency(artifactId: string): ContentCurrency | null {
+  const path = onboardingPaths.find((p) => p.id === artifactId);
+  if (!path) return null;
+
+  const signals = operationalSignals.filter(
+    (s) => s.status !== "resolved"
+  );
+  const { score, signalImpacts } = calculateCurrencyScore(path, signals, libraryItems);
+  const status = scoreToStatus(score);
+  const now = new Date().toISOString();
+
+  const existing = contentCurrencies.findIndex((c) => c.artifactId === artifactId);
+  const record: ContentCurrency = {
+    id: `cur_${artifactId}`,
+    artifactId,
+    artifactType: "onboarding_path",
+    currentScore: score,
+    status,
+    lastEvaluatedAt: now,
+    lastRefreshedAt: existing >= 0 ? contentCurrencies[existing].lastRefreshedAt : undefined,
+    activeSignals: signalImpacts.map((si) => ({
+      signalId: si.signalId,
+      signalType: si.signalType,
+      impact: si.impact,
+      appliedAt: now,
+    })),
+    sourceVersionsAtGeneration: path.sourceIds.map((srcId) => {
+      const src = libraryItems.find((s) => s.id === srcId);
+      return {
+        sourceId: srcId,
+        sourceTitle: src?.title || srcId,
+        versionAtGeneration: 1,
+        currentVersion: src?.version || 1,
+        isOutdated: (src?.version || 1) > 1,
+      };
+    }),
+    createdAt: existing >= 0 ? contentCurrencies[existing].createdAt : now,
+    updatedAt: now,
+  };
+
+  if (existing >= 0) {
+    contentCurrencies[existing] = record;
+  } else {
+    contentCurrencies.push(record);
+  }
+
+  return record;
+}
+
+export function recalculateAllCurrencies(): void {
+  for (const path of onboardingPaths) {
+    recalculateCurrency(path.id);
+  }
+}
+
+export const getStaleContent = (): ContentCurrency[] =>
+  contentCurrencies.filter((c) => c.currentScore < 70);
+
+export const getOutdatedContent = (): ContentCurrency[] =>
+  contentCurrencies.filter((c) => c.currentScore < 40);
+
+// ============================================================================
+// SKILL SUSPENSION
+// ============================================================================
+
+export function suspendUserSkill(
+  userId: string,
+  skillId: string,
+  signalId: string,
+  reason: string
+): UserSkillRecord | null {
+  const rec = userSkillRecords.find(
+    (r) => r.userId === userId && r.skillId === skillId
+  );
+  if (!rec) return null;
+  rec.status = "suspended";
+  rec.suspendedAt = new Date().toISOString();
+  rec.suspendedReason = reason;
+  rec.suspendedBySignalId = signalId;
+  rec.updatedAt = new Date().toISOString();
+  notifyListeners();
+  return rec;
+}
+
+export function reinstateUserSkill(
+  userId: string,
+  skillId: string,
+  trainingId?: string
+): UserSkillRecord | null {
+  const rec = userSkillRecords.find(
+    (r) => r.userId === userId && r.skillId === skillId
+  );
+  if (!rec) return null;
+  rec.status = "active";
+  rec.suspendedAt = undefined;
+  rec.suspendedReason = undefined;
+  rec.suspendedBySignalId = undefined;
+  if (trainingId) {
+    rec.evidenceId = trainingId;
+    rec.evidenceType = "training";
+  }
+  rec.updatedAt = new Date().toISOString();
+  notifyListeners();
+  return rec;
+}
+
+export function beginSkillRenewal(
+  userId: string,
+  skillId: string,
+  trainingId: string,
+  currencyScore: number
+): UserSkillRecord | null {
+  const rec = userSkillRecords.find(
+    (r) => r.userId === userId && r.skillId === skillId
+  );
+  if (!rec) return null;
+  rec.status = "renewing";
+  rec.renewalTrainingId = trainingId;
+  rec.contentCurrencyAtRenewal = currencyScore;
+  rec.updatedAt = new Date().toISOString();
+  notifyListeners();
+  return rec;
+}
+
+export function getSuspendedUserSkillRecords(): UserSkillRecord[] {
+  return userSkillRecords.filter((r) => r.status === "suspended");
+}
+
+// ============================================================================
+// TRAINING RESPONSES
+// ============================================================================
+
+export function getTrainingResponses(filters?: {
+  type?: TrainingResponseType;
+  status?: TrainingResponseStatus;
+}): TrainingResponse[] {
+  let result = [...trainingResponses];
+  if (filters?.type) result = result.filter((r) => r.type === filters.type);
+  if (filters?.status) result = result.filter((r) => r.status === filters.status);
+  return result;
+}
+
+export function getTrainingResponseById(id: string): TrainingResponse | undefined {
+  return trainingResponses.find((r) => r.id === id);
+}
+
+export function createTrainingResponse(
+  data: Omit<TrainingResponse, "id" | "createdAt" | "updatedAt">
+): TrainingResponse {
+  const now = new Date().toISOString();
+  const tr: TrainingResponse = {
+    ...data,
+    id: `tr_${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  trainingResponses.push(tr);
+  notifyListeners();
+  return tr;
+}
+
+export function updateTrainingResponse(
+  id: string,
+  updates: Partial<Omit<TrainingResponse, "id" | "createdAt">>
+): TrainingResponse | undefined {
+  const idx = trainingResponses.findIndex((r) => r.id === id);
+  if (idx === -1) return undefined;
+  trainingResponses[idx] = {
+    ...trainingResponses[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  notifyListeners();
+  return trainingResponses[idx];
+}
+
+export function approveTrainingResponse(
+  id: string,
+  userId: string
+): TrainingResponse | undefined {
+  return updateTrainingResponse(id, {
+    status: "approved",
+    approvedByUserId: userId,
+    approvedAt: new Date().toISOString(),
+  });
+}
+
+export function assignTrainingResponse(id: string): TrainingResponse | undefined {
+  const tr = trainingResponses.find((r) => r.id === id);
+  if (!tr) return undefined;
+  const now = new Date().toISOString();
+  const targets = tr.targetUserIds.map((uid) => {
+    const existing = tr.targets.find((t) => t.userId === uid);
+    return existing
+      ? { ...existing, assignedAt: existing.assignedAt || now }
+      : {
+          userId: uid,
+          status: "pending" as const,
+          assignedAt: now,
+          skillActions: tr.affectedSkillIds.map((sid) => ({
+            skillId: sid,
+            action: tr.skillAction,
+          })),
+        };
+  });
+  return updateTrainingResponse(id, {
+    status: "assigned",
+    targets,
+  });
+}
+
+export function completeTrainingResponseTarget(
+  responseId: string,
+  userId: string,
+  score?: number
+): TrainingResponse | undefined {
+  const tr = trainingResponses.find((r) => r.id === responseId);
+  if (!tr) return undefined;
+
+  const now = new Date().toISOString();
+  const updatedTargets = tr.targets.map((t) => {
+    if (t.userId !== userId) return t;
+    const passed = !tr.assessmentRequired || (score !== undefined && score >= (tr.passingScore || 0));
+    const newStatus = passed ? "completed" as const : "failed" as const;
+
+    if (passed) {
+      for (const sa of t.skillActions) {
+        if (sa.action === "suspend_until_complete") {
+          reinstateUserSkill(userId, sa.skillId);
+        } else if (sa.action === "renew") {
+          const record = userSkillRecords.find(
+            (r) => r.userId === userId && r.skillId === sa.skillId
+          );
+          const skillDef = skillsV2.find((s) => s.id === sa.skillId);
+          if (record) {
+            record.achievedDate = now;
+            record.status = "active";
+            if (skillDef?.expiryDays) {
+              record.expiryDate = new Date(
+                Date.now() + skillDef.expiryDays * 86400000
+              ).toISOString();
+            }
+            record.updatedAt = now;
+          }
+        } else if (sa.action === "grant") {
+          const existing = userSkillRecords.find(
+            (r) => r.userId === userId && r.skillId === sa.skillId
+          );
+          if (!existing) {
+            const skillDef = skillsV2.find((s) => s.id === sa.skillId);
+            userSkillRecords.push({
+              id: `usr_${Date.now()}_${userId}_${sa.skillId}`,
+              userId,
+              skillId: sa.skillId,
+              status: "active",
+              achievedDate: now,
+              expiryDate: skillDef?.expiryDays
+                ? new Date(Date.now() + skillDef.expiryDays * 86400000).toISOString()
+                : undefined,
+              evidenceType: "training",
+              evidenceUrl: responseId,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        } else if (sa.action === "flag_until_complete") {
+          // Nothing extra needed — flag cleared by completion
+        }
+      }
+    }
+
+    return {
+      ...t,
+      status: newStatus,
+      completedAt: now,
+      assessmentScore: score,
+    };
+  });
+
+  const allDone = updatedTargets.every(
+    (t) => t.status === "completed" || t.status === "failed"
+  );
+  const responseStatus = allDone ? "completed" as const : tr.status;
+
+  const updated = updateTrainingResponse(responseId, {
+    targets: updatedTargets,
+    status: responseStatus,
+  });
+
+  if (allDone && tr.triggeredBySignalId) {
+    const sig = operationalSignals.find((s) => s.id === tr.triggeredBySignalId);
+    if (sig && sig.status !== "resolved") {
+      sig.status = "resolved";
+      sig.resolvedAt = now;
+      sig.resolutionNotes = `Auto-resolved: training response "${tr.title}" completed by all targets.`;
+      sig.updatedAt = now;
+    }
+    recalculateAllCurrencies();
+  }
+
+  notifyListeners();
+  return updated;
+}
+
+export function rejectTrainingResponse(
+  id: string,
+  userId: string,
+  reason: string
+): TrainingResponse | undefined {
+  return updateTrainingResponse(id, {
+    status: "rejected",
+    rejectedByUserId: userId,
+    rejectedAt: new Date().toISOString(),
+    rejectionReason: reason,
+  });
+}
+
+export function getPendingTrainingResponses(): TrainingResponse[] {
+  return trainingResponses.filter(
+    (r) => r.status === "draft" || r.status === "approved"
+  );
+}
+
+export function getActiveTrainingResponses(): TrainingResponse[] {
+  return trainingResponses.filter((r) => r.status === "assigned");
+}
+
+export function getCompletedTrainingResponses(): TrainingResponse[] {
+  return trainingResponses.filter((r) => r.status === "completed");
+}
+
+export function getRejectedTrainingResponses(): TrainingResponse[] {
+  return trainingResponses.filter((r) => r.status === "rejected");
+}
+
+export function getTrainingResponsesForUser(userId: string): TrainingResponse[] {
+  return trainingResponses.filter(
+    (r) => r.targetUserIds.includes(userId) || r.targets.some((t) => t.userId === userId)
+  );
+}
+
+// Renewal evaluation
+export function evaluateRenewalType(
+  userId: string,
+  skillId: string
+): { type: "clean" | "delta" | "rebuilt"; reason: string } {
+  const record = userSkillRecords.find(
+    (r) => r.userId === userId && r.skillId === skillId
+  );
+  if (!record || !record.achievedDate) {
+    return { type: "rebuilt", reason: "No prior certification record found." };
+  }
+
+  const signalsSince = operationalSignals.filter((s) => {
+    if (s.status === "resolved" && s.resolvedAt && new Date(s.resolvedAt) < new Date(record.achievedDate!)) return false;
+    return (
+      s.affectedSkillIds.includes(skillId) &&
+      new Date(s.createdAt) > new Date(record.achievedDate!)
+    );
+  });
+
+  const criticalSignals = signalsSince.filter((s) => s.severity === "critical");
+  const totalSignals = signalsSince.length;
+
+  // Check currency of onboarding paths that cover this skill
+  const relevantPaths = onboardingPaths.filter((p) =>
+    p.skillsCovered.includes(skillId)
+  );
+  const relevantCurrencies = relevantPaths
+    .map((p) => contentCurrencies.find((c) => c.artifactId === p.id))
+    .filter(Boolean) as ContentCurrency[];
+  const avgCurrency =
+    relevantCurrencies.length > 0
+      ? relevantCurrencies.reduce((s, c) => s + c.currentScore, 0) / relevantCurrencies.length
+      : 100;
+
+  if (criticalSignals.length > 0 || avgCurrency < 40) {
+    return {
+      type: "rebuilt",
+      reason: `${criticalSignals.length} critical signal(s) since last cert, currency score ${Math.round(avgCurrency)}%. Full retraining recommended.`,
+    };
+  }
+  if (totalSignals > 0 || avgCurrency < 70) {
+    return {
+      type: "delta",
+      reason: `${totalSignals} signal(s) since last cert, currency score ${Math.round(avgCurrency)}%. Delta renewal with changes section recommended.`,
+    };
+  }
+  return {
+    type: "clean",
+    reason: "No significant changes since last certification. Standard renewal is sufficient.",
+  };
+}
+
+export function getUpcomingRenewals(daysAhead: number = 60): Array<{
+  userId: string;
+  skillId: string;
+  expiryDate: string;
+  renewalType: "clean" | "delta" | "rebuilt";
+  reason: string;
+}> {
+  const cutoff = new Date(Date.now() + daysAhead * 86400000);
+  const now = new Date();
+  const results: Array<{
+    userId: string;
+    skillId: string;
+    expiryDate: string;
+    renewalType: "clean" | "delta" | "rebuilt";
+    reason: string;
+  }> = [];
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  for (const record of userSkillRecords) {
+    if (
+      record.expiryDate &&
+      (record.status === "active" || record.status === "expiring") &&
+      new Date(record.expiryDate) <= cutoff &&
+      new Date(record.expiryDate) >= todayStart
+    ) {
+      const evaluation = evaluateRenewalType(record.userId, record.skillId);
+      results.push({
+        userId: record.userId,
+        skillId: record.skillId,
+        expiryDate: record.expiryDate,
+        renewalType: evaluation.type,
+        reason: evaluation.reason,
+      });
+    }
+  }
+
+  return results.sort(
+    (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+  );
+}
+
+// Role change gap analysis
+export function analyzeRoleChangeGaps(
+  userId: string,
+  newJobTitleId: string
+): { existingSkills: string[]; missingSkills: string[]; gapCount: number } {
+  const jobTitle = jobTitles.find((jt) => jt.id === newJobTitleId);
+  if (!jobTitle) return { existingSkills: [], missingSkills: [], gapCount: 0 };
+
+  const requiredSkillIds = jobTitle.requiredSkills.map((rs) => rs.skillId);
+  const userActiveSkills = userSkillRecords
+    .filter(
+      (r) =>
+        r.userId === userId &&
+        (r.status === "active" || r.status === "expiring")
+    )
+    .map((r) => r.skillId);
+
+  const existingSkills = requiredSkillIds.filter((sid) =>
+    userActiveSkills.includes(sid)
+  );
+  const missingSkills = requiredSkillIds.filter(
+    (sid) => !userActiveSkills.includes(sid)
+  );
+
+  return { existingSkills, missingSkills, gapCount: missingSkills.length };
 }

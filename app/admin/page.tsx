@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Circle, TrendingUp, TrendingDown, Users, Award, AlertCircle, Clock, CheckCircle, Target } from "lucide-react";
+import { Circle, TrendingUp, TrendingDown, Users, Award, AlertCircle, Clock, CheckCircle, Target, Shield } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import SmartComplianceCoach from "@/components/SmartComplianceCoach";
 import { useScope } from "@/hooks/useScope";
-import { subscribe } from "@/lib/store";
+import { subscribe, getAllContentCurrencies } from "@/lib/store";
 import {
   getScopedData,
   calculateDistribution,
@@ -292,6 +292,46 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Content Health */}
+          {(() => {
+            const currencies = getAllContentCurrencies();
+            if (currencies.length === 0) return null;
+            const current = currencies.filter((c) => c.currentScore >= 90).length;
+            const aging = currencies.filter((c) => c.currentScore >= 70 && c.currentScore < 90).length;
+            const stale = currencies.filter((c) => c.currentScore >= 40 && c.currentScore < 70).length;
+            const outdated = currencies.filter((c) => c.currentScore < 40).length;
+            return (
+              <div className="rounded-2xl bg-white border border-gray-200 p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-[15px] font-semibold text-gray-900">Content Health</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-sm text-gray-600">Current</span>
+                    <span className="ml-auto text-lg font-bold text-emerald-700">{current}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-100 rounded-xl">
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                    <span className="text-sm text-gray-600">Aging</span>
+                    <span className="ml-auto text-lg font-bold text-yellow-700">{aging}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-xl">
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    <span className="text-sm text-gray-600">Stale</span>
+                    <span className="ml-auto text-lg font-bold text-orange-700">{stale}</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-sm text-gray-600">Outdated</span>
+                    <span className="ml-auto text-lg font-bold text-red-700">{outdated}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
       </AdminLayout>

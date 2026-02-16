@@ -18,6 +18,7 @@ import {
   getUsersByJobTitle,
   getUserSkillGapsByJobTitle,
   getActiveSkillsV2,
+  getOnboardingPathById,
   getActiveUserSkillRecordsByUserId,
 } from "@/lib/store";
 import type { JobTitle, SkillPriority } from "@/types";
@@ -268,12 +269,34 @@ export default function JobTitleDetailView({ jobTitle, onBack, onEdit }: JobTitl
       <div>
         <h3 className="text-base font-semibold text-gray-900 mb-3">Onboarding</h3>
         <div className="border border-gray-200 rounded-lg p-6 text-center">
-          {jobTitle.onboardingPathId ? (
-            <p className="text-sm text-green-600 font-medium flex items-center justify-center gap-1">
-              <CheckCircle2 className="w-4 h-4" />
-              Onboarding path published
-            </p>
-          ) : (
+          {jobTitle.onboardingPathId ? (() => {
+            const path = getOnboardingPathById(jobTitle.onboardingPathId!);
+            return path ? (
+              <div className="space-y-3">
+                <p className="text-sm text-green-600 font-medium flex items-center justify-center gap-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Onboarding path published
+                </p>
+                <p className="text-sm text-gray-700 font-medium">{path.title}</p>
+                <div className="flex items-center justify-center gap-4 text-xs text-gray-500">
+                  <span>{path.durationDays} days</span>
+                  <span>{path.phases.reduce((s, p) => s + p.courses.length, 0)} courses</span>
+                  <span>{path.skillsCovered.length} skills</span>
+                </div>
+                <button
+                  onClick={() => router.push(`/admin/onboarding?tab=paths&preview=${path.id}`)}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  View in Onboarding
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-green-600 font-medium flex items-center justify-center gap-1">
+                <CheckCircle2 className="w-4 h-4" />
+                Onboarding path published
+              </p>
+            );
+          })() : (
             <>
               <p className="text-sm text-gray-500 mb-4">
                 No onboarding path configured for this job title.
@@ -282,7 +305,7 @@ export default function JobTitleDetailView({ jobTitle, onBack, onEdit }: JobTitl
                 variant="primary"
                 onClick={() =>
                   router.push(
-                    `/admin/learningmodel?tab=onboarding&jobTitleId=${jobTitle.id}`
+                    `/admin/onboarding?action=generate&jobTitleId=${jobTitle.id}`
                   )
                 }
               >
