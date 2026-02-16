@@ -45,14 +45,14 @@ export default function AddRoleRequirementModal({ isOpen, onClose }: AddRoleRequ
 
   // Get unique job titles from users, filtered by site/department selection
   const availableJobTitles = useMemo(() => {
-    let filtered = users.filter((u) => u.jobTitle);
+    let filtered = users.filter((u) => u.jobTitleText);
     if (siteId) {
       filtered = filtered.filter((u) => u.siteId === siteId);
     }
     if (departmentId) {
       filtered = filtered.filter((u) => u.departmentId === departmentId);
     }
-    const titles = [...new Set(filtered.map((u) => u.jobTitle!))].sort();
+    const titles = [...new Set(filtered.map((u) => u.jobTitleText!))].sort();
     return titles;
   }, [users, siteId, departmentId]);
 

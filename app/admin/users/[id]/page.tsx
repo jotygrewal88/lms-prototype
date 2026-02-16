@@ -25,6 +25,9 @@ import {
   subscribe,
   getUserSkillRecordsByUserId,
   getSkillV2ById,
+  getJobTitleById,
+  getUserSkillGapsByJobTitle,
+  getActiveUserSkillRecordsByUserId,
 } from "@/lib/store";
 import { User, Course, TrainingCompletion, Certificate, ProgressCourse, getFullName } from "@/types";
 import {
@@ -549,113 +552,236 @@ export default function UserProfilePage() {
             )}
           </Card>
 
-          {/* Skills & Certifications Section */}
+          {/* Skills & Compliance Section */}
           {(() => {
             const userSkills = getUserSkillRecordsByUserId(userId);
+            const activeRecords = getActiveUserSkillRecordsByUserId(userId);
+            const activeSkillIds = new Set(activeRecords.map((r) => r.skillId));
+            const jobTitleEntity = user.jobTitleId ? getJobTitleById(user.jobTitleId) : null;
+            const gapResult = user.jobTitleId ? getUserSkillGapsByJobTitle(userId) : null;
+
             return (
               <Card>
                 <div className="px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Shield className="w-5 h-5 text-blue-600" />
-                      <h3 className="text-lg font-semibold text-gray-900">Skills & Certifications</h3>
-                      <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-                        {userSkills.length}
-                      </span>
+                      <h3 className="text-lg font-semibold text-gray-900">Skills & Compliance</h3>
                     </div>
                   </div>
                 </div>
-                {userSkills.length === 0 ? (
-                  <div className="p-12 text-center">
-                    <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No skills or certifications yet</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Skills are earned by completing trainings and courses
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          {["Skill Name", "Type", "Status", "Achieved", "Expiry", "Days Until Expiry"].map((h) => (
-                            <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {userSkills.map((record) => {
-                          const skill = getSkillV2ById(record.skillId);
-                          if (!skill) return null;
-                          const daysUntilExpiry = record.expiryDate
-                            ? Math.floor(
-                                (new Date(record.expiryDate).getTime() - Date.now()) /
-                                  (1000 * 60 * 60 * 24)
-                              )
-                            : null;
 
-                          return (
-                            <tr key={record.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                {skill.name}
-                                {skill.regulatoryRef && (
-                                  <div className="text-xs text-blue-600">{skill.regulatoryRef}</div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <Badge variant={skill.type === "certification" ? "info" : "default"}>
-                                  {skill.type === "certification" ? "Certification" : "Skill"}
-                                </Badge>
-                              </td>
-                              <td className="px-6 py-4">
-                                <Badge
-                                  variant={
-                                    record.status === "active"
-                                      ? "success"
-                                      : record.status === "expired"
-                                      ? "error"
-                                      : record.status === "pending"
-                                      ? "warning"
-                                      : "default"
-                                  }
-                                >
-                                  {record.status}
-                                </Badge>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-600">
-                                {record.achievedDate || "—"}
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-600">
-                                {record.expiryDate || "No expiry"}
-                              </td>
-                              <td className="px-6 py-4">
-                                {daysUntilExpiry !== null ? (
-                                  <span
-                                    className={`text-sm font-medium ${
-                                      daysUntilExpiry < 0
-                                        ? "text-red-600"
-                                        : daysUntilExpiry < 30
-                                        ? "text-yellow-600"
-                                        : "text-green-600"
-                                    }`}
-                                  >
-                                    {daysUntilExpiry < 0
-                                      ? `Expired ${Math.abs(daysUntilExpiry)}d ago`
-                                      : `${daysUntilExpiry} days`}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-gray-400">—</span>
-                                )}
-                              </td>
+                <div className="p-6 space-y-6">
+                  {/* Job Title Compliance Summary */}
+                  {jobTitleEntity && gapResult ? (
+                    <div className="rounded-lg border border-gray-200 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-sm text-gray-500">Job Title</p>
+                          <p className="font-medium text-gray-900">{jobTitleEntity.name}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Compliance</p>
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  gapResult.compliancePct === 100
+                                    ? "bg-green-500"
+                                    : gapResult.compliancePct >= 70
+                                    ? "bg-yellow-400"
+                                    : "bg-red-400"
+                                }`}
+                                style={{ width: `${gapResult.compliancePct}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {gapResult.compliancePct}%
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              ({gapResult.covered.length} of {gapResult.required.length} skills)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Required Skills Table */}
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {["Skill", "Status", "Achieved", "Expires"].map((h) => (
+                                <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  {h}
+                                </th>
+                              ))}
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {jobTitleEntity.requiredSkills.map((req) => {
+                              const skill = getSkillV2ById(req.skillId);
+                              if (!skill) return null;
+                              const hasSkill = activeSkillIds.has(req.skillId);
+                              const record = activeRecords.find((r) => r.skillId === req.skillId);
+                              const daysUntilExpiry = record?.expiryDate
+                                ? Math.floor(
+                                    (new Date(record.expiryDate).getTime() - Date.now()) /
+                                      (1000 * 60 * 60 * 24)
+                                  )
+                                : null;
+
+                              return (
+                                <tr key={req.skillId} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                    {skill.name}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {hasSkill ? (
+                                      <Badge variant="success">Active</Badge>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                                        <AlertCircle className="w-3 h-3" />
+                                        Missing
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {record?.achievedDate || "—"}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {daysUntilExpiry !== null ? (
+                                      <span
+                                        className={`font-medium ${
+                                          daysUntilExpiry < 0
+                                            ? "text-red-600"
+                                            : daysUntilExpiry < 30
+                                            ? "text-yellow-600"
+                                            : "text-gray-600"
+                                        }`}
+                                      >
+                                        {record?.expiryDate}
+                                        {daysUntilExpiry >= 0 && daysUntilExpiry < 30 && (
+                                          <span className="ml-1 text-xs">({daysUntilExpiry}d)</span>
+                                        )}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : !jobTitleEntity ? (
+                    <div className="text-sm text-gray-500 italic">
+                      No structured job title assigned. Skill compliance is not tracked.
+                    </div>
+                  ) : null}
+
+                  {/* Additional Skills (not part of job title requirements) */}
+                  {userSkills.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">
+                        {jobTitleEntity ? "All Skill Records" : "Skills & Certifications"}
+                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">{userSkills.length}</span>
+                      </h4>
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {["Skill Name", "Type", "Status", "Achieved", "Expiry", "Days Until Expiry"].map((h) => (
+                                <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {userSkills.map((record) => {
+                              const skill = getSkillV2ById(record.skillId);
+                              if (!skill) return null;
+                              const daysUntilExpiry = record.expiryDate
+                                ? Math.floor(
+                                    (new Date(record.expiryDate).getTime() - Date.now()) /
+                                      (1000 * 60 * 60 * 24)
+                                  )
+                                : null;
+
+                              return (
+                                <tr key={record.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                    {skill.name}
+                                    {skill.regulatoryRef && (
+                                      <div className="text-xs text-blue-600">{skill.regulatoryRef}</div>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={skill.type === "certification" ? "info" : "default"}>
+                                      {skill.type === "certification" ? "Certification" : "Skill"}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge
+                                      variant={
+                                        record.status === "active"
+                                          ? "success"
+                                          : record.status === "expired"
+                                          ? "error"
+                                          : record.status === "pending"
+                                          ? "warning"
+                                          : "default"
+                                      }
+                                    >
+                                      {record.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {record.achievedDate || "—"}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {record.expiryDate || "No expiry"}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {daysUntilExpiry !== null ? (
+                                      <span
+                                        className={`text-sm font-medium ${
+                                          daysUntilExpiry < 0
+                                            ? "text-red-600"
+                                            : daysUntilExpiry < 30
+                                            ? "text-yellow-600"
+                                            : "text-green-600"
+                                        }`}
+                                      >
+                                        {daysUntilExpiry < 0
+                                          ? `Expired ${Math.abs(daysUntilExpiry)}d ago`
+                                          : `${daysUntilExpiry} days`}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-gray-400">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {userSkills.length === 0 && !jobTitleEntity && (
+                    <div className="text-center py-8">
+                      <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">No skills or certifications yet</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Skills are earned by completing trainings and courses
+                      </p>
+                    </div>
+                  )}
+                </div>
               </Card>
             );
           })()}

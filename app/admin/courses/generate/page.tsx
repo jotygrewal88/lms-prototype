@@ -45,7 +45,7 @@ export default function GenerateCoursePage() {
       setSkills(getActiveSkillsV2());
       const allUsers = getUsers();
       const titles = Array.from(
-        new Set(allUsers.map((u) => u.jobTitle).filter(Boolean) as string[])
+        new Set(allUsers.map((u) => u.jobTitleText).filter(Boolean) as string[])
       ).sort();
       setJobTitles(titles);
     };

@@ -205,7 +205,7 @@ export default function UsersPage() {
                       {user.email}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.jobTitle || "—"}
+                      {user.jobTitleText || "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <Badge variant={getRoleBadgeVariant(user.role)}>

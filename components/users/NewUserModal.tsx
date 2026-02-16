@@ -3,8 +3,8 @@
 // Same experience for both new and edit modes
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { X, Plus, Users, Shield } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { X, Plus, Users, Shield, Search, ChevronDown } from "lucide-react";
 import Modal from "@/components/Modal";
 import Button from "@/components/Button";
 import Toast from "@/components/Toast";
@@ -25,6 +25,8 @@ import {
   getUserAccessGrants,
   createUserAccessGrant,
   deleteUserAccessGrant,
+  getJobTitles,
+  getJobTitleById,
 } from "@/lib/store";
 import { User, Role, AccessGrantRelationship, UserAdditionalManager, UserAccessGrant } from "@/types";
 
@@ -62,6 +64,10 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [jobTitle, setJobTitle] = useState("");
+  const [selectedJobTitleId, setSelectedJobTitleId] = useState<string>("");
+  const [useCustomTitle, setUseCustomTitle] = useState(false);
+  const [jtSearch, setJtSearch] = useState("");
+  const [jtDropdownOpen, setJtDropdownOpen] = useState(false);
   const [role, setRole] = useState<Role>("LEARNER");
   const [siteId, setSiteId] = useState<string>("");
   const [departmentId, setDepartmentId] = useState<string>("");
@@ -100,7 +106,9 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       setFirstName(editUser.firstName);
       setLastName(editUser.lastName);
       setEmail(editUser.email);
-      setJobTitle(editUser.jobTitle || "");
+      setJobTitle(editUser.jobTitleText || "");
+      setSelectedJobTitleId(editUser.jobTitleId || "");
+      setUseCustomTitle(!editUser.jobTitleId && !!editUser.jobTitleText);
       setRole(editUser.role);
       setSiteId(editUser.siteId || "");
       setDepartmentId(editUser.departmentId || "");
@@ -116,6 +124,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
       setLastName("");
       setEmail("");
       setJobTitle("");
+      setSelectedJobTitleId("");
+      setUseCustomTitle(false);
       setRole("LEARNER");
       setSiteId(currentUser.role === "MANAGER" ? currentUser.siteId || "" : "");
       setDepartmentId(currentUser.role === "MANAGER" ? currentUser.departmentId || "" : "");
@@ -283,7 +293,8 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
-        jobTitle: jobTitle.trim() || undefined,
+        jobTitleId: selectedJobTitleId || undefined,
+        jobTitleText: useCustomTitle ? (jobTitle.trim() || undefined) : (selectedJobTitleId ? getJobTitleById(selectedJobTitleId)?.name : undefined),
         role,
         siteId: siteId || undefined,
         departmentId: departmentId || undefined,
@@ -575,13 +586,39 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Job Title
                   </label>
-                  <input
-                    type="text"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Forklift Operator, Safety Coordinator"
-                  />
+                  {useCustomTitle ? (
+                    <>
+                      <input
+                        type="text"
+                        value={jobTitle}
+                        onChange={(e) => setJobTitle(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Forklift Operator, Safety Coordinator"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomTitle(false);
+                          setJobTitle("");
+                        }}
+                        className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Select from structured job titles instead
+                      </button>
+                    </>
+                  ) : (
+                    <JobTitleDropdown
+                      selectedId={selectedJobTitleId}
+                      onSelect={(id) => {
+                        setSelectedJobTitleId(id);
+                        setJobTitle("");
+                      }}
+                      onCustom={() => {
+                        setUseCustomTitle(true);
+                        setSelectedJobTitleId("");
+                      }}
+                    />
+                  )}
                   <p className="mt-1 text-xs text-gray-500">The employee&apos;s position or job function</p>
                 </div>
 
@@ -922,5 +959,128 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
         />
       )}
     </>
+  );
+}
+
+/* ─── Job Title Searchable Dropdown ───────────────────────────────────── */
+
+function JobTitleDropdown({
+  selectedId,
+  onSelect,
+  onCustom,
+}: {
+  selectedId: string;
+  onSelect: (id: string) => void;
+  onCustom: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const allJobTitles = getJobTitles().filter((jt) => jt.active);
+
+  const selected = selectedId ? allJobTitles.find((jt) => jt.id === selectedId) : null;
+
+  const filtered = useMemo(() => {
+    if (!search) return allJobTitles;
+    const q = search.toLowerCase();
+    return allJobTitles.filter(
+      (jt) =>
+        jt.name.toLowerCase().includes(q) ||
+        jt.department.toLowerCase().includes(q) ||
+        jt.site.toLowerCase().includes(q)
+    );
+  }, [allJobTitles, search]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {selected ? (
+          <span className="text-gray-900">{selected.name}</span>
+        ) : (
+          <span className="text-gray-400">Select a job title...</span>
+        )}
+        <ChevronDown className="w-4 h-4 text-gray-400" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 mt-1 w-full bg-white rounded-lg border border-gray-200 shadow-lg max-h-64 overflow-hidden">
+            {/* Search */}
+            <div className="p-2 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search job titles..."
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Options */}
+            <div className="max-h-48 overflow-y-auto">
+              {selectedId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect("");
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50 border-b border-gray-100"
+                >
+                  Clear selection
+                </button>
+              )}
+              {filtered.map((jt) => (
+                <button
+                  key={jt.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(jt.id);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className={`w-full px-3 py-2.5 text-left hover:bg-blue-50 ${
+                    jt.id === selectedId ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <div className="text-sm font-medium text-gray-900">{jt.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {jt.department} &bull; {jt.site} &bull; {jt.requiredSkills.length} required skill{jt.requiredSkills.length !== 1 ? "s" : ""}
+                  </div>
+                </button>
+              ))}
+
+              {filtered.length === 0 && (
+                <div className="px-3 py-3 text-sm text-gray-500 text-center">No matching job titles</div>
+              )}
+            </div>
+
+            {/* Footer options */}
+            <div className="border-t border-gray-100 p-2 space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onCustom();
+                  setOpen(false);
+                  setSearch("");
+                }}
+                className="w-full px-3 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-50 rounded"
+              >
+                Or type a custom title
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

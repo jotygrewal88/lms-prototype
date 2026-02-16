@@ -40,7 +40,8 @@ export interface User {
   lastName: string;
   email: string;
   role: Role;
-  jobTitle?: string;  // Job title/position (e.g., "Forklift Operator", "Safety Coordinator")
+  jobTitleId?: string;    // Reference to a JobTitle entity
+  jobTitleText?: string;  // Free-text fallback (e.g., "Forklift Operator", "Safety Coordinator")
   siteId?: string;
   departmentId?: string;
   managerId?: string;
@@ -938,4 +939,37 @@ export interface AISynthesisSettings {
   autoSuggestSkills: boolean;
   includeQuizzes: boolean;
   maxLessonsPerCourse: number;
+}
+
+// ============================================================================
+// JOB TITLE TYPES
+// ============================================================================
+
+export type SkillPriority = "critical" | "high" | "medium" | "low";
+
+export interface JobTitleSkillRequirement {
+  skillId: string;
+  required: boolean;
+  priority: SkillPriority;
+  targetTimelineDays: number;
+  notes?: string;
+}
+
+export interface JobTitle extends Timestamped {
+  id: string;
+  name: string;
+  department: string;
+  site: string;
+  description: string;
+  requiredSkills: JobTitleSkillRequirement[];
+  onboardingPathId?: string;
+  active: boolean;
+}
+
+// Computed result for user skill gap analysis
+export interface UserSkillGapResult {
+  required: JobTitleSkillRequirement[];
+  gaps: JobTitleSkillRequirement[];
+  covered: JobTitleSkillRequirement[];
+  compliancePct: number;
 }

@@ -32,7 +32,8 @@ import { seedRoleSkillRequirements, seedWorkContextSkillRequirements } from "@/d
 import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
 import { seedSynthesisHistory } from "@/data/seedSynthesisDrafts";
 import { lotoCourse, lotoLessons, lotoResources, lotoQuiz, lotoAssignment } from "@/data/seedLOTOCourse";
-import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings } from "@/types";
+import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult } from "@/types";
+import { seedJobTitles } from "@/data/seedJobTitles";
 import { markdownToHtml } from "./markdownToHtml";
 
 // Re-export Scope type for convenience
@@ -93,6 +94,11 @@ let skillsV2: SkillV2[] = [...seedSkillsV2];
 let userSkillRecords: UserSkillRecord[] = [...seedUserSkillRecords];
 let roleSkillRequirements: RoleSkillRequirement[] = [...seedRoleSkillRequirements];
 let workContextSkillRequirements: WorkContextSkillRequirement[] = [...seedWorkContextSkillRequirements];
+
+// ============================================================================
+// JOB TITLES STATE
+// ============================================================================
+let jobTitles: JobTitle[] = [...seedJobTitles];
 
 // ============================================================================
 // LEARNING SYNTHESIS STATE
@@ -812,6 +818,9 @@ export function resetToSeed(): void {
   userSkillRecords = [...seedUserSkillRecords];
   roleSkillRequirements = [...seedRoleSkillRequirements];
   workContextSkillRequirements = [...seedWorkContextSkillRequirements];
+
+  // Job Titles: Reset
+  jobTitles = [...seedJobTitles];
 
   // Learning Synthesis: Reset
   synthesisHistory = [...seedSynthesisHistory];
@@ -4562,7 +4571,7 @@ export function getUserSkillGaps(userId: string): {
   const user = getUser(userId);
   if (!user) return [];
 
-  const requiredSkills = getRequiredSkillsByScope(user.siteId, user.departmentId, user.jobTitle);
+  const requiredSkills = getRequiredSkillsByScope(user.siteId, user.departmentId, user.jobTitleText);
   const userActiveSkills = getActiveUserSkillRecordsByUserId(userId);
   const activeSkillIds = new Set(userActiveSkills.map((r) => r.skillId));
 
@@ -4611,6 +4620,81 @@ export function updateAISynthesisSettings(updates: Partial<AISynthesisSettings>)
   aiSynthesisSettings = { ...aiSynthesisSettings, ...updates };
   notifyListeners();
   return { ...aiSynthesisSettings };
+}
+
+// ============================================================================
+// JOB TITLES — CRUD + COMPUTED HELPERS
+// ============================================================================
+
+export const getJobTitles = (): JobTitle[] => jobTitles;
+export const getActiveJobTitles = (): JobTitle[] => jobTitles.filter((jt) => jt.active);
+export const getJobTitleById = (id: string): JobTitle | undefined => jobTitles.find((jt) => jt.id === id);
+
+export function createJobTitle(data: Omit<JobTitle, "id" | "createdAt" | "updatedAt">): JobTitle {
+  const newJT: JobTitle = {
+    ...data,
+    id: `jt_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  jobTitles.push(newJT);
+  notifyListeners();
+  return newJT;
+}
+
+export function updateJobTitle(id: string, updates: Partial<Omit<JobTitle, "id" | "createdAt">>): JobTitle | undefined {
+  const idx = jobTitles.findIndex((jt) => jt.id === id);
+  if (idx === -1) return undefined;
+  jobTitles[idx] = { ...jobTitles[idx], ...updates, updatedAt: new Date().toISOString() };
+  notifyListeners();
+  return jobTitles[idx];
+}
+
+export function deleteJobTitle(id: string): boolean {
+  const idx = jobTitles.findIndex((jt) => jt.id === id);
+  if (idx === -1) return false;
+  jobTitles.splice(idx, 1);
+  notifyListeners();
+  return true;
+}
+
+/** Get all users assigned to a specific job title */
+export function getUsersByJobTitle(jobTitleId: string): User[] {
+  return users.filter((u) => u.jobTitleId === jobTitleId && u.active);
+}
+
+/** Compare a user's active skills against their job title's required skills */
+export function getUserSkillGapsByJobTitle(userId: string): UserSkillGapResult | null {
+  const user = getUser(userId);
+  if (!user || !user.jobTitleId) return null;
+
+  const jt = getJobTitleById(user.jobTitleId);
+  if (!jt) return null;
+
+  const userActiveSkills = getActiveUserSkillRecordsByUserId(userId);
+  const activeSkillIds = new Set(userActiveSkills.map((r) => r.skillId));
+
+  const gaps = jt.requiredSkills.filter((req) => !activeSkillIds.has(req.skillId));
+  const covered = jt.requiredSkills.filter((req) => activeSkillIds.has(req.skillId));
+  const compliancePct = jt.requiredSkills.length > 0
+    ? Math.round((covered.length / jt.requiredSkills.length) * 100)
+    : 100;
+
+  return {
+    required: jt.requiredSkills,
+    gaps,
+    covered,
+    compliancePct,
+  };
+}
+
+/** Get the display name for a user's job title (entity name or fallback text) */
+export function getUserJobTitleDisplayName(user: User): string {
+  if (user.jobTitleId) {
+    const jt = getJobTitleById(user.jobTitleId);
+    if (jt) return jt.name;
+  }
+  return user.jobTitleText || "";
 }
 
 // ============================================================================
