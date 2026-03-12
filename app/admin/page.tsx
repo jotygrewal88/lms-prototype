@@ -2,13 +2,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Circle, TrendingUp, TrendingDown, Users, Award, AlertCircle, Clock, CheckCircle, Target, Shield } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Circle, TrendingUp, TrendingDown, Users, Award, AlertCircle, Clock, CheckCircle, Target, Shield, Info } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import Card from "@/components/Card";
 import SmartComplianceCoach from "@/components/SmartComplianceCoach";
+import RenewalGenerateModal from "@/components/admin/compliance/RenewalGenerateModal";
 import { useScope } from "@/hooks/useScope";
-import { subscribe, getAllContentCurrencies } from "@/lib/store";
+import { subscribe, getAllContentCurrencies, getExpiringSkills, getExpiredSkills, getUpcomingRenewals, getUser as getUserById, getSkillV2ById } from "@/lib/store";
+import { getFullName } from "@/types";
 import {
   getScopedData,
   calculateDistribution,
@@ -17,8 +20,15 @@ import {
 } from "@/lib/stats";
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const { scope } = useScope();
   const [, forceUpdate] = useState({});
+  const [renewalModal, setRenewalModal] = useState<{
+    userId: string;
+    skillId: string;
+    renewalType: "clean" | "delta" | "rebuilt";
+    reason: string;
+  } | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribe(() => {
@@ -181,6 +191,125 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Skill & Certification Expiry Alerts */}
+        {(() => {
+          const expiredSkills = getExpiredSkills();
+          const expiring30 = getExpiringSkills(30);
+          const expiring60 = getExpiringSkills(60);
+          const hasAlerts = expiredSkills.length > 0 || expiring30.length > 0 || expiring60.length > 0;
+          if (!hasAlerts) return null;
+          return (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Skill & Certification Expiry</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  onClick={() => router.push("/admin/compliance?tab=skills&filter=expired")}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-gray-600">Expired Certifications</div>
+                      <div className="text-3xl font-bold text-red-600 mt-1">
+                        {expiredSkills.length}
+                      </div>
+                    </div>
+                    <AlertCircle className="w-12 h-12 text-red-600 opacity-20" />
+                  </div>
+                </Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  onClick={() => router.push("/admin/compliance?tab=skills&filter=expiring30")}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-gray-600">Expiring in 30 Days</div>
+                      <div className="text-3xl font-bold text-yellow-600 mt-1">
+                        {expiring30.length}
+                      </div>
+                    </div>
+                    <Clock className="w-12 h-12 text-yellow-600 opacity-20" />
+                  </div>
+                </Card>
+                <Card
+                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  onClick={() => router.push("/admin/compliance?tab=skills&filter=expiring60")}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-gray-600">Expiring in 60 Days</div>
+                      <div className="text-3xl font-bold text-blue-600 mt-1">
+                        {expiring60.length}
+                      </div>
+                    </div>
+                    <Info className="w-12 h-12 text-blue-600 opacity-20" />
+                  </div>
+                </Card>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Upcoming Renewals */}
+        {(() => {
+          const renewals = getUpcomingRenewals(60);
+          if (renewals.length === 0) return null;
+          return (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Upcoming Renewals</h3>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden bg-white">
+                {renewals.map((r) => {
+                  const user = getUserById(r.userId);
+                  const skill = getSkillV2ById(r.skillId);
+                  const typeColor =
+                    r.renewalType === "clean"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : r.renewalType === "delta"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-red-100 text-red-700";
+                  const typeLabel =
+                    r.renewalType === "clean"
+                      ? "Clean"
+                      : r.renewalType === "delta"
+                      ? "Delta"
+                      : "Rebuilt";
+                  const daysUntil = Math.ceil(
+                    (new Date(r.expiryDate).getTime() - Date.now()) / 86400000
+                  );
+                  return (
+                    <div key={`${r.userId}-${r.skillId}`} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">
+                          {user ? getFullName(user) : r.userId}
+                        </p>
+                        <p className="text-xs text-gray-500">{skill?.name || r.skillId}</p>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Expires in {daysUntil} day{daysUntil !== 1 ? "s" : ""}
+                      </div>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeColor}`}>
+                        {typeLabel}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setRenewalModal({
+                            userId: r.userId,
+                            skillId: r.skillId,
+                            renewalType: r.renewalType,
+                            reason: r.reason,
+                          })
+                        }
+                        className="text-xs font-medium text-violet-600 hover:text-violet-800 whitespace-nowrap"
+                      >
+                        {r.renewalType === "clean" ? "Auto-Assign" : "Generate Training"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Smart Compliance Coach */}
         <SmartComplianceCoach />
 
@@ -334,6 +463,20 @@ export default function AdminDashboard() {
           })()}
         </div>
       </div>
+
+      {renewalModal && (
+        <RenewalGenerateModal
+          userId={renewalModal.userId}
+          skillId={renewalModal.skillId}
+          renewalType={renewalModal.renewalType}
+          reason={renewalModal.reason}
+          onClose={() => setRenewalModal(null)}
+          onGenerated={(responseId) => {
+            setRenewalModal(null);
+            router.push(`/admin/training-responses/${responseId}`);
+          }}
+        />
+      )}
       </AdminLayout>
     </RouteGuard>
   );

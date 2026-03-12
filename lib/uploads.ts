@@ -44,7 +44,7 @@ export function isUploadUrl(url?: string): boolean {
 export function getAcceptedMimeTypes(type: ResourceType): string[] {
   switch (type) {
     case 'image':
-      return ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      return ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
     case 'video':
       return ['video/mp4', 'video/webm', 'video/quicktime'];
     case 'pdf':
@@ -60,7 +60,7 @@ export function getAcceptedMimeTypes(type: ResourceType): string[] {
 export function getFileAccept(type: ResourceType): string {
   switch (type) {
     case 'image':
-      return 'image/jpeg,image/png,image/gif,image/webp';
+      return 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml';
     case 'video':
       return 'video/mp4,video/webm,video/quicktime';
     case 'pdf':

@@ -93,6 +93,7 @@ export interface TrainingAssignment {
 // Training category and status types for filtering
 export type TrainingCategory = "Safety" | "Compliance" | "Onboarding" | "Technical" | "HR" | "Other";
 export type TrainingStatus = "active" | "draft" | "archived";
+export type TrainingFormat = "in-person" | "classroom" | "on-site" | "third-party-online" | "other";
 
 export interface Training {
   id: string;
@@ -110,6 +111,8 @@ export interface Training {
   tags?: string[];
   vendor?: string; // Third-party vendor/provider of the training
   contentUrl?: string; // URL link or uploaded file path for training content/materials
+  trainingFormat?: TrainingFormat;
+  trainingFormatOther?: string;
   createdAt: string;
   updatedAt: string;
   // Skills V2: What skills completing this training grants

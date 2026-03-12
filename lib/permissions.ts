@@ -32,8 +32,16 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin",
     },
     {
-      label: "Analytics",
-      path: "/admin/analytics",
+      label: "Compliance",
+      path: "/admin/compliance",
+    },
+    {
+      label: "Notifications",
+      path: "/admin/notifications",
+    },
+    {
+      label: "Trainings",
+      path: "/admin/trainings",
     },
     {
       label: "Courses",
@@ -44,7 +52,7 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/onboarding",
     },
     {
-      label: "Training Responses",
+      label: "Training Actions",
       path: "/admin/training-responses",
     },
     {
@@ -52,29 +60,13 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/library",
     },
     {
-      label: "Trainings",
-      path: "/admin/trainings",
-    },
-    {
-      label: "Compliance",
-      path: "/admin/compliance",
-    },
-    {
-      label: "Notifications",
-      path: "/admin/notifications",
-    },
-    {
-      label: "Users",
-      path: "/admin/users",
-    },
-    {
-      label: "Learning Model",
-      path: "/admin/learningmodel",
-    },
-    {
       label: "Reports",
       path: "/admin/reports",
       children: [
+        {
+          label: "Analytics",
+          path: "/admin/analytics",
+        },
         {
           label: "Audit Snapshots",
           path: "/admin/reports/audits",
@@ -90,28 +82,24 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/settings",
       children: [
         {
+          label: "Users",
+          path: "/admin/users",
+        },
+        {
+          label: "Learning Model",
+          path: "/admin/learningmodel",
+        },
+        {
           label: "Locations",
           path: "/admin/settings/locations",
         },
         {
-          label: "Brand",
-          path: "/admin/settings/brand",
-        },
-        {
-          label: "Localization",
-          path: "/admin/settings/localization",
+          label: "Customization",
+          path: "/admin/settings/customization",
         },
         {
           label: "Reminders",
           path: "/admin/settings/notifications",
-        },
-        {
-          label: "Style Guide",
-          path: "/admin/settings/style-guide",
-        },
-        {
-          label: "Certificates",
-          path: "/admin/settings/certificates",
         },
       ],
     },
@@ -122,9 +110,17 @@ export function getNavigationItems(role: Role): NavItem[] {
     return [];
   }
 
-  // Managers see everything except Settings
+  // Managers see everything except admin-only settings (brand, localization, etc.)
   if (role === "MANAGER") {
-    return adminNav.filter(item => item.label !== "Settings");
+    const managerVisibleSettings = ["Users", "Learning Model", "Locations"];
+    return adminNav.map(item => {
+      if (item.label === "Settings" && item.children) {
+        const filtered = item.children.filter(c => managerVisibleSettings.includes(c.label));
+        if (filtered.length === 0) return null;
+        return { ...item, children: filtered };
+      }
+      return item;
+    }).filter((item): item is NavItem => item !== null);
   }
 
   // Admins see everything

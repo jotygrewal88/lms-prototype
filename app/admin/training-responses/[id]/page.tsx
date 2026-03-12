@@ -88,7 +88,7 @@ export default function TrainingResponseDetailPage() {
           <div className="text-center py-20">
             <p className="text-gray-500">Training response not found.</p>
             <Button variant="secondary" onClick={() => router.push("/admin/training-responses")} className="mt-4">
-              <ArrowLeft className="w-4 h-4" /> Back to Training Responses
+              <ArrowLeft className="w-4 h-4" /> Back to Training Actions
             </Button>
           </div>
         </AdminLayout>
@@ -137,7 +137,7 @@ export default function TrainingResponseDetailPage() {
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Training Responses
+            Back to Training Actions
           </button>
 
           {/* Header */}

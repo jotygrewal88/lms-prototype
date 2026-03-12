@@ -1,50 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
-  Calendar,
-  BookOpen,
-  Target,
-  Star,
-  Users,
-  AlertTriangle,
-  CheckCircle2,
+  Eye,
   Archive,
   Copy,
-  Eye,
   Trash2,
   ArrowRight,
   FileText,
-  ChevronDown,
-  ChevronRight,
   Pencil,
+  CheckCircle2,
+  MoreHorizontal,
+  RefreshCw,
 } from "lucide-react";
 import Button from "@/components/Button";
 import Badge from "@/components/Badge";
-import PathRefreshModal from "./PathRefreshModal";
+import Card from "@/components/Card";
 import {
   getOnboardingPaths,
-  getOnboardingAssignmentsByPathId,
   getJobTitles,
   getJobTitleById,
   deleteOnboardingPath,
   archiveOnboardingPath,
-  getActiveSkillsV2,
   publishOnboardingPath,
   getCurrentUser,
-  getContentCurrency,
-  getOperationalSignalById,
 } from "@/lib/store";
-import Link from "next/link";
-import type { OnboardingPath } from "@/types";
-
-const PRIORITY_DOTS: Record<string, { dot: string; label: string }> = {
-  critical: { dot: "bg-red-500", label: "CRITICAL" },
-  high: { dot: "bg-amber-500", label: "HIGH" },
-  medium: { dot: "bg-orange-400", label: "MEDIUM" },
-  low: { dot: "bg-gray-400", label: "LOW" },
-};
 
 export default function PathsTab({
   onGenerate,
@@ -57,10 +38,25 @@ export default function PathsTab({
 }) {
   const paths = getOnboardingPaths();
   const jobTitles = getJobTitles().filter((jt) => jt.active);
-  const allSkills = getActiveSkillsV2();
   const currentUser = getCurrentUser();
-  const [expandedGaps, setExpandedGaps] = useState<Set<string>>(new Set());
-  const [refreshPath, setRefreshPath] = useState<OnboardingPath | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"" | "draft" | "published" | "archived">("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = () => setOpenMenuId(null);
+    if (openMenuId) {
+      document.addEventListener("click", handler);
+      return () => document.removeEventListener("click", handler);
+    }
+  }, [openMenuId]);
+
+  const departments = useMemo(
+    () => Array.from(new Set(jobTitles.map((jt) => jt.department).filter(Boolean))).sort(),
+    [jobTitles]
+  );
 
   const uncoveredJTs = jobTitles.filter(
     (jt) => !paths.some((p) => p.jobTitleId === jt.id && p.status === "published")
@@ -68,19 +64,31 @@ export default function PathsTab({
 
   const draftPaths = paths.filter((p) => p.status === "draft");
 
-  const courseCount = (p: typeof paths[0]) =>
-    p.phases.reduce((s, ph) => s + ph.courses.length, 0);
-
-  const getSkillName = (id: string) => allSkills.find((s) => s.id === id)?.name || id;
-
-  const toggleGap = (pathId: string) => {
-    setExpandedGaps((prev) => {
-      const next = new Set(prev);
-      if (next.has(pathId)) next.delete(pathId);
-      else next.add(pathId);
-      return next;
+  const filteredPaths = useMemo(() => {
+    return paths.filter((p) => {
+      const jt = getJobTitleById(p.jobTitleId);
+      if (filterStatus && p.status !== filterStatus) return false;
+      if (filterDepartment && jt?.department !== filterDepartment) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const titleMatch = p.title.toLowerCase().includes(q);
+        const jtMatch = jt?.name.toLowerCase().includes(q);
+        if (!titleMatch && !jtMatch) return false;
+      }
+      return true;
     });
+  }, [paths, searchQuery, filterStatus, filterDepartment]);
+
+  const hasActiveFilters = searchQuery || filterStatus || filterDepartment;
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterStatus("");
+    setFilterDepartment("");
   };
+
+  const courseCount = (p: (typeof paths)[0]) =>
+    p.phases.reduce((s, ph) => s + ph.courses.length, 0);
 
   const handleApproveAll = () => {
     if (!confirm(`Publish ${draftPaths.length} onboarding paths? This will make them available for assignment.`)) return;
@@ -89,17 +97,27 @@ export default function PathsTab({
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    if (status === "published") return "Published";
+    if (status === "draft") return "Draft";
+    return "Archived";
+  };
+
+  const getStatusVariant = (status: string): "success" | "info" | "default" => {
+    if (status === "published") return "success";
+    if (status === "draft") return "info";
+    return "default";
+  };
+
+  const getConfidenceColor = (score: number) => {
+    if (score >= 90) return "text-emerald-600";
+    if (score >= 70) return "text-yellow-600";
+    if (score >= 50) return "text-orange-500";
+    return "text-red-500";
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Onboarding Paths</h2>
-        <Button variant="primary" onClick={() => onGenerate()}>
-          <Plus className="w-4 h-4" />
-          Generate New Path
-        </Button>
-      </div>
-
       {/* Batch action bar */}
       {draftPaths.length > 1 && (
         <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -123,275 +141,245 @@ export default function PathsTab({
         </div>
       )}
 
-      {/* Empty state */}
-      {paths.length === 0 && uncoveredJTs.length === 0 && (
-        <div className="text-center py-12 border border-dashed border-gray-300 rounded-lg">
-          <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm mb-4">No onboarding paths yet.</p>
-          <Button variant="primary" onClick={() => onGenerate()}>
-            Generate your first onboarding path
-          </Button>
-        </div>
-      )}
-
-      {/* Path cards */}
-      {paths.map((path) => {
-        const jt = getJobTitleById(path.jobTitleId);
-        const activeAssignments = getOnboardingAssignmentsByPathId(path.id).filter(
-          (a) => a.status === "active"
-        );
-        const courses = courseCount(path);
-        const gapExpanded = expandedGaps.has(path.id);
-
-        return (
-          <div
-            key={path.id}
-            className="border border-gray-200 rounded-lg p-5 bg-white hover:border-gray-300 transition-colors"
-          >
-            {/* Title + Status */}
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h3 className="font-semibold text-gray-900">{path.title}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {jt?.department || "—"} &bull; {jt?.site || "—"}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  path.status === "published"
-                    ? "success"
-                    : path.status === "draft"
-                    ? "info"
-                    : "default"
-                }
-              >
-                {path.status === "published"
-                  ? "Published"
-                  : path.status === "draft"
-                  ? "Draft"
-                  : "Archived"}
-              </Badge>
-            </div>
-
-            {/* Stats */}
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-4 h-4 text-gray-400" />
-                {path.durationDays} days
-              </span>
-              <span className="flex items-center gap-1">
-                <BookOpen className="w-4 h-4 text-gray-400" />
-                {courses} course{courses !== 1 ? "s" : ""}
-              </span>
-              <span className="flex items-center gap-1">
-                <Target className="w-4 h-4 text-gray-400" />
-                {path.skillsCovered.length}/{path.skillsCovered.length + path.skillsGap.length} skills (
-                {Math.round(
-                  (path.skillsCovered.length /
-                    (path.skillsCovered.length + path.skillsGap.length || 1)) *
-                    100
-                )}
-                %)
-              </span>
-              <span className="flex items-center gap-1">
-                <Star className="w-4 h-4 text-amber-400" />
-                {path.confidenceScore}% confidence
-              </span>
-              {(() => {
-                const cur = getContentCurrency(path.id);
-                if (!cur) return null;
-                const s = cur.currentScore;
-                const cls =
-                  s >= 90
-                    ? "bg-emerald-100 text-emerald-700"
-                    : s >= 70
-                    ? "bg-yellow-100 text-yellow-700"
-                    : s >= 40
-                    ? "bg-orange-100 text-orange-700"
-                    : "bg-red-100 text-red-700";
-                const label =
-                  s >= 90 ? "Current" : s >= 70 ? "Aging" : s >= 40 ? "Stale" : "Outdated";
-                return (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-                    {s >= 90 ? "●" : s >= 70 ? "◐" : s >= 40 ? "◑" : "○"} {label}
-                  </span>
-                );
-              })()}
-              {activeAssignments.length > 0 && (
-                <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4 text-gray-400" />
-                  {activeAssignments.length} active assignment{activeAssignments.length !== 1 ? "s" : ""}
-                </span>
-              )}
-              {path.skillsGap.length > 0 && (
-                <span className="flex items-center gap-1 text-amber-600">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  {path.skillsGap.length} skill gap{path.skillsGap.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            {/* Phase summary */}
-            <div className="text-sm text-gray-500 mb-3">
-              <span className="font-medium text-gray-700">Phases: </span>
-              {path.phases.map((ph, i) => (
-                <span key={ph.id}>
-                  {i > 0 && " → "}
-                  {ph.name}
-                </span>
+      {/* Filters */}
+      <Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Title or job title..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">All Departments</option>
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
               ))}
-            </div>
+            </select>
+          </div>
+        </div>
+        {hasActiveFilters && (
+          <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+            <span>Showing {filteredPaths.length} of {paths.length} paths</span>
+            <button onClick={clearFilters} className="text-primary hover:underline">
+              Clear filters
+            </button>
+          </div>
+        )}
+      </Card>
 
-            {/* Skill Gap Callout */}
-            {path.skillsGap.length > 0 && (
-              <div className="border-l-4 border-amber-400 bg-amber-50 rounded-r-lg mb-3">
-                <button
-                  onClick={() => toggleGap(path.id)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-left"
-                >
-                  <span className="flex items-center gap-2 text-sm font-medium text-amber-800">
-                    <AlertTriangle className="w-4 h-4 text-amber-500" />
-                    Skill Gap Warning — {path.skillsGap.length} skill{path.skillsGap.length !== 1 ? "s" : ""} not covered
-                  </span>
-                  {gapExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-amber-500" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-amber-500" />
-                  )}
-                </button>
-                {gapExpanded && (
-                  <div className="px-4 pb-3 space-y-2">
-                    {path.skillsGap.map((skillId) => {
-                      const req = jt?.requiredSkills.find((r) => r.skillId === skillId);
-                      const priority = req?.priority || "medium";
-                      const cfg = PRIORITY_DOTS[priority] || PRIORITY_DOTS.medium;
-                      return (
-                        <div key={skillId} className="flex items-center gap-2 text-sm">
-                          <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                          <span className="font-medium text-gray-800 uppercase text-xs tracking-wide">{cfg.label}:</span>
-                          <span className="text-gray-700">{getSkillName(skillId)}</span>
-                        </div>
-                      );
-                    })}
-                    <p className="text-xs text-amber-700 mt-2">
-                      New hires on this path will not earn these skills. Add sources or courses to close gaps.
-                    </p>
-                    <button
-                      onClick={() => onGenerate(path.jobTitleId)}
-                      className="flex items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-900 mt-1"
-                    >
-                      <Pencil className="w-3 h-3" />
-                      Edit Path
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Currency Alert */}
-            {(() => {
-              const cur = getContentCurrency(path.id);
-              if (!cur || cur.currentScore >= 70) return null;
-              return (
-                <div className="border-l-4 border-red-400 bg-red-50 rounded-r-lg p-4 mb-3">
-                  <p className="text-sm font-medium text-red-800 mb-1">
-                    ⚠ Content Currency Alert — Score: {cur.currentScore}/100
-                  </p>
-                  {cur.activeSignals.length > 0 && (
-                    <div className="space-y-1 mb-2">
-                      <p className="text-xs text-red-700">{cur.activeSignals.length} signal{cur.activeSignals.length !== 1 ? "s" : ""} affecting this path:</p>
-                      {cur.activeSignals.map((as) => {
-                        const sig = getOperationalSignalById(as.signalId);
-                        return (
-                          <p key={as.signalId} className="text-xs text-red-600 flex items-center gap-1">
-                            <span>{as.signalType === "incident" ? "🔴" : as.signalType === "regulatory_change" ? "🟡" : "🟠"}</span>
-                            {sig ? sig.title : as.signalType.replace(/_/g, " ")} (−{as.impact} pts)
-                          </p>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <p className="text-xs text-red-600 mb-2">
-                    Recommended: Review and refresh this path before new assignments.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <Link
-                      href="/admin/signals"
-                      className="text-xs font-medium text-red-700 hover:text-red-900 underline"
-                    >
-                      Review Signals
-                    </Link>
-                    <button
-                      onClick={() => setRefreshPath(path)}
-                      className="text-xs font-medium text-red-700 hover:text-red-900 underline"
-                    >
-                      Refresh Path
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Date */}
-            <p className="text-xs text-gray-400 mb-4">
-              {path.publishedAt
-                ? `Published ${new Date(path.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                : `Generated ${new Date(path.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
-            </p>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => onPreview(path.id)}
-                className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                Preview
-              </button>
-
-              {path.status === "draft" && (
-                <>
-                  <button
-                    onClick={() => onPreview(path.id)}
-                    className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-800"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Approve & Publish
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm("Delete this draft?")) deleteOnboardingPath(path.id);
-                    }}
-                    className="flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-800"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                </>
-              )}
-
-              {path.status === "published" && (
-                <>
-                  <button
-                    onClick={() => onGenerate(path.jobTitleId)}
-                    className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-800"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    Duplicate
-                  </button>
-                  <button
-                    onClick={() => archiveOnboardingPath(path.id)}
-                    className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-800"
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    Archive
-                  </button>
-                </>
-              )}
+      {/* Empty state */}
+      {paths.length === 0 && uncoveredJTs.length === 0 ? (
+        <Card>
+          <div className="text-center py-12">
+            <FileText className="w-12 h-12 text-gray-400 mx-auto" />
+            <h3 className="mt-2 text-sm font-semibold text-gray-900">No onboarding paths yet</h3>
+            <p className="mt-1 text-sm text-gray-500">Get started by generating your first onboarding path.</p>
+            <div className="mt-6">
+              <Button variant="primary" onClick={() => onGenerate()}>
+                Generate your first onboarding path
+              </Button>
             </div>
           </div>
-        );
-      })}
+        </Card>
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Courses</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skills</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredPaths.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
+                      No paths match your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPaths.map((path) => {
+                    const jt = getJobTitleById(path.jobTitleId);
+                    const courses = courseCount(path);
+                    const totalSkills = path.skillsCovered.length + path.skillsGap.length;
+                    const coveragePct = totalSkills > 0 ? Math.round((path.skillsCovered.length / totalSkills) * 100) : 100;
+
+                    return (
+                      <tr
+                        key={path.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => onPreview(path.id)}
+                      >
+                        <td className="px-4 py-3 text-sm">
+                          <div className="font-medium text-gray-900">{path.title}</div>
+                          {jt && <div className="text-xs text-gray-500">{jt.name}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {jt?.department || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {path.durationDays} days
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {courses}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {path.skillsCovered.length}/{totalSkills} ({coveragePct}%)
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`font-medium ${getConfidenceColor(path.confidenceScore)}`}>
+                            {path.confidenceScore}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <Badge variant={getStatusVariant(path.status)}>
+                            {getStatusLabel(path.status)}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative inline-block">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === path.id ? null : path.id);
+                              }}
+                              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                            {openMenuId === path.id && (
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(null);
+                                    onPreview(path.id);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Preview
+                                </button>
+                                {(path.status === "draft" || path.status === "published") && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuId(null);
+                                      onPreview(path.id);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                    Edit
+                                  </button>
+                                )}
+                                {path.status === "draft" && (
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        onGenerate(path.jobTitleId);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                      Regenerate
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        publishOnboardingPath(path.id, currentUser.id);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      Publish
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        if (confirm("Delete this draft?")) deleteOnboardingPath(path.id);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      Delete
+                                    </button>
+                                  </>
+                                )}
+                                {path.status === "published" && (
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        onGenerate(path.jobTitleId);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                      Duplicate
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(null);
+                                        archiveOnboardingPath(path.id);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <Archive className="w-3.5 h-3.5" />
+                                      Archive
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Uncovered job titles nudge */}
       {uncoveredJTs.length > 0 && (
@@ -401,20 +389,13 @@ export default function PathsTab({
             {uncoveredJTs.map((jt) => jt.name).join(", ")}
           </p>
           <button
-            onClick={() => onBatchGenerate ? onBatchGenerate() : onGenerate()}
+            onClick={() => (onBatchGenerate ? onBatchGenerate() : onGenerate())}
             className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-800"
           >
             Generate paths for these roles
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
-      )}
-
-      {refreshPath && (
-        <PathRefreshModal
-          path={refreshPath}
-          onClose={() => setRefreshPath(null)}
-        />
       )}
     </div>
   );

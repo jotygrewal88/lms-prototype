@@ -8,6 +8,7 @@ import {
   Wrench,
   Library,
   Building2,
+  FileText,
 } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import { getCurrentUser } from "@/lib/store";
@@ -15,9 +16,11 @@ import JobTitlesTab from "@/components/admin/learningmodel/JobTitlesTab";
 import SkillsTab from "@/components/admin/learningmodel/SkillsTab";
 import OrganizationTab from "@/components/admin/learningmodel/OrganizationTab";
 import SourcesTab from "@/components/admin/learningmodel/SourcesTab";
+import ContentStandardsTab from "@/components/admin/learningmodel/ContentStandardsTab";
 
 const TABS = [
   { id: "organization", label: "Organization", icon: Building2 },
+  { id: "content-standards", label: "Content Standards", icon: FileText },
   { id: "jobtitles", label: "Job Titles", icon: Briefcase },
   { id: "skills", label: "Skills", icon: Wrench },
   { id: "sources", label: "Sources", icon: Library },
@@ -102,6 +105,7 @@ function LearningModelContent() {
 
         {/* Tab Content */}
         {activeTab === "organization" && <OrganizationTab />}
+        {activeTab === "content-standards" && <ContentStandardsTab />}
         {activeTab === "jobtitles" && <JobTitlesTab />}
         {activeTab === "skills" && <SkillsTab />}
         {activeTab === "sources" && <SourcesTab />}

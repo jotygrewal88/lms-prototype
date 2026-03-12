@@ -1,31 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CheckCircle2,
-  Clock,
-  Lock,
   AlertTriangle,
-  Target,
-  Calendar,
   Users,
-  MoreVertical,
+  MoreHorizontal,
   Send,
   CalendarClock,
   UserCircle,
-  X as XIcon,
   Trash2,
+  X as XIcon,
 } from "lucide-react";
 import Button from "@/components/Button";
+import Card from "@/components/Card";
+import Badge from "@/components/Badge";
 import Toast from "@/components/Toast";
 import {
   getActiveOnboardingAssignments,
   getOnboardingPathById,
   getUser,
-  getActiveSkillsV2,
   updateOnboardingAssignment,
-  getContentCurrency,
 } from "@/lib/store";
 import { getFullName } from "@/types";
 import type { OnboardingAssignment } from "@/types";
@@ -35,11 +30,122 @@ function daysBetween(a: string, b: Date) {
 }
 
 export default function ActiveTab() {
+  const router = useRouter();
   const assignments = getActiveOnboardingAssignments();
-  const allSkills = getActiveSkillsV2();
-  const getSkillName = (id: string) => allSkills.find((s) => s.id === id)?.name || id;
   const today = new Date();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"" | "on-track" | "behind">("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const [dialogAssignment, setDialogAssignment] = useState<OnboardingAssignment | null>(null);
+  const [dialogType, setDialogType] = useState<"reminder" | "deadline" | "remove" | null>(null);
+  const [deadlineDate, setDeadlineDate] = useState("");
+  const [deadlineReason, setDeadlineReason] = useState("");
+
+  useEffect(() => {
+    const handler = () => setOpenMenuId(null);
+    if (openMenuId) {
+      document.addEventListener("click", handler);
+      return () => document.removeEventListener("click", handler);
+    }
+  }, [openMenuId]);
+
+  const enriched = useMemo(() => {
+    return assignments.map((a) => {
+      const path = getOnboardingPathById(a.pathId);
+      const user = getUser(a.userId);
+      if (!path || !user) return null;
+
+      const dayNum = daysBetween(a.startDate, today);
+      const totalCompletedCourses = a.phaseProgress.reduce((s, p) => s + p.coursesCompleted, 0);
+      const totalCourses = a.phaseProgress.reduce((s, p) => s + p.coursesTotal, 0);
+      const progressPct = totalCourses > 0 ? Math.round((totalCompletedCourses / totalCourses) * 100) : 0;
+
+      const currentPhase = a.phaseProgress.find((p) => p.status === "in_progress");
+      const currentPathPhase = currentPhase ? path.phases.find((ph) => ph.id === currentPhase.phaseId) : null;
+
+      let behindSchedule = false;
+      if (currentPathPhase) {
+        if (dayNum > currentPathPhase.dayEnd) {
+          behindSchedule = true;
+        } else if (currentPhase && currentPhase.coursesCompleted === 0) {
+          const daysSincePhaseStart = dayNum - currentPathPhase.dayStart + 1;
+          const phaseDuration = currentPathPhase.dayEnd - currentPathPhase.dayStart + 1;
+          if (daysSincePhaseStart > phaseDuration * 0.5) behindSchedule = true;
+        }
+      }
+
+      return {
+        assignment: a,
+        path,
+        user,
+        userName: getFullName(user),
+        dayNum,
+        progressPct,
+        currentPhaseName: currentPathPhase?.name || "Complete",
+        behindSchedule,
+      };
+    }).filter(Boolean) as NonNullable<typeof enriched[number]>[] ;
+  }, [assignments]);
+
+  const filtered = useMemo(() => {
+    return enriched.filter((item) => {
+      if (filterStatus === "on-track" && item.behindSchedule) return false;
+      if (filterStatus === "behind" && !item.behindSchedule) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        if (!item.userName.toLowerCase().includes(q) && !item.path.title.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [enriched, searchQuery, filterStatus]);
+
+  const hasActiveFilters = searchQuery || filterStatus;
+  const clearFilters = () => { setSearchQuery(""); setFilterStatus(""); };
+
+  const openDialog = (a: OnboardingAssignment, type: "reminder" | "deadline" | "remove") => {
+    setDialogAssignment(a);
+    setDialogType(type);
+    setOpenMenuId(null);
+    if (type === "deadline") {
+      const path = getOnboardingPathById(a.pathId);
+      if (path) {
+        const deadline = new Date(new Date(a.startDate).getTime() + path.durationDays * 86400000);
+        setDeadlineDate(deadline.toISOString().split("T")[0]);
+      }
+      setDeadlineReason("");
+    }
+  };
+
+  const closeDialog = () => { setDialogAssignment(null); setDialogType(null); };
+
+  const handleSendReminder = () => {
+    if (!dialogAssignment) return;
+    const user = getUser(dialogAssignment.userId);
+    closeDialog();
+    setToast({ message: `Reminder sent to ${user ? getFullName(user) : "user"}`, type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleAdjustDeadline = () => {
+    if (!deadlineDate || !dialogAssignment) return;
+    closeDialog();
+    const user = getUser(dialogAssignment.userId);
+    setToast({ message: `Deadline adjusted for ${user ? getFullName(user) : "user"}`, type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleRemove = () => {
+    if (!dialogAssignment) return;
+    const user = getUser(dialogAssignment.userId);
+    const path = getOnboardingPathById(dialogAssignment.pathId);
+    updateOnboardingAssignment(dialogAssignment.id, { status: "cancelled" });
+    closeDialog();
+    setToast({ message: `${user ? getFullName(user) : "User"} removed from ${path?.title || "path"}`, type: "success" });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   if (assignments.length === 0) {
     return (
@@ -57,341 +163,271 @@ export default function ActiveTab() {
         <span className="text-sm text-gray-500">{assignments.length} in progress</span>
       </div>
 
-      {assignments.map((a) => (
-        <AssignmentCard
-          key={a.id}
-          assignment={a}
-          today={today}
-          getSkillName={getSkillName}
-          onToast={(msg) => { setToast({ message: msg, type: "success" }); setTimeout(() => setToast(null), 3000); }}
-        />
-      ))}
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
-  );
-}
-
-function AssignmentCard({
-  assignment: a,
-  today,
-  getSkillName,
-  onToast,
-}: {
-  assignment: OnboardingAssignment;
-  today: Date;
-  getSkillName: (id: string) => string;
-  onToast: (msg: string) => void;
-}) {
-  const router = useRouter();
-  const path = getOnboardingPathById(a.pathId);
-  const user = getUser(a.userId);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showReminder, setShowReminder] = useState(false);
-  const [showDeadline, setShowDeadline] = useState(false);
-  const [showRemove, setShowRemove] = useState(false);
-  const [adjustedDeadline, setAdjustedDeadline] = useState<string | null>(null);
-  const [deadlineDate, setDeadlineDate] = useState("");
-  const [deadlineReason, setDeadlineReason] = useState("");
-
-  if (!path || !user) return null;
-
-  const userName = getFullName(user);
-  const dayNum = daysBetween(a.startDate, today);
-  const totalCompletedCourses = a.phaseProgress.reduce((s, p) => s + p.coursesCompleted, 0);
-  const totalCourses = a.phaseProgress.reduce((s, p) => s + p.coursesTotal, 0);
-  const progressPct = totalCourses > 0 ? Math.round((totalCompletedCourses / totalCourses) * 100) : 0;
-
-  const currentPhase = a.phaseProgress.find((p) => p.status === "in_progress");
-  const currentPathPhase = currentPhase
-    ? path.phases.find((ph) => ph.id === currentPhase.phaseId)
-    : null;
-
-  // Enhanced behind schedule logic
-  let behindSchedule = false;
-  if (currentPathPhase) {
-    if (dayNum > currentPathPhase.dayEnd) {
-      behindSchedule = true;
-    } else if (currentPhase && currentPhase.coursesCompleted === 0) {
-      const daysSincePhaseStart = dayNum - currentPathPhase.dayStart + 1;
-      const phaseDuration = currentPathPhase.dayEnd - currentPathPhase.dayStart + 1;
-      if (daysSincePhaseStart > phaseDuration * 0.5) {
-        behindSchedule = true;
-      }
-    }
-  }
-
-  const originalDeadline = new Date(new Date(a.startDate).getTime() + path.durationDays * 86400000);
-  const displayDeadline = adjustedDeadline ? new Date(adjustedDeadline) : originalDeadline;
-
-  let nextDueLabel = "";
-  if (currentPathPhase) {
-    const startDate = new Date(a.startDate);
-    const dueDate = new Date(startDate.getTime() + currentPathPhase.dayEnd * 86400000);
-    const nextCourse = currentPathPhase.courses[currentPhase!.coursesCompleted];
-    if (nextCourse) {
-      nextDueLabel = `${nextCourse.title} (${dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`;
-    }
-  }
-
-  const totalSkills = path.skillsCovered.length;
-
-  const handleSendReminder = () => {
-    setShowReminder(false);
-    setMenuOpen(false);
-    onToast(`Reminder sent to ${userName}`);
-  };
-
-  const handleAdjustDeadline = () => {
-    if (!deadlineDate) return;
-    setAdjustedDeadline(deadlineDate);
-    setShowDeadline(false);
-    setMenuOpen(false);
-    onToast(`Deadline adjusted for ${userName}`);
-  };
-
-  const handleRemove = () => {
-    updateOnboardingAssignment(a.id, { status: "cancelled" });
-    setShowRemove(false);
-    setMenuOpen(false);
-    onToast(`${userName} removed from ${path.title}`);
-  };
-
-  return (
-    <div className="border border-gray-200 rounded-lg p-5 bg-white relative">
-      {/* User + Path + Menu */}
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <h3 className="font-semibold text-gray-900">{userName}</h3>
-          <p className="text-sm text-gray-500">{path.title}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {behindSchedule && (
-            <span className="flex items-center gap-1 text-xs text-red-700 bg-red-50 px-2 py-1 rounded-full font-medium">
-              <AlertTriangle className="w-3 h-3" />
-              Behind Schedule
-            </span>
-          )}
-          {adjustedDeadline && (
-            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">
-              Deadline adjusted
-            </span>
-          )}
-          {/* Overflow menu */}
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-40 py-1">
-                  <button
-                    onClick={() => { setMenuOpen(false); setShowReminder(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Send Reminder
-                  </button>
-                  <button
-                    onClick={() => { setMenuOpen(false); setDeadlineDate(displayDeadline.toISOString().split("T")[0]); setShowDeadline(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <CalendarClock className="w-3.5 h-3.5" />
-                    Adjust Deadline
-                  </button>
-                  <button
-                    onClick={() => { setMenuOpen(false); router.push(`/admin/users/${a.userId}`); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <UserCircle className="w-3.5 h-3.5" />
-                    View Profile
-                  </button>
-                  <div className="my-1 border-t border-gray-100" />
-                  <button
-                    onClick={() => { setMenuOpen(false); setShowRemove(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Remove from Path
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-        <span className="flex items-center gap-1">
-          <Calendar className="w-3.5 h-3.5" />
-          Started: {new Date(a.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        </span>
-        <span>Day {dayNum} of {path.durationDays}</span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="mb-3">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                behindSchedule ? "bg-red-500" : "bg-emerald-500"
-              }`}
-              style={{ width: `${progressPct}%` }}
+      {/* Filters */}
+      <Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Employee name or path title..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
-          <span className="text-xs font-medium text-gray-600">{progressPct}%</span>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">All</option>
+              <option value="on-track">On Track</option>
+              <option value="behind">Behind Schedule</option>
+            </select>
+          </div>
         </div>
-      </div>
+        {hasActiveFilters && (
+          <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+            <span>Showing {filtered.length} of {enriched.length} assignments</span>
+            <button onClick={clearFilters} className="text-primary hover:underline">
+              Clear filters
+            </button>
+          </div>
+        )}
+      </Card>
 
-      {/* Currency warning */}
-      {(() => {
-        const cur = getContentCurrency(a.pathId);
-        if (!cur || cur.currentScore >= 70) return null;
+      {/* Table */}
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Phase</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+                    No assignments match your filters.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
+                  <tr
+                    key={item.assignment.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => router.push(`/admin/users/${item.assignment.userId}`)}
+                  >
+                    <td className="px-4 py-3 text-sm">
+                      <div className="font-medium text-gray-900">{item.userName}</div>
+                      <div className="text-xs text-gray-500">{item.path.title}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      Day {item.dayNum} of {item.path.durationDays}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden w-24">
+                          <div
+                            className={`h-full rounded-full transition-all ${item.behindSchedule ? "bg-red-500" : "bg-emerald-500"}`}
+                            style={{ width: `${item.progressPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-gray-600 w-8">{item.progressPct}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {item.currentPhaseName}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {item.behindSchedule ? (
+                        <Badge variant="error">
+                          <AlertTriangle className="w-3 h-3 mr-1" />
+                          Behind
+                        </Badge>
+                      ) : (
+                        <Badge variant="success">On Track</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative inline-block">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(openMenuId === item.assignment.id ? null : item.assignment.id);
+                          }}
+                          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                        {openMenuId === item.assignment.id && (
+                          <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDialog(item.assignment, "reminder");
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              Send Reminder
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDialog(item.assignment, "deadline");
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <CalendarClock className="w-3.5 h-3.5" />
+                              Adjust Deadline
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(null);
+                                router.push(`/admin/users/${item.assignment.userId}`);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <UserCircle className="w-3.5 h-3.5" />
+                              View Profile
+                            </button>
+                            <div className="my-1 border-t border-gray-100" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDialog(item.assignment, "remove");
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Remove from Path
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Send Reminder Dialog */}
+      {dialogType === "reminder" && dialogAssignment && (() => {
+        const user = getUser(dialogAssignment.userId);
+        const userName = user ? getFullName(user) : "this user";
         return (
-          <div className="flex items-center gap-2 p-2 mb-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-            <p className="text-xs text-amber-700">
-              ⚠ Training content may be outdated. {cur.activeSignals.length} change{cur.activeSignals.length !== 1 ? "s" : ""} since this path was assigned.
-            </p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/40" onClick={closeDialog} />
+            <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
+              <button onClick={closeDialog} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+                <XIcon className="w-4 h-4" />
+              </button>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Send Reminder</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Send {userName} a reminder about their upcoming training?
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
+                <Button variant="primary" onClick={handleSendReminder}>Send</Button>
+              </div>
+            </div>
           </div>
         );
       })()}
 
-      {/* Phase status */}
-      <div className="space-y-1.5 mb-3">
-        {a.phaseProgress.map((pp, i) => {
-          const phase = path.phases.find((ph) => ph.id === pp.phaseId);
-          if (!phase) return null;
-          const icon =
-            pp.status === "completed" ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            ) : pp.status === "in_progress" ? (
-              <Clock className="w-3.5 h-3.5 text-blue-500" />
-            ) : (
-              <Lock className="w-3.5 h-3.5 text-gray-300" />
-            );
-          const label =
-            pp.status === "completed"
-              ? "Complete"
-              : pp.status === "in_progress"
-              ? `In Progress (${pp.coursesCompleted} of ${pp.coursesTotal} courses done)`
-              : "Locked";
-
-          return (
-            <div key={pp.phaseId} className="flex items-center gap-2 text-xs">
-              {icon}
-              <span className="text-gray-700 font-medium">
-                Phase {i + 1}: {phase.timeline}
-              </span>
-              <span className="text-gray-400">— {label}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer stats */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <Target className="w-3.5 h-3.5" />
-          Skills earned: {a.skillsEarned.length} of {totalSkills}
-        </span>
-        {nextDueLabel && (
-          <span>Next due: {nextDueLabel}</span>
-        )}
-      </div>
-
-      {/* ─── Send Reminder Dialog ─── */}
-      {showReminder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setShowReminder(false)} />
-          <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
-            <button onClick={() => setShowReminder(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
-              <XIcon className="w-4 h-4" />
-            </button>
-            <h3 className="text-base font-semibold text-gray-900 mb-2">Send Reminder</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Send {userName} a reminder about their upcoming training?
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowReminder(false)}>Cancel</Button>
-              <Button variant="primary" onClick={handleSendReminder}>Send</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Adjust Deadline Dialog ─── */}
-      {showDeadline && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setShowDeadline(false)} />
-          <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
-            <button onClick={() => setShowDeadline(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
-              <XIcon className="w-4 h-4" />
-            </button>
-            <h3 className="text-base font-semibold text-gray-900 mb-3">Adjust Deadline</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Current deadline</label>
-                <p className="text-sm text-gray-700">{originalDeadline.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">New deadline</label>
-                <input
-                  type="date"
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Reason (optional)</label>
-                <input
-                  type="text"
-                  value={deadlineReason}
-                  onChange={(e) => setDeadlineReason(e.target.value)}
-                  placeholder="e.g., Extended leave"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={() => setShowDeadline(false)}>Cancel</Button>
-              <Button variant="primary" onClick={handleAdjustDeadline}>Save</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Remove Confirmation ─── */}
-      {showRemove && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setShowRemove(false)} />
-          <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
-            <button onClick={() => setShowRemove(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
-              <XIcon className="w-4 h-4" />
-            </button>
-            <h3 className="text-base font-semibold text-gray-900 mb-2">Remove from Path</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Remove {userName} from {path.title}? Their progress will be saved but the assignment will be cancelled.
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowRemove(false)}>Cancel</Button>
-              <button
-                onClick={handleRemove}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
-              >
-                Remove
+      {/* Adjust Deadline Dialog */}
+      {dialogType === "deadline" && dialogAssignment && (() => {
+        const path = getOnboardingPathById(dialogAssignment.pathId);
+        const originalDeadline = path
+          ? new Date(new Date(dialogAssignment.startDate).getTime() + path.durationDays * 86400000)
+          : new Date();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/40" onClick={closeDialog} />
+            <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
+              <button onClick={closeDialog} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+                <XIcon className="w-4 h-4" />
               </button>
+              <h3 className="text-base font-semibold text-gray-900 mb-3">Adjust Deadline</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Current deadline</label>
+                  <p className="text-sm text-gray-700">{originalDeadline.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">New deadline</label>
+                  <input
+                    type="date"
+                    value={deadlineDate}
+                    onChange={(e) => setDeadlineDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Reason (optional)</label>
+                  <input
+                    type="text"
+                    value={deadlineReason}
+                    onChange={(e) => setDeadlineReason(e.target.value)}
+                    placeholder="e.g., Extended leave"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-4">
+                <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
+                <Button variant="primary" onClick={handleAdjustDeadline}>Save</Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Remove Confirmation */}
+      {dialogType === "remove" && dialogAssignment && (() => {
+        const user = getUser(dialogAssignment.userId);
+        const path = getOnboardingPathById(dialogAssignment.pathId);
+        const userName = user ? getFullName(user) : "this user";
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/40" onClick={closeDialog} />
+            <div className="relative bg-white rounded-xl max-w-sm w-full shadow-xl p-6">
+              <button onClick={closeDialog} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+                <XIcon className="w-4 h-4" />
+              </button>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Remove from Path</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Remove {userName} from {path?.title || "this path"}? Their progress will be saved but the assignment will be cancelled.
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="secondary" onClick={closeDialog}>Cancel</Button>
+                <button
+                  onClick={handleRemove}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

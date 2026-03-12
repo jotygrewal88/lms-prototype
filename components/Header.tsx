@@ -4,21 +4,22 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { BookOpen, Bell, User } from "lucide-react";
-import { getCurrentUser, getUsers, switchRole, subscribe, getReceivedNotifications } from "@/lib/store";
+import { getCurrentUser, getUsers, switchRole, subscribe, getReceivedNotifications, getOrganization } from "@/lib/store";
 import { User as UserType, getFullName } from "@/types";
 import ScopeSelector from "@/components/ScopeSelector";
 
 export default function Header() {
   const [currentUser, setCurrentUser] = useState<UserType>(getCurrentUser());
   const [notificationCount, setNotificationCount] = useState(0);
+  const [orgLogo, setOrgLogo] = useState(getOrganization().logo);
   const users = getUsers();
 
   useEffect(() => {
     const updateState = () => {
       const user = getCurrentUser();
       setCurrentUser(user);
+      setOrgLogo(getOrganization().logo);
       
-      // Update notification count for learners
       if (user.role === "LEARNER") {
         setNotificationCount(getReceivedNotifications(user.id).length);
       }
@@ -36,8 +37,14 @@ export default function Header() {
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between sticky top-0 z-40 shadow-sm px-4 md:px-6">
       <div className="flex items-center gap-2">
-        <BookOpen className="w-5 h-5 text-gray-800" />
-        <span className="text-lg font-semibold tracking-tight text-gray-900">UpKeep Learn</span>
+        {currentUser.role === "LEARNER" && orgLogo ? (
+          <img src={orgLogo} alt="Logo" className="h-8 object-contain" />
+        ) : (
+          <>
+            <BookOpen className="w-5 h-5 text-gray-800" />
+            <span className="text-lg font-semibold tracking-tight text-gray-900">UpKeep Learn</span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

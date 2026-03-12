@@ -5,7 +5,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Training, TrainingAssignment, Role, TrainingCompletion, User, getFullName, TrainingCategory, TrainingStatus } from "@/types";
+import { Training, TrainingAssignment, Role, TrainingCompletion, User, getFullName, TrainingCategory, TrainingStatus, TrainingFormat } from "@/types";
 import { getUsers, getSites, getDepartments, createTraining, updateTraining, createCompletion } from "@/lib/store";
 import { getUsersForTraining } from "@/lib/assignment";
 import { today, addDays } from "@/lib/utils";
@@ -40,6 +40,8 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
   const [tagInput, setTagInput] = useState("");
   const [skillsGranted, setSkillsGranted] = useState<Array<{ skillId: string; level?: number; evidenceRequired: boolean }>>([]);
   const [vendor, setVendor] = useState("");
+  const [trainingFormat, setTrainingFormat] = useState<TrainingFormat | "">("");
+  const [trainingFormatOther, setTrainingFormatOther] = useState("");
   
   // Tab state
   const [activeTab, setActiveTab] = useState<"details" | "assignment">("details");
@@ -114,6 +116,8 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
       setTags(training.tags || []);
       setSkillsGranted(training.skillsGranted || []);
       setVendor(training.vendor || "");
+      setTrainingFormat(training.trainingFormat || "");
+      setTrainingFormatOther(training.trainingFormatOther || "");
       const existingContentUrl = training.contentUrl || "";
       setContentUrl(existingContentUrl);
       // If it's an uploaded file, extract filename from path
@@ -145,6 +149,8 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
     setTagInput("");
     setSkillsGranted([]);
     setVendor("");
+    setTrainingFormat("");
+    setTrainingFormatOther("");
     setActiveTab("details");
     setContentUrl("");
     setUploadedFileName(null);
@@ -177,6 +183,8 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         skillsGranted: skillsGranted.length > 0 ? skillsGranted : undefined,
         contentUrl: contentUrl || undefined,
         vendor: vendor || undefined,
+        trainingFormat: trainingFormat || undefined,
+        trainingFormatOther: trainingFormat === "other" ? trainingFormatOther || undefined : undefined,
         updatedAt: new Date().toISOString(),
       });
     } else {
@@ -195,6 +203,8 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
         skillsGranted: skillsGranted.length > 0 ? skillsGranted : undefined,
         contentUrl: contentUrl || undefined,
         vendor: vendor || undefined,
+        trainingFormat: trainingFormat || undefined,
+        trainingFormatOther: trainingFormat === "other" ? trainingFormatOther || undefined : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -555,7 +565,7 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   {/* Category */}
                   <div>
                     <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -574,6 +584,26 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
                     </select>
                   </div>
 
+                  {/* Training Format */}
+                  <div>
+                    <label htmlFor="trainingFormat" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Training Format
+                    </label>
+                    <select
+                      id="trainingFormat"
+                      value={trainingFormat}
+                      onChange={(e) => setTrainingFormat(e.target.value as TrainingFormat | "")}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    >
+                      <option value="">Select format...</option>
+                      <option value="in-person">In-Person</option>
+                      <option value="classroom">Classroom</option>
+                      <option value="on-site">On-Site</option>
+                      <option value="third-party-online">Third-Party Online</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
                   {/* Vendor */}
                   <div>
                     <label htmlFor="vendor" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -589,6 +619,22 @@ export default function TrainingModal({ isOpen, onClose, training, onSave }: Tra
                     />
                   </div>
                 </div>
+
+                {trainingFormat === "other" && (
+                  <div>
+                    <label htmlFor="trainingFormatOther" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Describe Format
+                    </label>
+                    <input
+                      type="text"
+                      id="trainingFormatOther"
+                      value={trainingFormatOther}
+                      onChange={(e) => setTrainingFormatOther(e.target.value)}
+                      placeholder="e.g., Virtual Reality simulation, Field ride-along..."
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                )}
 
                 {/* Tags */}
                 <div>

@@ -257,7 +257,7 @@ export default function GenerateCoursePage() {
                   <Sparkles className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Generate Course with AI</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">Create Course</h1>
                   <p className="text-sm text-gray-500 mt-0.5">
                     Provide context and the AI agent will build your course in the editor.
                   </p>

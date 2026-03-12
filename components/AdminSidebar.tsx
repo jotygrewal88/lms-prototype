@@ -13,11 +13,8 @@ import {
   Users, 
   FileStack, 
   Palette, 
-  Globe, 
   CalendarClock,
   TestTube,
-  Paintbrush2,
-  Award,
   BarChart3,
   Library,
   MapPin,
@@ -45,14 +42,11 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Onboarding": Milestone,
   "Audit Snapshots": FileStack,
   "Locations": MapPin,
-  "Brand": Palette,
-  "Localization": Globe,
+  "Customization": Palette,
   "Reminders": CalendarClock,
-  "Style Guide": Paintbrush2,
-  "Certificates": Award,
   "Demo": TestTube,
   "Signals": AlertTriangle,
-  "Training Responses": Zap,
+  "Training Actions": Zap,
 };
 
 export default function AdminSidebar() {
@@ -173,7 +167,7 @@ export default function AdminSidebar() {
                     {activeOnboardingCount}
                   </span>
                 )}
-                {item.label === "Training Responses" && pendingResponseCount > 0 && (
+                {item.label === "Training Actions" && pendingResponseCount > 0 && (
                   <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-violet-100 text-violet-700 text-[10px] font-semibold">
                     {pendingResponseCount}
                   </span>

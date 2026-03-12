@@ -110,20 +110,6 @@ const LANGUAGES = [
   "Mandarin Chinese", "Japanese", "Korean", "Arabic", "Hindi", "Other",
 ];
 
-const RECERT_OPTIONS = [
-  { value: "annual", label: "Annual (12 months)" },
-  { value: "biannual", label: "Bi-Annual (6 months)" },
-  { value: "2years", label: "Every 2 Years" },
-  { value: "3years", label: "Every 3 Years" },
-];
-
-const TRAINING_LANG_OPTIONS = [
-  { value: "english_only", label: "English only" },
-  { value: "bilingual", label: "Bilingual (English + additional)" },
-  { value: "primary_only", label: "Primary language only" },
-  { value: "multi", label: "Multi-language" },
-];
-
 const REGULATORY_GROUPS: { category: string; items: { id: string; label: string }[] }[] = [
   {
     category: "Safety & Health",
@@ -181,10 +167,6 @@ export default function OrganizationTab() {
   const [additionalLanguages, setAdditionalLanguages] = useState<string[]>(profile.additionalLanguages);
   const [regulatoryFrameworks, setRegulatoryFrameworks] = useState<string[]>(profile.regulatoryFrameworks);
   const [otherRegulations, setOtherRegulations] = useState(profile.otherRegulations);
-  const [defaultPassingScore, setDefaultPassingScore] = useState(profile.defaultPassingScore);
-  const [defaultRecertPeriod, setDefaultRecertPeriod] = useState(profile.defaultRecertPeriod);
-  const [trainingLanguageReq, setTrainingLanguageReq] = useState(profile.trainingLanguageReq);
-  const [customAIInstructions, setCustomAIInstructions] = useState(profile.customAIInstructions);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showForm, setShowForm] = useState(!!profile.companyName || !!profile.industry);
 
@@ -230,10 +212,6 @@ export default function OrganizationTab() {
       additionalLanguages,
       regulatoryFrameworks,
       otherRegulations,
-      defaultPassingScore,
-      defaultRecertPeriod,
-      trainingLanguageReq,
-      customAIInstructions,
       updatedByUserId: currentUser.id,
     });
     setToast({ message: "Organization profile saved", type: "success" });
@@ -525,87 +503,6 @@ export default function OrganizationTab() {
             />
           </div>
         </div>
-      </section>
-
-      {/* ━━━ Section 4: Training Standards ━━━ */}
-      <section>
-        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-1">
-          Training Standards
-        </h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Default settings for AI-generated training content.
-        </p>
-        <div className="space-y-4">
-          {/* Passing Score */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Default Certification Passing Score
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={defaultPassingScore}
-                onChange={(e) => setDefaultPassingScore(Math.min(100, Math.max(0, Number(e.target.value))))}
-                className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-              />
-              <span className="text-sm text-gray-500">%</span>
-            </div>
-          </div>
-
-          {/* Recertification Period */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Default Recertification Period
-            </label>
-            <select
-              value={defaultRecertPeriod}
-              onChange={(e) => setDefaultRecertPeriod(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-            >
-              {RECERT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Training Language Requirement */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Training Language Requirement
-            </label>
-            <select
-              value={trainingLanguageReq}
-              onChange={(e) => setTrainingLanguageReq(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-            >
-              {TRAINING_LANG_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* ━━━ Section 5: Custom AI Instructions ━━━ */}
-      <section>
-        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-1">
-          Custom AI Instructions
-        </h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Tell the AI anything specific about your organization that should be reflected in generated training content. This is included as context in every AI generation.
-        </p>
-        <textarea
-          value={customAIInstructions}
-          onChange={(e) => setCustomAIInstructions(e.target.value)}
-          rows={8}
-          placeholder={"- We refer to maintenance workers as \"Maintenance Partners\"\n- Our internal SOP numbering follows: [DEPT]-[YEAR]-[SEQ]\n- All safety training must reference our company motto..."}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 resize-none"
-        />
-        <p className="mt-1 text-xs text-gray-400">
-          This is a free-text field. The AI reads this as additional context.
-        </p>
       </section>
 
       {/* Info box */}

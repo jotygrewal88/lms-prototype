@@ -82,7 +82,7 @@ function TrainingResponsesListContent() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="w-6 h-6 text-violet-600" />
-                <h1 className="text-xl font-bold text-gray-900">Training Responses</h1>
+                <h1 className="text-xl font-bold text-gray-900">Training Actions</h1>
               </div>
               <p className="text-sm text-gray-500">
                 Signal-driven training generated from operational events
