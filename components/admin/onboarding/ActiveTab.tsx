@@ -87,7 +87,7 @@ export default function ActiveTab() {
         currentPhaseName: currentPathPhase?.name || "Complete",
         behindSchedule,
       };
-    }).filter(Boolean) as NonNullable<typeof enriched[number]>[] ;
+    }).filter((x): x is NonNullable<typeof x> => x !== null);
   }, [assignments]);
 
   const filtered = useMemo(() => {
