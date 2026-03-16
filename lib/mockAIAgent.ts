@@ -1173,7 +1173,7 @@ function generateRichDescription(topic: string, setup: ParsedSetup): string {
 // OBJECTIVES GENERATOR
 // ============================================================================
 
-function generateObjectivesForTopic(topic: string): string[] {
+export function generateObjectivesForTopic(topic: string): string[] {
   if (matchesKeywords(topic, ["loto", "lockout", "tagout"])) {
     return [
       "Understand the purpose and scope of LOTO procedures",
@@ -1284,7 +1284,7 @@ function detectReadingLevel(setup: ParsedSetup): "basic" | "standard" | "technic
 // CATEGORY DETECTOR
 // ============================================================================
 
-function detectCategory(topic: string): string {
+export function detectCategory(topic: string): string {
   if (matchesKeywords(topic, ["loto", "lockout", "tagout", "confined space", "ppe", "fire", "safety", "hazard"])) return "Safety";
   if (matchesKeywords(topic, ["forklift", "equipment", "machine", "operat"])) return "Equipment";
   if (matchesKeywords(topic, ["onboard", "orient", "new hire"])) return "Onboarding";

@@ -401,16 +401,23 @@ export interface KnowledgeCheck {
   explanation: string;
 }
 
+export interface DownloadableResource {
+  title: string;
+  url: string;
+  fileType: string;
+}
+
 export interface Lesson extends Timestamped {
   id: string;
   courseId: string;
   title: string;
   order: number;
   resourceIds: string[];
-  sourceAttributions?: string[];  // Library item IDs this lesson drew from (AI-generated)
+  sourceAttributions?: string[];
   knowledgeChecks?: KnowledgeCheck[];
   estimatedMinutes?: number;
   lessonType?: "lesson" | "assessment";
+  downloadableResources?: DownloadableResource[];
 }
 
 // Resource entity (attached to lessons)
@@ -574,6 +581,16 @@ export interface ProgressLesson extends Timestamped {
   lastPassedQuizAttemptId?: string; // Links to most recent passed attempt
   // Knowledge check persistence
   knowledgeCheckAnswers?: Record<string, string>; // checkId -> selectedOptionId
+}
+
+// Course feedback / rating from learners
+export interface CourseFeedbackEntry {
+  id: string;
+  courseId: string;
+  userId: string;
+  rating: number;
+  comment?: string;
+  submittedAt: string;
 }
 
 // Certificate for course completion

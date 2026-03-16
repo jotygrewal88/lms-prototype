@@ -488,6 +488,10 @@ export const lotoLessons: Lesson[] = [
     knowledgeChecks: lesson1KCs,
     estimatedMinutes: 15,
     lessonType: "lesson",
+    downloadableResources: [
+      { title: "Energy Sources Quick Reference Card", url: "#", fileType: "pdf" },
+      { title: "Hazard Identification Checklist", url: "#", fileType: "pdf" },
+    ],
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
@@ -500,6 +504,10 @@ export const lotoLessons: Lesson[] = [
     knowledgeChecks: lesson2KCs,
     estimatedMinutes: 20,
     lessonType: "lesson",
+    downloadableResources: [
+      { title: "6-Step LOTO Procedure Poster", url: "#", fileType: "pdf" },
+      { title: "Lockout Tagout Log Sheet", url: "#", fileType: "xlsx" },
+    ],
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },

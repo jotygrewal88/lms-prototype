@@ -17,8 +17,6 @@ import {
   Download,
   Eye,
   Clock,
-  AlertTriangle,
-  FileText
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -74,77 +72,24 @@ export default function CertificatesPage() {
         <div className="space-y-6">
           {/* Page Header */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Award className="w-6 h-6 text-amber-600" />
-              <h1 className="text-2xl font-bold text-gray-900">My Certificates</h1>
-            </div>
-            <p className="text-gray-600">
-              Certificates you've earned from completing courses. Download or share your achievements.
+            <h1 className="text-2xl font-bold text-gray-900">My Certificates</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              {certificates.length} certificate{certificates.length !== 1 ? "s" : ""} earned
+              {expiringSoonCount > 0 && ` \u00b7 ${expiringSoonCount} expiring soon`}
+              {expiredCount > 0 && ` \u00b7 ${expiredCount} expired`}
             </p>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Award className="w-5 h-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{certificates.length}</p>
-                  <p className="text-xs text-gray-500">Total Earned</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{validCount}</p>
-                  <p className="text-xs text-gray-500">Valid</p>
-                </div>
-              </div>
-            </div>
-            {expiringSoonCount > 0 && (
-              <div className="bg-white rounded-xl border border-amber-200 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-amber-600">{expiringSoonCount}</p>
-                    <p className="text-xs text-gray-500">Expiring Soon</p>
-                  </div>
-                </div>
-              </div>
-            )}
-            {expiredCount > 0 && (
-              <div className="bg-white rounded-xl border border-red-200 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-red-600">{expiredCount}</p>
-                    <p className="text-xs text-gray-500">Expired</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Certificates Grid */}
           {certificates.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-50 flex items-center justify-center">
-                <Award className="w-8 h-8 text-amber-400" />
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-amber-50 flex items-center justify-center">
+                <Award className="w-7 h-7 text-amber-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 No certificates yet
               </h3>
-              <p className="text-gray-500 max-w-md mx-auto">
+              <p className="text-gray-500 max-w-md mx-auto text-sm">
                 Complete courses to earn certificates. They'll appear here once you finish your training.
               </p>
             </div>
@@ -158,79 +103,56 @@ export default function CertificatesPage() {
                 return (
                   <div
                     key={cert.id}
-                    className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all overflow-hidden ${
+                    onClick={() => handleViewCertificate(cert)}
+                    className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer group ${
                       expired ? "border-red-200" : expiringSoon ? "border-amber-200" : "border-gray-200"
                     }`}
                   >
-                    {/* Certificate preview banner */}
-                    <div className={`relative h-32 ${
-                      expired 
-                        ? "bg-gradient-to-br from-gray-200 to-gray-300" 
-                        : "bg-gradient-to-br from-amber-100 via-orange-100 to-yellow-100"
-                    }`}>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                          expired ? "bg-gray-300" : "bg-white/80"
-                        } shadow-lg`}>
-                          <Award className={`w-8 h-8 ${expired ? "text-gray-500" : "text-amber-600"}`} />
-                        </div>
+                    <div className="p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <Award className={`w-5 h-5 ${expired ? "text-gray-400" : "text-amber-500"}`} />
+                        {expired && (
+                          <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Expired</span>
+                        )}
+                        {expiringSoon && !expired && (
+                          <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Expiring Soon</span>
+                        )}
                       </div>
-                      {/* Status badge */}
-                      {expired && (
-                        <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-medium px-2 py-1 rounded-full">
-                          Expired
-                        </div>
-                      )}
-                      {expiringSoon && !expired && (
-                        <div className="absolute top-3 right-3 bg-amber-500 text-white text-xs font-medium px-2 py-1 rounded-full">
-                          Expiring Soon
+
+                      <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1 group-hover:text-amber-700 transition-colors">
+                        {cert.courseTitle || course?.title || "Course Certificate"}
+                      </h3>
+
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Issued {formatDate(cert.issuedAt)}</span>
+                      </div>
+
+                      {cert.expiresAt && (
+                        <div className={`flex items-center gap-2 text-xs mb-3 ${
+                          expired ? "text-red-600" : expiringSoon ? "text-amber-600" : "text-gray-500"
+                        }`}>
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{expired ? "Expired" : "Expires"} {formatDate(cert.expiresAt)}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Card Body */}
-                    <div className="p-5">
-                      <h3 className="font-semibold text-gray-900 mb-1 truncate">
-                        {cert.courseTitle || course?.title || "Course Certificate"}
-                      </h3>
-                      <p className="text-xs text-gray-500 font-mono mb-3">
-                        Serial: {cert.serial}
-                      </p>
-
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          <span>Issued: {formatDate(cert.issuedAt)}</span>
-                        </div>
-                        {cert.expiresAt && (
-                          <div className={`flex items-center gap-2 text-sm ${
-                            expired ? "text-red-600" : expiringSoon ? "text-amber-600" : "text-gray-600"
-                          }`}>
-                            <Clock className="w-4 h-4" />
-                            <span>
-                              {expired ? "Expired" : "Expires"}: {formatDate(cert.expiresAt)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleViewCertificate(cert)}
-                          className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          <Eye className="w-4 h-4" />
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleViewCertificate(cert)}
-                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download
-                        </button>
-                      </div>
+                    <div className="px-5 pb-4 flex gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleViewCertificate(cert); }}
+                        className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Eye className="w-4 h-4" />
+                        View
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleViewCertificate(cert); }}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </button>
                     </div>
                   </div>
                 );

@@ -5,7 +5,7 @@ import { today, addDays, calculateOverdueDays } from "@/lib/utils";
 export const organization: Organization = {
   id: "org_upkeep",
   name: "UpKeep Demo Co",
-  logo: "https://via.placeholder.com/150x50/2563EB/FFFFFF?text=UpKeep",
+  logo: "",
   primaryColor: "#2563EB",
   settings: {
     timezone: "America/Los_Angeles",

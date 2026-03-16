@@ -1006,6 +1006,16 @@ export default function CourseEditPage() {
     updateLesson(activeLessonId, { title });
   };
 
+  const handleUpdateEstimatedMinutes = (minutes: number | undefined) => {
+    if (!activeLessonId || isManager) return;
+    updateLesson(activeLessonId, { estimatedMinutes: minutes });
+  };
+
+  const handleUpdateDownloadableResources = (resources: import("@/types").DownloadableResource[]) => {
+    if (!activeLessonId || isManager) return;
+    updateLesson(activeLessonId, { downloadableResources: resources });
+  };
+
   const handleMoveLessonUp = () => {
     if (!activeLessonId || isManager) return;
     const currentIndex = lessons.findIndex(l => l.id === activeLessonId);
@@ -2622,6 +2632,8 @@ export default function CourseEditPage() {
                         }).filter((v, i, a) => a.indexOf(v) === i);
                       })()}
                       onUpdateTitle={handleUpdateLessonTitle}
+                      onUpdateEstimatedMinutes={handleUpdateEstimatedMinutes}
+                      onUpdateDownloadableResources={handleUpdateDownloadableResources}
                       onMoveUp={handleMoveLessonUp}
                       onMoveDown={handleMoveLessonDown}
                       onAddResource={handleAddResource}

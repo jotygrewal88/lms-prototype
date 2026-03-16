@@ -1,4 +1,3 @@
-// Phase II 1H.1c: Course Player Page (New Route Structure)
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -9,7 +8,7 @@ import CoursePlayerHeader from "@/components/learner/CoursePlayerHeader";
 import CoursePlayerSidebar from "@/components/learner/CoursePlayerSidebar";
 import LessonContentRenderer from "@/components/learner/LessonContentRenderer";
 import CoursePlayerFooter from "@/components/learner/CoursePlayerFooter";
-import CompletionCelebration from "@/components/learner/CompletionCelebration";
+import CourseCompletionSummary from "@/components/learner/CourseCompletionSummary";
 import LessonTimer from "@/components/learner/LessonTimer";
 import VideoProgressTracker from "@/components/learner/VideoProgressTracker";
 import Toast from "@/components/Toast";
@@ -35,13 +34,20 @@ import {
 import { FEATURES } from "@/lib/features";
 import { Course, Lesson, ProgressLesson } from "@/types";
 
+type TextSize = "sm" | "base" | "lg";
+const TEXT_SIZE_CLASS: Record<TextSize, string> = {
+  sm: "text-sm",
+  base: "text-base",
+  lg: "text-lg",
+};
+
 export default function CoursePlayerLessonPage() {
   const router = useRouter();
   const params = useParams();
   const courseId = params.courseId as string;
   const lessonId = params.lessonId as string;
 
-  const [currentUser, setCurrentUser] = useState(getCurrentUser());
+  const [currentUser] = useState(getCurrentUser());
   const [course, setCourse] = useState<Course | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
@@ -52,8 +58,58 @@ export default function CoursePlayerLessonPage() {
   const [hasAutoCompleted, setHasAutoCompleted] = useState(false);
   const [timeSpent, setTimeSpent] = useState(0);
   const [watchPct, setWatchPct] = useState(0);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [celebrationScore, setCelebrationScore] = useState<number | undefined>(undefined);
+
+  // Completion states
+  const [showCompletionSummary, setShowCompletionSummary] = useState(false);
+  const [completionScore, setCompletionScore] = useState<number | undefined>(undefined);
+
+  // Lesson completion feedback
+  const [showLessonSuccess, setShowLessonSuccess] = useState(false);
+
+  // Auto-save indicator
+  const [showSaveIndicator, setShowSaveIndicator] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("Progress saved");
+
+  // Accessibility & focus
+  const [textSize, setTextSize] = useState<TextSize>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("lms_textSize") as TextSize) || "base";
+    }
+    return "base";
+  });
+  const [highContrast, setHighContrast] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lms_highContrast") === "true";
+    }
+    return false;
+  });
+  const [focusMode, setFocusMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lms_focusMode") === "true";
+    }
+    return false;
+  });
+
+  // Persist accessibility prefs
+  const handleTextSizeChange = (size: TextSize) => {
+    setTextSize(size);
+    localStorage.setItem("lms_textSize", size);
+  };
+  const handleHighContrastChange = (enabled: boolean) => {
+    setHighContrast(enabled);
+    localStorage.setItem("lms_highContrast", String(enabled));
+  };
+  const handleFocusModeChange = (enabled: boolean) => {
+    setFocusMode(enabled);
+    localStorage.setItem("lms_focusMode", String(enabled));
+  };
+
+  // Show save indicator helper
+  const flashSave = useCallback((msg?: string) => {
+    setSaveMessage(msg || "Progress saved");
+    setShowSaveIndicator(true);
+    setTimeout(() => setShowSaveIndicator(false), 2000);
+  }, []);
 
   // Load course and lessons
   useEffect(() => {
@@ -66,10 +122,8 @@ export default function CoursePlayerLessonPage() {
     const lessonsData = getLessonsByCourseId(courseId);
     setLessons(lessonsData);
 
-    // Find current lesson
     const lesson = lessonsData.find((l) => l.id === lessonId);
     if (!lesson) {
-      // Invalid lesson ID, redirect to first lesson or resume
       const user = getCurrentUser();
       const progressCourse = getProgressCourseByCourseAndUser(courseId, user.id);
       if (progressCourse?.lastLessonId) {
@@ -83,9 +137,7 @@ export default function CoursePlayerLessonPage() {
     }
     setCurrentLesson(lesson);
 
-    // Check if lesson is unlocked
     if (!isLessonUnlocked(courseData, lessonId, getCurrentUser().id)) {
-      // Find first unlocked lesson
       const user = getCurrentUser();
       const unlockedLesson = lessonsData.find((l) => isLessonUnlocked(courseData, l.id, user.id));
       if (unlockedLesson) {
@@ -103,23 +155,25 @@ export default function CoursePlayerLessonPage() {
     const progressCourse = getProgressCourseByCourseAndUser(course.id, user.id);
     setCourseProgress(progressCourse);
 
-    // Build progress map
     const map: Record<string, ProgressLesson> = {};
     lessons.forEach((lesson) => {
       const progress = getProgressLesson(user.id, lesson.id);
-      if (progress) {
-        map[lesson.id] = progress;
-      }
+      if (progress) map[lesson.id] = progress;
     });
     setProgressMap(map);
 
-    // Start lesson tracking
     if (lessonId) {
       const progress = startLesson(course.id, lessonId, user.id);
       setTimeSpent(progress.timeSpentSec || 0);
       setWatchPct(progress.watchPct || 0);
     }
-  }, [course, lessons, lessonId]);
+
+    // Flash resume indicator on page load if there's existing progress
+    const existingProgress = getProgressLesson(user.id, lessonId);
+    if (existingProgress?.timeSpentSec && existingProgress.timeSpentSec > 0) {
+      flashSave("Progress restored");
+    }
+  }, [course, lessons, lessonId, flashSave]);
 
   // Subscribe to store changes
   useEffect(() => {
@@ -132,18 +186,20 @@ export default function CoursePlayerLessonPage() {
         const map: Record<string, ProgressLesson> = {};
         lessons.forEach((lesson) => {
           const progress = getProgressLesson(user.id, lesson.id);
-          if (progress) {
-            map[lesson.id] = progress;
-          }
+          if (progress) map[lesson.id] = progress;
         });
         setProgressMap(map);
+
+        // Check if course just completed
+        if (progressCourse?.status === "completed" && !showCompletionSummary) {
+          setCompletionScore(progressCourse.scorePct);
+          setShowCompletionSummary(true);
+        }
       }
     });
-
     return unsubscribe;
-  }, [course, lessons]);
+  }, [course, lessons, showCompletionSummary]);
 
-  // Check thresholds and completion status
   const currentProgress = progressMap[lessonId];
   const canComplete = currentProgress && course
     ? checkLessonCompletionThresholds(course, currentProgress)
@@ -152,43 +208,34 @@ export default function CoursePlayerLessonPage() {
   const isCompleted = currentProgress?.status === "completed";
   const requiresManualCompletion = course?.policy?.requiresManualCompletion ?? false;
 
-  // Generate threshold messages
   const getThresholdMessages = (): string[] => {
     const messages: string[] = [];
     if (!course || !currentProgress) return messages;
-
     if (course.policy?.minTimeOnLessonSec) {
-      const timeSpent = currentProgress.timeSpentSec || 0;
-      const remaining = course.policy.minTimeOnLessonSec - timeSpent;
-      if (remaining > 0) {
-        messages.push(`Complete ${Math.ceil(remaining)} more seconds`);
-      }
+      const ts = currentProgress.timeSpentSec || 0;
+      const remaining = course.policy.minTimeOnLessonSec - ts;
+      if (remaining > 0) messages.push(`Complete ${Math.ceil(remaining)} more seconds`);
     }
-
     if (course.policy?.minVideoWatchPct) {
-      const watchPct = currentProgress.watchPct || 0;
-      const remaining = course.policy.minVideoWatchPct - watchPct;
-      if (remaining > 0) {
-        messages.push(`Watch ${Math.ceil(remaining)}% more video`);
-      }
+      const wp = currentProgress.watchPct || 0;
+      const remaining = course.policy.minVideoWatchPct - wp;
+      if (remaining > 0) messages.push(`Watch ${Math.ceil(remaining)}% more video`);
     }
-
     return messages;
   };
 
-  // Handle navigation
+  // Navigation
   const handleLessonClick = useCallback(
     (newLessonId: string) => {
       if (!course) return;
-
       const user = getCurrentUser();
       if (!isLessonUnlocked(course, newLessonId, user.id)) {
         setToastMessage("Complete previous lessons to unlock this lesson");
         setShowToast(true);
         return;
       }
-
       updateResumePointer(user.id, course.id, newLessonId);
+      setShowLessonSuccess(false);
       router.push(`/learner/courses/${courseId}/lessons/${newLessonId}`);
     },
     [course, courseId, router]
@@ -197,232 +244,176 @@ export default function CoursePlayerLessonPage() {
   const handlePrev = useCallback(() => {
     if (!lessonId) return;
     const prevId = getPrevLessonId(courseId, lessonId);
-    if (prevId) {
-      handleLessonClick(prevId);
-    }
+    if (prevId) handleLessonClick(prevId);
   }, [courseId, lessonId, handleLessonClick]);
 
   const handleNext = useCallback(() => {
     if (!lessonId || !course) return;
-
     const user = getCurrentUser();
-    // Phase II 1H.5: Use getNextUnlockedLesson to respect policy
     const nextId = getNextUnlockedLesson(courseId, user.id, lessonId);
-
     if (nextId) {
       handleLessonClick(nextId);
     } else {
-      // No unlocked next lesson
-      if (isCompleted) {
-        setToastMessage("All lessons complete");
-      } else {
-        setToastMessage("Complete this lesson to unlock the next lesson");
-      }
+      setToastMessage(isCompleted ? "All lessons complete" : "Complete this lesson to unlock the next lesson");
       setShowToast(true);
     }
   }, [course, courseId, lessonId, handleLessonClick, isCompleted]);
 
   const handleMarkComplete = useCallback(() => {
     if (!course || !lessonId) return;
-
     const user = getCurrentUser();
     completeLesson(course.id, lessonId, user.id);
 
-    // Phase II 1H.5: Show toast with next unlock message
+    // Lesson completion feedback
+    setShowLessonSuccess(true);
+    flashSave("Lesson complete!");
+    setTimeout(() => setShowLessonSuccess(false), 2500);
+
     const nextUnlockedLessonId = getNextUnlockedLesson(courseId, user.id, lessonId);
     if (nextUnlockedLessonId) {
-      const nextLesson = lessons.find(l => l.id === nextUnlockedLessonId);
-      setToastMessage(`Lesson complete — ${nextLesson ? nextLesson.title : 'Next lesson'} unlocked`);
+      const nextLesson = lessons.find((l) => l.id === nextUnlockedLessonId);
+      setToastMessage(`Lesson complete — ${nextLesson ? nextLesson.title : "Next lesson"} unlocked`);
     } else {
-      setToastMessage("Lesson complete — All lessons complete!");
+      setToastMessage("Lesson complete!");
     }
     setShowToast(true);
+  }, [course, courseId, lessonId, lessons, flashSave]);
 
-    // Auto-navigate to next lesson if available
-    setTimeout(() => {
-      const nextId = getNextUnlockedLesson(courseId, user.id, lessonId);
-      if (nextId) {
-        handleLessonClick(nextId);
-      }
-    }, 1000);
-  }, [course, courseId, lessonId, handleLessonClick, lessons]);
-
-  // Demo function: bypass thresholds and complete lesson
   const handleDemoComplete = useCallback(() => {
     if (!course || !lessonId) return;
-
     const user = getCurrentUser();
-    const progress = getOrCreateProgressLesson(user.id, lessonId);
-    
-    // Set thresholds to met values for demo
     updateLessonProgress(lessonId, user.id, {
       timeSpentSec: course.policy?.minTimeOnLessonSec || 60,
       watchPct: course.policy?.minVideoWatchPct || 80,
     });
-
-    // Complete the lesson
     completeLesson(course.id, lessonId, user.id);
-
-    setToastMessage("Lesson completed (demo mode)");
-    setShowToast(true);
-
-    // Auto-navigate to next lesson if available
+    setShowLessonSuccess(true);
+    flashSave("Lesson complete!");
     setTimeout(() => {
+      setShowLessonSuccess(false);
       const nextId = getNextLessonId(courseId, lessonId);
-      if (nextId) {
-        handleLessonClick(nextId);
-      } else {
-        // Course complete!
-        setToastMessage("Course complete! 🎉");
-        setShowToast(true);
-      }
-    }, 500);
-  }, [course, courseId, lessonId, handleLessonClick]);
+      if (nextId) handleLessonClick(nextId);
+    }, 1500);
+  }, [course, courseId, lessonId, handleLessonClick, flashSave]);
 
-  // Auto-completion logic
+  // Auto-completion
   useEffect(() => {
     if (!course || !lessonId || !currentProgress) return;
-    if (requiresManualCompletion) return; // Manual completion required
-    if (!FEATURES || !FEATURES.autoCompleteOnScroll) return; // Feature disabled
-    if (isCompleted) return; // Already completed
-    if (hasAutoCompleted) return; // Already auto-completed
+    if (requiresManualCompletion) return;
+    if (!FEATURES || !FEATURES.autoCompleteOnScroll) return;
+    if (isCompleted || hasAutoCompleted) return;
 
     if (canComplete) {
       const user = getCurrentUser();
       completeLesson(course.id, lessonId, user.id);
       setHasAutoCompleted(true);
-      
-      // Phase II 1H.5: Show toast with next unlock message
+      setShowLessonSuccess(true);
+      flashSave("Lesson complete!");
+      setTimeout(() => setShowLessonSuccess(false), 2500);
+
       const nextUnlockedLessonId = getNextUnlockedLesson(courseId, user.id, lessonId);
       if (nextUnlockedLessonId) {
-        const nextLesson = lessons.find(l => l.id === nextUnlockedLessonId);
-        setToastMessage(`Lesson complete — ${nextLesson ? nextLesson.title : 'Next lesson'} unlocked`);
+        const nextLesson = lessons.find((l) => l.id === nextUnlockedLessonId);
+        setToastMessage(`Lesson complete — ${nextLesson ? nextLesson.title : "Next lesson"} unlocked`);
       } else {
-        setToastMessage("Lesson complete — All lessons complete!");
+        setToastMessage("Lesson complete!");
       }
       setShowToast(true);
     }
-  }, [course, courseId, lessonId, currentProgress, canComplete, requiresManualCompletion, isCompleted, hasAutoCompleted, lessons]);
+  }, [course, courseId, lessonId, currentProgress, canComplete, requiresManualCompletion, isCompleted, hasAutoCompleted, lessons, flashSave]);
 
-  // Reset auto-complete flag when lesson changes
   useEffect(() => {
     setHasAutoCompleted(false);
+    setShowLessonSuccess(false);
   }, [lessonId]);
 
-  // Keyboard navigation
+  // Keyboard shortcuts
   useEffect(() => {
-    if (!course || !currentUser) return; // Guard clause
-    
+    if (!course || !currentUser) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return; // Don't interfere with form inputs
-      }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      // Phase II 1H.5: j/k for resource navigation (if resources exist)
-      const resources = getResourcesByLessonId(lessonId);
-      if (resources.length > 0) {
-        if (e.key === "j" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-          // Navigate to next resource (scroll to next resource element)
-          e.preventDefault();
-          const resourceElements = document.querySelectorAll('.resource-wrapper, .resource-card');
-          let currentIndex = -1;
-          resourceElements.forEach((el, idx) => {
-            const rect = el.getBoundingClientRect();
-            if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
-              currentIndex = idx;
-            }
-          });
-          if (currentIndex >= 0 && currentIndex < resourceElements.length - 1) {
-            resourceElements[currentIndex + 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          return;
-        }
-        if (e.key === "k" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-          // Navigate to previous resource
-          e.preventDefault();
-          const resourceElements = document.querySelectorAll('.resource-wrapper, .resource-card');
-          let currentIndex = -1;
-          resourceElements.forEach((el, idx) => {
-            const rect = el.getBoundingClientRect();
-            if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
-              currentIndex = idx;
-            }
-          });
-          if (currentIndex > 0) {
-            resourceElements[currentIndex - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          return;
-        }
-      }
-
-      // Phase II 1H.5: n for next lesson (if unlocked)
-      if (e.key === "n" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "f" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        const nextUnlockedLessonId = getNextUnlockedLesson(courseId, currentUser.id, lessonId);
-        if (nextUnlockedLessonId) {
-          handleNext();
-        }
+        handleFocusModeChange(!focusMode);
         return;
       }
 
-      // Existing j/k for prev/next lesson (keep both behaviors)
-      if (e.key === "j" || e.key === "ArrowRight") {
+      if (e.key === "ArrowRight" || (e.key === "n" && !e.ctrlKey)) {
         e.preventDefault();
         handleNext();
-      } else if (e.key === "k" || e.key === "ArrowLeft") {
+      } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         handlePrev();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleNext, handlePrev, lessonId, course, courseId, currentUser]);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleNext, handlePrev, course, currentUser, focusMode]);
 
   if (!course || !currentLesson) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-gray-600">Loading...</p>
-        </div>
+        <p className="text-gray-600">Loading...</p>
       </div>
+    );
+  }
+
+  // Course completion summary takes over the entire view
+  if (showCompletionSummary) {
+    return (
+      <RouteGuard allowedRoles={["LEARNER"]}>
+        <div className="flex flex-col h-screen bg-white">
+          <div className="bg-white border-b border-gray-200 px-6 py-2">
+            <div className="max-w-full mx-auto flex items-center gap-2 text-sm text-gray-600">
+              <Link href="/learner" className="hover:text-gray-900">Back to Courses</Link>
+              <span>/</span>
+              <span className="text-gray-900">{course.title}</span>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <CourseCompletionSummary
+              course={course}
+              userId={currentUser.id}
+              scorePct={completionScore}
+              onReturnToDashboard={() => {}}
+            />
+          </div>
+        </div>
+      </RouteGuard>
     );
   }
 
   const resources = getResourcesByLessonId(lessonId);
   const hasPrev = !!getPrevLessonId(courseId, lessonId);
-  // Phase II 1H.5: Check if next unlocked lesson exists
   const nextUnlockedLessonId = course && currentUser ? getNextUnlockedLesson(courseId, currentUser.id, lessonId) : null;
   const hasNext = !!nextUnlockedLessonId;
+  const nextLesson = nextUnlockedLessonId ? lessons.find((l) => l.id === nextUnlockedLessonId) : null;
+
+  const completedCount = lessons.filter((l) => progressMap[l.id]?.status === "completed").length;
 
   return (
     <RouteGuard allowedRoles={["LEARNER"]}>
-      <div className="flex flex-col h-screen bg-gray-50">
+      <div className={`flex flex-col h-screen ${highContrast ? "bg-white" : "bg-gray-50"}`}>
         {/* Breadcrumb */}
         <div className="bg-white border-b border-gray-200 px-6 py-2">
           <div className="max-w-full mx-auto flex items-center gap-2 text-sm text-gray-600">
-            <Link href="/learner" className="hover:text-gray-900">
-              Back to Courses
-            </Link>
+            <Link href="/learner" className="hover:text-gray-900">Back to Courses</Link>
             <span>/</span>
-            <Link href={`/learner/courses/${courseId}`} className="hover:text-gray-900">
-              {course.title}
-            </Link>
+            <Link href={`/learner/courses/${courseId}`} className="hover:text-gray-900">{course.title}</Link>
             <span>/</span>
             <span className="text-gray-900">{currentLesson.title}</span>
           </div>
         </div>
 
         {/* Header */}
-        <CoursePlayerHeader 
-          course={course} 
+        <CoursePlayerHeader
+          course={course}
           progress={courseProgress || {
             id: `pc_temp_${course.id}_${currentUser.id}`,
             userId: currentUser.id,
             courseId: course.id,
-            status: "not_started",
+            status: "not_started" as const,
             lessonDoneCount: 0,
             lessonTotal: lessons.length,
             scorePct: 0,
@@ -432,9 +423,13 @@ export default function CoursePlayerLessonPage() {
           }}
           currentLessonId={lessonId}
           onExit={() => router.push("/learner")}
-          onResume={(resumeLessonId) => {
-            router.push(`/learner/courses/${courseId}/lessons/${resumeLessonId}`);
-          }}
+          onResume={(resumeLessonId) => router.push(`/learner/courses/${courseId}/lessons/${resumeLessonId}`)}
+          textSize={textSize}
+          highContrast={highContrast}
+          focusMode={focusMode}
+          onTextSizeChange={handleTextSizeChange}
+          onHighContrastChange={handleHighContrastChange}
+          onFocusModeChange={handleFocusModeChange}
         />
 
         <div className="flex flex-1 overflow-hidden">
@@ -449,26 +444,61 @@ export default function CoursePlayerLessonPage() {
               setToastMessage(message);
               setShowToast(true);
             }}
+            hidden={focusMode}
           />
 
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto bg-white">
+          <main className={`flex-1 overflow-y-auto ${highContrast ? "bg-white" : "bg-white"} relative`}>
+            {/* Lesson completion success overlay */}
+            {showLessonSuccess && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                <div className="bg-emerald-500 text-white px-8 py-4 rounded-2xl shadow-2xl animate-bounce">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-xl font-bold">Lesson Complete!</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Learning objectives banner on first lesson */}
+            {lessons[0]?.id === lessonId && course.metadata?.objectives && course.metadata.objectives.length > 0 && (
+              <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-3">
+                <details className="max-w-4xl mx-auto">
+                  <summary className="text-sm font-medium text-emerald-800 cursor-pointer">
+                    In this course, you&apos;ll learn...
+                  </summary>
+                  <ul className="mt-2 space-y-1 pl-4">
+                    {course.metadata.objectives.map((obj, i) => (
+                      <li key={i} className="text-sm text-emerald-700 list-disc">{obj}</li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            )}
+
             <LessonContentRenderer
               lesson={currentLesson}
               resources={resources}
               progress={currentProgress}
               courseId={courseId}
               userId={currentUser.id}
+              isCompleted={isCompleted}
               onQuizComplete={() => {
-                // If this is an assessment lesson, show celebration
                 if (currentLesson.lessonType === "assessment") {
                   const cp = getProgressCourseByCourseAndUser(courseId, currentUser.id);
-                  setCelebrationScore(cp?.scorePct);
-                  setShowCelebration(true);
+                  setCompletionScore(cp?.scorePct);
+                  flashSave("Quiz submitted");
                 } else {
+                  flashSave("Quiz submitted");
                   window.location.reload();
                 }
               }}
+              onNavigateToLesson={(lid) => handleLessonClick(lid)}
+              textSizeClass={TEXT_SIZE_CLASS[textSize]}
+              highContrast={highContrast}
             />
           </main>
         </div>
@@ -484,6 +514,9 @@ export default function CoursePlayerLessonPage() {
           progress={currentProgress}
           canComplete={canComplete}
           thresholdMessages={getThresholdMessages()}
+          completedCount={completedCount}
+          totalCount={lessons.length}
+          nextLessonTitle={nextLesson?.title}
           onPrev={handlePrev}
           onNext={handleNext}
           onMarkComplete={handleMarkComplete}
@@ -499,9 +532,7 @@ export default function CoursePlayerLessonPage() {
               userId={currentUser.id}
               minTimeSec={course.policy?.minTimeOnLessonSec}
               initialTimeSpent={currentProgress.timeSpentSec || 0}
-              onTimeUpdate={(seconds) => {
-                setTimeSpent(seconds);
-              }}
+              onTimeUpdate={(seconds) => setTimeSpent(seconds)}
             />
             <VideoProgressTracker
               courseId={course.id}
@@ -509,12 +540,24 @@ export default function CoursePlayerLessonPage() {
               userId={currentUser.id}
               minWatchPct={course.policy?.minVideoWatchPct}
               initialWatchPct={currentProgress.watchPct || 0}
-              onProgressUpdate={(pct) => {
-                setWatchPct(pct);
-              }}
+              onProgressUpdate={(pct) => setWatchPct(pct)}
             />
           </>
         )}
+
+        {/* Auto-save indicator */}
+        <div
+          className={`fixed bottom-20 right-6 z-50 transition-all duration-300 ${
+            showSaveIndicator ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
+          }`}
+        >
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg">
+            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {saveMessage}
+          </div>
+        </div>
 
         {/* Toast */}
         {showToast && (
@@ -524,18 +567,7 @@ export default function CoursePlayerLessonPage() {
             duration={3000}
           />
         )}
-
-        {/* Completion Celebration */}
-        {showCelebration && course && (
-          <CompletionCelebration
-            courseTitle={course.title}
-            skillName={course.skillsGranted?.[0]?.skillId ? course.skillsGranted[0].skillId : undefined}
-            scorePct={celebrationScore}
-            onReturnToDashboard={() => setShowCelebration(false)}
-          />
-        )}
       </div>
     </RouteGuard>
   );
 }
-

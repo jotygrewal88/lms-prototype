@@ -118,6 +118,21 @@ let operationalSignals: OperationalSignal[] = [...seedOperationalSignals];
 let contentCurrencies: ContentCurrency[] = [...seedContentCurrencies];
 let trainingResponses: TrainingResponse[] = [...seedTrainingResponses];
 
+// Course player enhancements
+let lessonNotes: Record<string, Record<string, string>> = {};
+let courseFeedback: Array<{ id: string; courseId: string; userId: string; rating: number; comment?: string; submittedAt: string }> = [
+  { id: "cf_seed_01", courseId: "crs_001", userId: "usr_lrn_a_pkg_1", rating: 5, comment: "Very thorough and well-organized. The knowledge checks really helped reinforce the material.", submittedAt: "2026-02-25T14:30:00Z" },
+  { id: "cf_seed_02", courseId: "crs_001", userId: "usr_lrn_a_pkg_2", rating: 4, comment: "Good course overall. Could use more real-world examples.", submittedAt: "2026-02-26T09:15:00Z" },
+  { id: "cf_seed_03", courseId: "crs_001", userId: "usr_lrn_a_wh_1", rating: 5, submittedAt: "2026-02-27T11:00:00Z" },
+  { id: "cf_seed_04", courseId: "crs_001", userId: "usr_lrn_b_maint_1", rating: 4, comment: "Clear and concise. Appreciated the downloadable reference cards.", submittedAt: "2026-03-01T16:45:00Z" },
+  { id: "cf_seed_05", courseId: "crs_003", userId: "usr_lrn_a_pkg_3", rating: 5, comment: "Excellent content, especially the hands-on scenarios. Felt well prepared after completing it.", submittedAt: "2026-02-20T10:00:00Z" },
+  { id: "cf_seed_06", courseId: "crs_003", userId: "usr_lrn_b_maint_2", rating: 3, comment: "Content was useful but felt a bit long. Some sections could be more concise.", submittedAt: "2026-02-22T13:20:00Z" },
+  { id: "cf_seed_07", courseId: "crs_003", userId: "usr_lrn_a_wh_2", rating: 4, submittedAt: "2026-03-03T08:30:00Z" },
+  { id: "cf_seed_08", courseId: "crs_004", userId: "usr_lrn_a_pkg_4", rating: 5, comment: "Best training I've taken on this platform. Interactive and engaging.", submittedAt: "2026-03-05T15:10:00Z" },
+  { id: "cf_seed_09", courseId: "crs_004", userId: "usr_lrn_a_pkg_5", rating: 4, comment: "Solid course. The quiz at the end was a good challenge.", submittedAt: "2026-03-07T12:00:00Z" },
+  { id: "cf_seed_10", courseId: "crs_004", userId: "usr_lrn_b_maint_3", rating: 5, submittedAt: "2026-03-10T09:45:00Z" },
+];
+
 const DEFAULT_AI_SETTINGS: AISynthesisSettings = {
   defaultSynthesisType: "full-course",
   defaultIndustry: "Manufacturing",
@@ -5526,4 +5541,52 @@ export function analyzeRoleChangeGaps(
   );
 
   return { existingSkills, missingSkills, gapCount: missingSkills.length };
+}
+
+// ============================================================================
+// LESSON NOTES
+// ============================================================================
+export function getLessonNote(lessonId: string, userId: string): string {
+  return lessonNotes[lessonId]?.[userId] || "";
+}
+
+export function setLessonNote(lessonId: string, userId: string, note: string): void {
+  if (!lessonNotes[lessonId]) lessonNotes[lessonId] = {};
+  lessonNotes[lessonId][userId] = note;
+  notifyListeners();
+}
+
+export function hasLessonNote(lessonId: string, userId: string): boolean {
+  return !!(lessonNotes[lessonId]?.[userId]);
+}
+
+// ============================================================================
+// COURSE FEEDBACK
+// ============================================================================
+export function submitCourseFeedback(courseId: string, userId: string, rating: number, comment?: string): void {
+  const existing = courseFeedback.find(f => f.courseId === courseId && f.userId === userId);
+  if (existing) {
+    existing.rating = rating;
+    existing.comment = comment;
+    existing.submittedAt = new Date().toISOString();
+  } else {
+    courseFeedback.push({
+      id: `cf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      courseId,
+      userId,
+      rating,
+      comment,
+      submittedAt: new Date().toISOString(),
+    });
+  }
+  notifyListeners();
+}
+
+export function getCourseFeedback(courseId: string): Array<{ id: string; courseId: string; userId: string; rating: number; comment?: string; submittedAt: string }> {
+  return courseFeedback.filter(f => f.courseId === courseId);
+}
+
+export function getUserCourseFeedback(courseId: string, userId: string): { rating: number; comment?: string } | null {
+  const entry = courseFeedback.find(f => f.courseId === courseId && f.userId === userId);
+  return entry ? { rating: entry.rating, comment: entry.comment } : null;
 }

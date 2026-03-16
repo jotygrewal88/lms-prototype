@@ -14,6 +14,7 @@ import {
 } from "@/lib/store";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
+import { generateObjectivesForTopic, detectCategory } from "@/lib/mockAIAgent";
 import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, Library, Search, Check } from "lucide-react";
 
 export default function GenerateCoursePage() {
@@ -143,12 +144,15 @@ export default function GenerateCoursePage() {
         timestamp: new Date().toISOString(),
       };
 
-      // Create the course entity with context
+      const autoObjectives = generateObjectivesForTopic(topic.trim());
+      const autoCategory = detectCategory(topic.trim());
+      const autoDescription = `A ${synthesisType === "micro-lesson" ? "micro-lesson" : "comprehensive training course"} covering ${topic.trim().toLowerCase()}. ${targetRole ? `Designed for ${targetRole}.` : "Suitable for all relevant personnel."}`;
+
       const newCourse = createCourse({
         title: topic.trim(),
-        description: "",
+        description: autoDescription,
         status: "ai-draft",
-        category: "",
+        category: autoCategory,
         tags: [],
         lessonIds: [],
         ownerUserId: currentUser?.id,
@@ -158,6 +162,10 @@ export default function GenerateCoursePage() {
         sourceAttributions: selectedSourceTitles,
         conversationHistory: [setupMessage],
         suggestedSkillIds: targetSkillId ? [targetSkillId] : [],
+        metadata: {
+          objectives: autoObjectives,
+          difficulty: audienceLevel === "new-hire" ? "beginner" : audienceLevel === "recertification" ? "intermediate" : undefined,
+        },
       });
 
       console.log("[GENERATE] Course created:", {

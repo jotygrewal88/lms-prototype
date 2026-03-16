@@ -226,7 +226,7 @@ export default function CoursesPage() {
                           <tr
                             key={course.id}
                             className="hover:bg-gray-50 cursor-pointer"
-                            onClick={() => router.push(`/admin/courses/${course.id}/edit`)}
+                            onClick={() => router.push(`/admin/courses/${course.id}`)}
                           >
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">
                               <div className="flex items-center gap-2">

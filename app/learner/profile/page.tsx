@@ -79,26 +79,20 @@ export default function LearnerProfilePage() {
       <LearnerLayout>
         <div className="space-y-6">
           {/* Profile Header */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Banner */}
-            <div className="h-24 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600"></div>
-            
-            {/* Profile Info */}
-            <div className="px-6 pb-6 -mt-12">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="h-16 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100"></div>
+            <div className="px-6 pb-6 -mt-8">
               <div className="flex flex-col md:flex-row md:items-end gap-4">
-                {/* Avatar */}
-                <div className="w-24 h-24 rounded-xl bg-white shadow-lg flex items-center justify-center border-4 border-white">
-                  <div className="w-full h-full rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-2xl font-bold">
+                <div className="w-16 h-16 rounded-xl bg-white shadow-md flex items-center justify-center border-2 border-white">
+                  <div className="w-full h-full rounded-lg bg-emerald-600 flex items-center justify-center text-white text-lg font-bold">
                     {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
                   </div>
                 </div>
-
-                {/* Name & Role */}
-                <div className="flex-1 pt-2 md:pt-0">
-                  <h1 className="text-2xl font-bold text-gray-900">
+                <div className="flex-1 pt-1 md:pt-0">
+                  <h1 className="text-xl font-bold text-gray-900">
                     {getFullName(currentUser)}
                   </h1>
-                  <p className="text-gray-500">{currentUser.role}</p>
+                  <p className="text-sm text-gray-500">Learner</p>
                 </div>
               </div>
             </div>

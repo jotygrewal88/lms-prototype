@@ -19,8 +19,6 @@ import {
   Calendar,
   Clock,
   ArrowRight,
-  BookOpen,
-  ExternalLink
 } from "lucide-react";
 
 export default function CompletedCoursesPage() {
@@ -89,61 +87,34 @@ export default function CompletedCoursesPage() {
       <LearnerLayout>
         <div className="space-y-6">
           {/* Page Header */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+          <div className="flex items-center justify-between">
+            <div>
               <h1 className="text-2xl font-bold text-gray-900">Completed Courses</h1>
-            </div>
-            <p className="text-gray-600">
-              Courses you've successfully completed. View certificates and revisit course materials.
-            </p>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">{completedCourses.length}</p>
-                  <p className="text-xs text-gray-500">Completed</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Award className="w-5 h-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {completedCourses.filter(c => c.certificate).length}
-                  </p>
-                  <p className="text-xs text-gray-500">Certificates</p>
-                </div>
-              </div>
+              <p className="text-gray-500 text-sm mt-1">
+                {completedCourses.length} course{completedCourses.length !== 1 ? "s" : ""} completed
+                {completedCourses.filter(c => c.certificate).length > 0 &&
+                  ` \u00b7 ${completedCourses.filter(c => c.certificate).length} certificate${completedCourses.filter(c => c.certificate).length !== 1 ? "s" : ""} earned`}
+              </p>
             </div>
           </div>
 
           {/* Completed Courses Grid */}
           {completedCourses.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-                <BookOpen className="w-8 h-8 text-gray-400" />
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-50 flex items-center justify-center">
+                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 No completed courses yet
               </h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-4">
+              <p className="text-gray-500 max-w-md mx-auto text-sm mb-4">
                 Complete your assigned courses to see them here and earn certificates.
               </p>
               <Link
                 href="/learner"
-                className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium"
+                className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium text-sm"
               >
-                View Active Courses
+                Go to My Learning
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -152,70 +123,58 @@ export default function CompletedCoursesPage() {
               {completedCourses.map(({ course, progress, certificate }) => (
                 <div
                   key={course.id}
-                  className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden group"
+                  onClick={() => handleCourseClick(course.id)}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer group"
                 >
-                  {/* Card Header with completion badge */}
-                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 px-5 py-4 border-b border-emerald-100">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Completed
-                          </span>
-                        </div>
-                        <h3 className="font-semibold text-gray-900 truncate">
-                          {course.title}
-                        </h3>
-                      </div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Completed
+                      </span>
                       {certificate && (
-                        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 ml-2">
-                          <Award className="w-4 h-4 text-amber-600" />
-                        </div>
+                        <Award className="w-4 h-4 text-amber-500" />
                       )}
+                    </div>
+
+                    <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1 group-hover:text-emerald-700 transition-colors">
+                      {course.title}
+                    </h3>
+
+                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-4">
+                      {course.category && <span>{course.category}</span>}
+                      {course.category && course.estimatedMinutes && <span>&bull;</span>}
+                      {course.estimatedMinutes && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {course.estimatedMinutes} min
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                      <span>Completed {formatDate(progress.completedAt)}</span>
                     </div>
                   </div>
 
-                  {/* Card Body */}
-                  <div className="p-5">
-                    {/* Course category */}
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        {course.category || "Training"}
-                      </span>
-                    </div>
-
-                    {/* Completion info */}
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span>Completed: {formatDate(progress.completedAt)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        <span>{course.estimatedMinutes || 30} min</span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      {certificate && (
-                        <Link
-                          href="/learner/certificates"
-                          className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          <Award className="w-4 h-4" />
-                          Certificate
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => handleCourseClick(course.id)}
-                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  <div className="px-5 pb-4">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCourseClick(course.id); }}
+                      className="w-full py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      Review Course
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    {certificate && (
+                      <Link
+                        href="/learner/certificates"
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full mt-2 py-1.5 px-3 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors flex items-center justify-center"
                       >
-                        <ExternalLink className="w-4 h-4" />
-                        Review
-                      </button>
-                    </div>
+                        View Certificate
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

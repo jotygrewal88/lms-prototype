@@ -1,18 +1,23 @@
-// Learner sidebar navigation with clean, modern design
 "use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  BookOpen, 
-  CheckCircle2, 
-  Award, 
-  Stamp, 
+import {
+  BookOpen,
+  CheckCircle2,
+  Award,
+  Stamp,
   Bell,
-  User
+  User,
 } from "lucide-react";
-import { getCurrentUser, getReceivedNotifications, subscribe } from "@/lib/store";
+import {
+  getCurrentUser,
+  getReceivedNotifications,
+  getAssignedCoursesForUser,
+  getProgressCoursesByUserId,
+  subscribe,
+} from "@/lib/store";
 
 interface NavItem {
   label: string;
@@ -21,22 +26,55 @@ interface NavItem {
   badge?: number;
 }
 
+function MiniProgressRing({ percent, size = 36, stroke = 3 }: { percent: number; size?: number; stroke?: number }) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="#10b981"
+        strokeWidth={stroke}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="transition-all duration-700"
+      />
+    </svg>
+  );
+}
+
 export default function LearnerSidebar() {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState(getCurrentUser());
   const [notificationCount, setNotificationCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     const updateState = () => {
       const user = getCurrentUser();
       setCurrentUser(user);
       setNotificationCount(getReceivedNotifications(user.id).length);
+
+      const assigned = getAssignedCoursesForUser(user.id);
+      const progress = getProgressCoursesByUserId(user.id);
+      const done = progress.filter((p) => p.status === "completed").length;
+      setTotalCount(assigned.length);
+      setCompletedCount(done);
     };
-    
+
     updateState();
     const unsubscribe = subscribe(updateState);
     return unsubscribe;
   }, []);
+
+  const completionPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const navItems: NavItem[] = [
     { label: "My Learning", path: "/learner", icon: BookOpen },
@@ -47,25 +85,26 @@ export default function LearnerSidebar() {
   ];
 
   const isActive = (path: string) => {
-    if (path === "/learner") {
-      return pathname === "/learner";
-    }
+    if (path === "/learner") return pathname === "/learner";
     return pathname.startsWith(path);
   };
 
   return (
     <aside className="w-56 bg-white border-r border-gray-200 min-h-screen sticky top-14 overflow-y-auto">
-      {/* User greeting */}
+      {/* User greeting + progress */}
       <div className="px-4 py-5 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold text-sm shadow-md">
-            {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
+          <div className="relative flex-shrink-0">
+            <MiniProgressRing percent={completionPct} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-gray-700">{completionPct}%</span>
+            </div>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">
               {currentUser.firstName}
             </p>
-            <p className="text-xs text-gray-500">Learner</p>
+            <p className="text-xs text-gray-500">{completedCount} course{completedCount !== 1 ? "s" : ""} completed</p>
           </div>
         </div>
       </div>
@@ -76,7 +115,7 @@ export default function LearnerSidebar() {
           {navItems.map((item) => {
             const active = isActive(item.path);
             const Icon = item.icon;
-            
+
             return (
               <Link
                 key={item.path}
@@ -124,5 +163,3 @@ export default function LearnerSidebar() {
     </aside>
   );
 }
-
-

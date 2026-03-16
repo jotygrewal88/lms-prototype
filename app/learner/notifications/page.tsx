@@ -54,30 +54,24 @@ export default function LearnerNotificationsPage() {
         <div className="space-y-6">
           {/* Page Header */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Bell className="w-6 h-6 text-emerald-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-              {notifications.length > 0 && (
-                <span className="bg-emerald-100 text-emerald-700 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {notifications.length}
-                </span>
-              )}
-            </div>
-            <p className="text-gray-600">
-              Messages from your training administrators and system updates
+            <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              {notifications.length > 0
+                ? `${notifications.length} notification${notifications.length !== 1 ? "s" : ""}`
+                : "No new notifications"}
             </p>
           </div>
 
           {/* Notifications List */}
           {notifications.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-                <Inbox className="w-8 h-8 text-gray-400" />
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <Inbox className="w-7 h-7 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 No notifications yet
               </h3>
-              <p className="text-gray-500 max-w-md mx-auto">
+              <p className="text-gray-500 max-w-md mx-auto text-sm">
                 You'll see messages here when your administrator sends updates or reminders.
               </p>
             </div>

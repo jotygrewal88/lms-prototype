@@ -661,9 +661,6 @@ function CompliancePageContent() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Completed
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Overdue
-                    </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -705,23 +702,16 @@ function CompliancePageContent() {
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             <div className="flex items-center gap-2">
-                              {isLMSCourse ? (
-                                <>
-                                  <Badge variant="info" className="text-xs">Course</Badge>
-                                  {displayCourseId ? (
-                                    <a
-                                      href={`/admin/courses/${displayCourseId}/edit`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:text-blue-800 hover:underline"
-                                      title={`Open course: ${displayTitle}`}
-                                    >
-                                      {displayTitle}
-                                    </a>
-                                  ) : (
-                                    <span>{displayTitle}</span>
-                                  )}
-                                </>
+                              {isLMSCourse && displayCourseId ? (
+                                <a
+                                  href={`/admin/courses/${displayCourseId}/edit`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 hover:underline"
+                                  title={`Open course: ${displayTitle}`}
+                                >
+                                  {displayTitle}
+                                </a>
                               ) : (
                                 <span>{displayTitle}</span>
                               )}
@@ -743,13 +733,6 @@ function CompliancePageContent() {
                               >
                                 View Proof
                               </a>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {completion.overdueDays && completion.overdueDays > 0 ? (
-                              <span className="text-red-600 font-medium">{completion.overdueDays} days</span>
-                            ) : (
-                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-right">

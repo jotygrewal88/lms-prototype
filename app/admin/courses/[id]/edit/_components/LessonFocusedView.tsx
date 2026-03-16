@@ -19,8 +19,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowUp, ArrowDown, Plus, Eye, Save } from "lucide-react";
-import { Lesson, Resource } from "@/types";
+import { ArrowUp, ArrowDown, Plus, Eye, Save, Clock, FileDown, X, Upload } from "lucide-react";
+import { Lesson, Resource, DownloadableResource } from "@/types";
 import ResourceCardSimple from "./ResourceCardSimple";
 import Button from "@/components/Button";
 
@@ -57,6 +57,8 @@ interface LessonFocusedViewProps {
   isAIDraft?: boolean;
   sourceLabels?: string[];  // Resolved source attribution labels for AI lessons
   onUpdateTitle: (title: string) => void;
+  onUpdateEstimatedMinutes: (minutes: number | undefined) => void;
+  onUpdateDownloadableResources: (resources: DownloadableResource[]) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onAddResource: () => void;
@@ -78,6 +80,8 @@ export default function LessonFocusedView({
   isAIDraft,
   sourceLabels,
   onUpdateTitle,
+  onUpdateEstimatedMinutes,
+  onUpdateDownloadableResources,
   onMoveUp,
   onMoveDown,
   onAddResource,
@@ -91,17 +95,21 @@ export default function LessonFocusedView({
   onSaveAndNext,
 }: LessonFocusedViewProps) {
   const [title, setTitle] = useState(lesson.title);
+  const [estMinutes, setEstMinutes] = useState<string>(lesson.estimatedMinutes?.toString() || "");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showAddResource, setShowAddResource] = useState(false);
+  const [newResTitle, setNewResTitle] = useState("");
+  const [newResUrl, setNewResUrl] = useState("");
+  const [newResFileType, setNewResFileType] = useState("pdf");
 
-  // Sync title when lesson changes
   useEffect(() => {
     setTitle(lesson.title);
-    // Set initial lastSaved when lesson loads (so indicator shows immediately)
+    setEstMinutes(lesson.estimatedMinutes?.toString() || "");
     if (lesson.updatedAt) {
       setLastSaved(new Date(lesson.updatedAt));
     }
-  }, [lesson.id, lesson.title, lesson.updatedAt]);
+  }, [lesson.id, lesson.title, lesson.updatedAt, lesson.estimatedMinutes]);
 
   // Debounced save
   const debouncedSave = useMemo(
@@ -133,6 +141,33 @@ export default function LessonFocusedView({
     if (!isReadOnly && title.trim() && title !== lesson.title) {
       onUpdateTitle(title);
     }
+  };
+
+  const handleEstMinutesBlur = () => {
+    if (isReadOnly) return;
+    const parsed = parseInt(estMinutes, 10);
+    const newVal = isNaN(parsed) || parsed <= 0 ? undefined : parsed;
+    if (newVal !== lesson.estimatedMinutes) {
+      onUpdateEstimatedMinutes(newVal);
+    }
+  };
+
+  const handleAddDownloadableResource = () => {
+    if (!newResTitle.trim()) return;
+    const updated = [
+      ...(lesson.downloadableResources || []),
+      { title: newResTitle.trim(), url: newResUrl.trim() || "#", fileType: newResFileType },
+    ];
+    onUpdateDownloadableResources(updated);
+    setNewResTitle("");
+    setNewResUrl("");
+    setNewResFileType("pdf");
+    setShowAddResource(false);
+  };
+
+  const handleRemoveDownloadableResource = (index: number) => {
+    const updated = (lesson.downloadableResources || []).filter((_, i) => i !== index);
+    onUpdateDownloadableResources(updated);
   };
 
   const sensors = useSensors(
@@ -211,6 +246,23 @@ export default function LessonFocusedView({
             `}
             placeholder="Untitled Lesson"
           />
+          {/* Estimated time */}
+          <div className="flex items-center gap-2 mt-2">
+            <Clock className="w-3.5 h-3.5 text-gray-400" />
+            <label className="text-xs text-gray-500">Est. time:</label>
+            <input
+              type="number"
+              min="1"
+              max="999"
+              value={estMinutes}
+              onChange={(e) => setEstMinutes(e.target.value)}
+              onBlur={handleEstMinutesBlur}
+              disabled={isReadOnly}
+              placeholder="—"
+              className="w-16 text-xs px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:bg-gray-50 disabled:cursor-not-allowed"
+            />
+            <span className="text-xs text-gray-400">min</span>
+          </div>
           {/* Source attribution for AI-generated lessons */}
           {isAIDraft && sourceLabels && sourceLabels.length > 0 && (
             <p className="text-xs text-gray-400 mt-1.5 flex items-start gap-1.5">
@@ -313,6 +365,96 @@ export default function LessonFocusedView({
               </button>
             )}
           </>
+        )}
+      </div>
+
+      {/* Downloadable Resources */}
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+            <FileDown className="w-4 h-4 text-gray-400" />
+            Downloadable Resources
+          </h3>
+          {!isReadOnly && (
+            <button
+              onClick={() => setShowAddResource(true)}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </button>
+          )}
+        </div>
+
+        {(lesson.downloadableResources || []).length === 0 && !showAddResource ? (
+          <p className="text-xs text-gray-400 italic">No downloadable resources attached to this lesson.</p>
+        ) : (
+          <div className="space-y-2">
+            {(lesson.downloadableResources || []).map((res, idx) => (
+              <div key={idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Upload className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-800 truncate">{res.title}</span>
+                  <span className="text-[10px] uppercase font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">{res.fileType}</span>
+                </div>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => handleRemoveDownloadableResource(idx)}
+                    className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAddResource && !isReadOnly && (
+          <div className="mt-3 p-3 border border-gray-200 rounded-lg bg-white space-y-2">
+            <input
+              type="text"
+              placeholder="Resource title (e.g. Quick Reference Card)"
+              value={newResTitle}
+              onChange={(e) => setNewResTitle(e.target.value)}
+              className="w-full text-sm px-3 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              placeholder="URL (optional, leave blank for placeholder)"
+              value={newResUrl}
+              onChange={(e) => setNewResUrl(e.target.value)}
+              className="w-full text-sm px-3 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
+            <div className="flex items-center gap-2">
+              <select
+                value={newResFileType}
+                onChange={(e) => setNewResFileType(e.target.value)}
+                className="text-sm px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400 pr-8"
+              >
+                <option value="pdf">PDF</option>
+                <option value="docx">DOCX</option>
+                <option value="xlsx">XLSX</option>
+                <option value="pptx">PPTX</option>
+                <option value="zip">ZIP</option>
+                <option value="other">Other</option>
+              </select>
+              <div className="flex-1" />
+              <button
+                onClick={() => { setShowAddResource(false); setNewResTitle(""); setNewResUrl(""); }}
+                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddDownloadableResource}
+                disabled={!newResTitle.trim()}
+                className="text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 px-3 py-1.5 rounded-md transition-colors"
+              >
+                Add Resource
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
