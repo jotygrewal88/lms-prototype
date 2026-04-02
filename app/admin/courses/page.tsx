@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Toast from "@/components/Toast";
 import { BookOpen, Trash2, Sparkles, Search, MoreHorizontal, Pencil } from "lucide-react";
@@ -18,6 +18,14 @@ import {
 import { Course, CourseStatus } from "@/types";
 
 export default function CoursesPage() {
+  return (
+    <Suspense>
+      <CoursesPageInner />
+    </Suspense>
+  );
+}
+
+function CoursesPageInner() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
 
