@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowUp, ArrowDown, Plus, Eye, Save, Clock, FileDown, X, Upload } from "lucide-react";
+import { ArrowUp, ArrowDown, Plus, Eye, Save, Clock, FileDown, X, Upload, FileText, Presentation, Mic, CircleCheck, ImageIcon, Video, Link as LinkIcon } from "lucide-react";
 import { Lesson, Resource, DownloadableResource } from "@/types";
 import ResourceCardSimple from "./ResourceCardSimple";
 import Button from "@/components/Button";
@@ -70,6 +70,72 @@ interface LessonFocusedViewProps {
   onPreviewLesson: () => void;
   onSave: () => void;
   onSaveAndNext: () => void;
+}
+
+const addSectionMenuItems = [
+  { type: 'text', label: 'Text', icon: FileText, color: 'text-indigo-600' },
+  { type: 'slides', label: 'Slides', icon: Presentation, color: 'text-violet-600' },
+  { type: 'narrated-walkthrough', label: 'Narrated Walkthrough', icon: Mic, color: 'text-teal-600' },
+  { type: 'knowledge-check', label: 'Knowledge Check', icon: CircleCheck, color: 'text-purple-600' },
+  { type: 'separator' },
+  { type: 'image', label: 'Image', icon: ImageIcon, color: 'text-sky-600' },
+  { type: 'video', label: 'Video', icon: Video, color: 'text-rose-600' },
+  { type: 'pdf', label: 'PDF', icon: FileText, color: 'text-amber-600' },
+  { type: 'link', label: 'Link', icon: LinkIcon, color: 'text-emerald-600' },
+] as const;
+
+function AddSectionDropdown({ variant }: { variant: 'button' | 'dashed' | 'empty' }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {variant === 'dashed' ? (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="mt-4 w-full flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Section
+        </button>
+      ) : (
+        <Button variant="primary" onClick={() => setIsOpen(!isOpen)} className="!text-xs !py-1.5 !px-3">
+          <Plus className="w-3.5 h-3.5 mr-1.5" />
+          {variant === 'empty' ? 'Add First Section' : 'Add Section'}
+        </Button>
+      )}
+
+      {isOpen && (
+        <div className="absolute z-50 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 right-0">
+          {addSectionMenuItems.map((item, idx) =>
+            item.type === 'separator' ? (
+              <div key={idx} className="my-1 border-t border-gray-100" />
+            ) : (
+              <button
+                key={item.type}
+                onClick={() => setIsOpen(false)}
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <item.icon className={`w-4 h-4 ${item.color}`} />
+                {item.label}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LessonFocusedView({
@@ -301,10 +367,7 @@ export default function LessonFocusedView({
             Sections
           </h3>
           {!isReadOnly && (
-            <Button variant="primary" onClick={onAddResource} className="!text-xs !py-1.5 !px-3">
-              <Plus className="w-3.5 h-3.5 mr-1.5" />
-              Add Section
-            </Button>
+            <AddSectionDropdown variant="button" />
           )}
         </div>
 
@@ -317,10 +380,7 @@ export default function LessonFocusedView({
                 <p className="text-sm text-gray-500 mb-5 max-w-sm mx-auto">
                   Add text sections, videos, links, or files. Drag to reorder.
                 </p>
-                <Button variant="primary" onClick={onAddResource} className="!text-xs !py-1.5 !px-3">
-                  <Plus className="w-3.5 h-3.5 mr-1.5" />
-                  Add First Section
-                </Button>
+                <AddSectionDropdown variant="empty" />
               </>
             )}
           </div>
@@ -356,13 +416,7 @@ export default function LessonFocusedView({
 
             {/* Add Section button at the bottom of the list */}
             {!isReadOnly && (
-              <button
-                onClick={onAddResource}
-                className="mt-4 w-full flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/50 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Add Section (Text, Video, Image, Link, PDF)
-              </button>
+              <AddSectionDropdown variant="dashed" />
             )}
           </>
         )}

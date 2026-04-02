@@ -345,7 +345,7 @@ export interface CourseScope {
 }
 
 // Course entity
-export type CourseStatus = "draft" | "published" | "ai-draft" | "in-review" | "rejected";
+export type CourseStatus = "draft" | "published" | "ai-draft" | "in-review" | "rejected" | "generating";
 
 export interface Course extends Timestamped {
   id: string;
@@ -354,6 +354,7 @@ export interface Course extends Timestamped {
   category?: string;
   estimatedMinutes?: number;
   status: CourseStatus;
+  outputFormat?: OutputFormat;
   tags?: string[];
   standards?: string[];
   skills?: string[]; // Phase II — 1M.1: array of Skill IDs
@@ -401,6 +402,28 @@ export interface KnowledgeCheck {
   explanation: string;
 }
 
+export interface Slide {
+  id: string;
+  layoutType: 'title' | 'content' | 'two-column' | 'image-focus' | 'key-point' | 'comparison' | 'quote';
+  title: string;
+  body: string;
+  speakerNotes?: string;
+  imageUrl?: string;
+}
+
+export interface NarrationData {
+  script: string;
+  audioDurationSeconds: number;
+  slides: Slide[];
+}
+
+export interface KnowledgeCheckData {
+  question: string;
+  type: 'multiple-choice' | 'true-false' | 'scenario';
+  options: { text: string; isCorrect: boolean }[];
+  explanation: string;
+}
+
 export interface DownloadableResource {
   title: string;
   url: string;
@@ -421,7 +444,7 @@ export interface Lesson extends Timestamped {
 }
 
 // Resource entity (attached to lessons)
-export type ResourceType = "pdf" | "link" | "text" | "image" | "video";
+export type ResourceType = "pdf" | "link" | "text" | "image" | "video" | "slides" | "narrated-walkthrough" | "knowledge-check";
 
 export interface Resource extends Timestamped {
   id: string;
@@ -443,6 +466,10 @@ export interface Resource extends Timestamped {
   };
   // Phase II — 1N.3: Library integration
   libraryItemId?: string; // Links to LibraryItem if this resource came from Library
+  // Q2: New content type data
+  slides?: Slide[];
+  narrationData?: NarrationData;
+  knowledgeCheckData?: KnowledgeCheckData;
 }
 
 // UI alias: Resource data is displayed as "Sections" in the lesson editor
@@ -878,6 +905,7 @@ export interface WorkContextSkillRequirement extends Timestamped {
 // ============================================================================
 
 export type SynthesisType = "micro-lesson" | "full-course" | "onboarding-path" | "toolbox-talk" | "refresher" | "what-changed" | "assessment-only";
+export type OutputFormat = "reading" | "presentation" | "mixed";
 export type DraftStatus = "pending" | "approved" | "rejected" | "published";
 
 export interface GeneratedQuiz {

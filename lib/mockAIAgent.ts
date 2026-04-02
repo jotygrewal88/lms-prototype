@@ -1061,7 +1061,10 @@ const GENERIC_TEMPLATE: GeneratedLesson[] = [
 
 function matchesKeywords(text: string, keywords: string[]): boolean {
   const lower = text.toLowerCase();
-  return keywords.some((kw) => lower.includes(kw));
+  return keywords.some((kw) => {
+    if (kw.includes(" ")) return lower.includes(kw);
+    return new RegExp(`\\b${kw}\\b`).test(lower);
+  });
 }
 
 function getTemplateForContext(

@@ -40,6 +40,8 @@ import LessonStepper from "./_components/LessonStepper";
 import LessonFocusedView from "./_components/LessonFocusedView";
 import PreviewSectionModal from "./_components/PreviewSectionModal";
 import ResourceEditorDrawer from "./_components/ResourceEditorDrawer";
+import SlideEditorModal from "./_components/SlideEditorModal";
+import NarratedWalkthroughEditorModal from "./_components/NarratedWalkthroughEditorModal";
 import LessonSummaryPanelStepper from "./_components/LessonSummaryPanelStepper";
 import LessonPreviewModalStepper from "./_components/LessonPreviewModalStepper";
 import QuizTab from "./_components/QuizTab";
@@ -193,6 +195,8 @@ export default function CourseEditPage() {
   const [isResourceDrawerOpen, setIsResourceDrawerOpen] = useState(false);
   const [editingResource, setEditingResource] = useState<Resource | undefined>(undefined);
   const [previewingSection, setPreviewingSection] = useState<Resource | null>(null);
+  const [slideEditorResource, setSlideEditorResource] = useState<Resource | null>(null);
+  const [narrationEditorResource, setNarrationEditorResource] = useState<Resource | null>(null);
   const [isLessonPreviewOpen, setIsLessonPreviewOpen] = useState(false);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null); // Keep for Epic 1D compatibility
   const [lessonResources, setLessonResources] = useState<Resource[]>([]);
@@ -1045,6 +1049,14 @@ export default function CourseEditPage() {
   };
 
   const handleEditResource = (resource: Resource) => {
+    if (resource.type === 'slides') {
+      setSlideEditorResource(resource);
+      return;
+    }
+    if (resource.type === 'narrated-walkthrough') {
+      setNarrationEditorResource(resource);
+      return;
+    }
     setEditingResource(resource);
     setIsResourceDrawerOpen(true);
   };
@@ -2660,6 +2672,22 @@ export default function CourseEditPage() {
                     )}
                   </div>
                 )}
+
+                {/* Slide Editor Modal */}
+                <SlideEditorModal
+                  isOpen={!!slideEditorResource}
+                  onClose={() => setSlideEditorResource(null)}
+                  slides={slideEditorResource?.slides || []}
+                  resourceTitle={slideEditorResource?.title || ''}
+                />
+
+                {/* Narrated Walkthrough Editor Modal */}
+                <NarratedWalkthroughEditorModal
+                  isOpen={!!narrationEditorResource}
+                  onClose={() => setNarrationEditorResource(null)}
+                  narrationData={narrationEditorResource?.narrationData}
+                  resourceTitle={narrationEditorResource?.title || ''}
+                />
 
                 {/* Resource Editor Drawer */}
                 <ResourceEditorDrawer

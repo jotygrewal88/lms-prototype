@@ -3,8 +3,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File, Sparkles, RotateCcw } from "lucide-react";
-import { Resource } from "@/types";
+import { GripVertical, Eye, Pencil, Trash2, FileText, Link as LinkIcon, FileImage, Video, File, Sparkles, RotateCcw, Presentation, Mic, Volume2, CircleCheck } from "lucide-react";
+import { Resource, Slide } from "@/types";
 import type { AiAction } from "@/types";
 import { formatFileSize } from "@/lib/uploads";
 import { 
@@ -55,6 +55,12 @@ function getResourceIcon(type: Resource['type']) {
       return <Video className="w-5 h-5 text-rose-600" />;
     case 'pdf':
       return <File className="w-5 h-5 text-amber-600" />;
+    case 'slides':
+      return <Presentation className="w-5 h-5 text-violet-600" />;
+    case 'narrated-walkthrough':
+      return <Mic className="w-5 h-5 text-teal-600" />;
+    case 'knowledge-check':
+      return <CircleCheck className="w-5 h-5 text-purple-600" />;
     default:
       return <File className="w-5 h-5 text-gray-600" />;
   }
@@ -73,6 +79,12 @@ function getAccentColor(type: Resource['type']): string {
       return 'border-l-rose-400';
     case 'pdf':
       return 'border-l-amber-400';
+    case 'slides':
+      return 'border-l-violet-400';
+    case 'narrated-walkthrough':
+      return 'border-l-teal-400';
+    case 'knowledge-check':
+      return 'border-l-purple-400';
     default:
       return 'border-l-gray-400';
   }
@@ -91,6 +103,12 @@ function getTypeBadgeColor(type: Resource['type']): string {
       return 'bg-rose-50 text-rose-700';
     case 'pdf':
       return 'bg-amber-50 text-amber-700';
+    case 'slides':
+      return 'bg-violet-50 text-violet-700';
+    case 'narrated-walkthrough':
+      return 'bg-teal-50 text-teal-700';
+    case 'knowledge-check':
+      return 'bg-purple-50 text-purple-700';
     default:
       return 'bg-gray-50 text-gray-700';
   }
@@ -472,6 +490,139 @@ export default function ResourceCardSimple({
             )}
           </div>
         );
+      case 'slides': {
+        const slides = resource.slides || [];
+        const slideCount = slides.length;
+        const estMin = resource.durationSec
+          ? Math.ceil(resource.durationSec / 60)
+          : slideCount;
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-sm text-gray-500 mb-3">
+              Slides &middot; {slideCount} slide{slideCount !== 1 ? 's' : ''} &middot; ~{estMin} min
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {slides.map((slide, idx) => (
+                <div
+                  key={slide.id}
+                  className="flex-shrink-0 w-16 h-10 bg-gray-100 border border-gray-200 rounded flex items-center justify-center"
+                >
+                  <span className="text-xs text-gray-500 font-medium">{idx + 1}</span>
+                </div>
+              ))}
+            </div>
+            {!isReadOnly && (
+              <button
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-md transition-colors"
+                onClick={() => onEdit(resource)}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+        );
+      }
+      case 'narrated-walkthrough': {
+        const narration = resource.narrationData;
+        const slides = narration?.slides || [];
+        const slideCount = slides.length;
+        const audioDuration = narration?.audioDurationSeconds || resource.durationSec || 0;
+        const estMin = Math.ceil(audioDuration / 60);
+        const audioMin = Math.floor(audioDuration / 60);
+        const audioSec = audioDuration % 60;
+
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-sm text-gray-500 mb-3">
+              Narrated Walkthrough &middot; {slideCount} slide{slideCount !== 1 ? 's' : ''} &middot; ~{estMin} min
+            </p>
+
+            {slideCount > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+                {slides.map((slide, idx) => (
+                  <div
+                    key={slide.id}
+                    className="flex-shrink-0 w-16 h-10 bg-gray-100 border border-gray-200 rounded flex items-center justify-center"
+                  >
+                    <span className="text-xs text-gray-500 font-medium">{idx + 1}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-md">
+              <Volume2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+              <span className="text-sm text-gray-600">
+                Audio: Generated &middot; {audioMin}:{audioSec.toString().padStart(2, '0')}
+              </span>
+              <button
+                className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded transition-colors"
+                onClick={() => {}}
+              >
+                &#9654; Preview
+              </button>
+            </div>
+
+            {!isReadOnly && (
+              <button
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-md transition-colors"
+                onClick={() => onEdit(resource)}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+        );
+      }
+      case 'knowledge-check': {
+        const kc = resource.knowledgeCheckData;
+        if (!kc) {
+          return (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <span className="text-gray-400 italic text-sm">No question data</span>
+            </div>
+          );
+        }
+        const typeLabel = kc.type === 'multiple-choice'
+          ? 'Multiple Choice'
+          : kc.type === 'true-false'
+            ? 'True / False'
+            : 'Scenario';
+
+        return (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mb-2">
+              {typeLabel} &middot; Not Graded
+            </p>
+            <p className="text-sm text-gray-700 italic mb-3">
+              &ldquo;{kc.question}&rdquo;
+            </p>
+            <ul className="space-y-1.5">
+              {kc.options.map((opt, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-sm">
+                  <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                    opt.isCorrect ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                  }`} />
+                  <span className={opt.isCorrect ? 'text-green-600 font-medium' : 'text-gray-600'}>
+                    {opt.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {!isReadOnly && (
+              <button
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors"
+                onClick={() => onEdit(resource)}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+        );
+      }
       default:
         return (
           <div className="mt-3 pt-3 border-t border-gray-100">

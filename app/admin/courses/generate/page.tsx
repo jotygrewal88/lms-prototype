@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { SynthesisType, ChatMessage } from "@/types";
+import type { SynthesisType, OutputFormat, ChatMessage } from "@/types";
 import type { LibraryItem, SkillV2 } from "@/types";
 import {
   getSynthesisReadyLibraryItems,
@@ -15,7 +15,7 @@ import {
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
 import { generateObjectivesForTopic, detectCategory } from "@/lib/mockAIAgent";
-import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, Library, Search, Check } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, Library, Search, Check, BookOpen, Presentation, Mic, Loader2 } from "lucide-react";
 
 export default function GenerateCoursePage() {
   const router = useRouter();
@@ -26,6 +26,10 @@ export default function GenerateCoursePage() {
   const [targetRole, setTargetRole] = useState("Maintenance Technician");
   const [targetSkillId, setTargetSkillId] = useState("skl_loto");
   const [audienceLevel, setAudienceLevel] = useState<"new-hire" | "experienced" | "recertification" | "">("");
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("mixed");
+  const [language, setLanguage] = useState("English");
+  const [customLanguage, setCustomLanguage] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState<number | "">("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>(["lib_002", "lib_004"]);
   const [additionalContext, setAdditionalContext] = useState("Focus on annual recertification requirements and hands-on verification procedures.");
   const [quizPlacement, setQuizPlacement] = useState<"per-lesson" | "end-of-course" | "both">("both");
@@ -77,6 +81,9 @@ export default function GenerateCoursePage() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [loadingDone, setLoadingDone] = useState(false);
   const hasRedirected = useRef(false);
+  const [showNarrationScreen, setShowNarrationScreen] = useState(false);
+  const [waitingHere, setWaitingHere] = useState(false);
+  const [createdCourseId, setCreatedCourseId] = useState<string | null>(null);
   const loadingSteps = [
     "Analyzing your selected sources...",
     "Mapping organizational skill gaps...",
@@ -86,11 +93,19 @@ export default function GenerateCoursePage() {
     "Finalizing course outline...",
   ];
 
-  // When loading finishes, create the course and redirect (as a side effect, NOT inside a state updater)
+  // When loading finishes, create the course and either redirect or show narration screen
   useEffect(() => {
     if (loadingDone && !hasRedirected.current) {
       hasRedirected.current = true;
-      doCreateAndRedirect();
+      if (outputFormat === "reading") {
+        doCreateAndRedirect();
+      } else {
+        const courseId = doCreateCourse();
+        if (courseId) {
+          setCreatedCourseId(courseId);
+          setShowNarrationScreen(true);
+        }
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingDone]);
@@ -100,6 +115,9 @@ export default function GenerateCoursePage() {
     setIsSubmitting(true);
     setLoadingStep(0);
     setLoadingDone(false);
+    setShowNarrationScreen(false);
+    setWaitingHere(false);
+    setCreatedCourseId(null);
     hasRedirected.current = false;
 
     // Animate through loading steps
@@ -117,14 +135,13 @@ export default function GenerateCoursePage() {
     }, 800);
   };
 
-  const doCreateAndRedirect = () => {
+  const doCreateCourse = (): string | null => {
     try {
       const currentUser = getCurrentUser();
       const selectedSources = sources.filter((s) => selectedSourceIds.includes(s.id));
       const selectedSourceTitles = selectedSources.map((s) => s.title);
       const targetSkill = skills.find((s) => s.id === targetSkillId);
 
-      // Build a system context message with setup info for the agent
       const setupMessage: ChatMessage = {
         id: `msg_setup_${Date.now()}`,
         role: "system",
@@ -176,19 +193,39 @@ export default function GenerateCoursePage() {
         sourceIds: newCourse.sourceIds,
       });
 
-      // Redirect to the editor — the agent will auto-start there
-      router.push(`/admin/courses/${newCourse.id}/edit`);
+      return newCourse.id;
     } catch {
       alert("Failed to create course. Please try again.");
       setIsSubmitting(false);
+      return null;
     }
+  };
+
+  const doCreateAndRedirect = () => {
+    const courseId = doCreateCourse();
+    if (courseId) {
+      router.push(`/admin/courses/${courseId}/edit`);
+    }
+  };
+
+  const handleContinueWorking = () => {
+    router.push("/admin/courses?toast=generating");
+  };
+
+  const handleWaitHere = () => {
+    setWaitingHere(true);
+    setTimeout(() => {
+      if (createdCourseId) {
+        router.push(`/admin/courses/${createdCourseId}/edit`);
+      }
+    }, 3000);
   };
 
   return (
     <RouteGuard allowedRoles={["ADMIN"]}>
       <AdminLayout>
         {/* ═══ LOADING SCREEN ═══ */}
-        {isSubmitting && (
+        {isSubmitting && !showNarrationScreen && (
           <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
             <div className="max-w-md mx-auto text-center px-6">
               {/* Animated icon */}
@@ -243,6 +280,47 @@ export default function GenerateCoursePage() {
                 />
               </div>
               <p className="text-xs text-gray-400 mt-3">This usually takes a few seconds...</p>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ NARRATION RENDERING SCREEN ═══ */}
+        {isSubmitting && showNarrationScreen && (
+          <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
+            <div className="max-w-md mx-auto text-center px-6">
+              <div className="relative mb-8">
+                <div className="w-20 h-20 mx-auto bg-purple-100 rounded-2xl flex items-center justify-center animate-pulse">
+                  <Mic className="w-10 h-10 text-purple-600" />
+                </div>
+              </div>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">Rendering Audio Narration</h2>
+              <p className="text-sm text-gray-500 mb-8">
+                This may take a few minutes.<br />
+                We&apos;ll notify you when it&apos;s ready.
+              </p>
+
+              {waitingHere ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                  <p className="text-sm text-gray-500">Almost ready...</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={handleContinueWorking}
+                    className="px-5 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Continue Working &rarr;
+                  </button>
+                  <button
+                    onClick={handleWaitHere}
+                    className="px-5 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+                  >
+                    Wait Here
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -435,6 +513,97 @@ export default function GenerateCoursePage() {
                         <span className="text-xs text-gray-500">{opt.desc}</span>
                       </label>
                     ))}
+                  </div>
+                </div>
+
+                {/* Output Format */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Output Format
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {([
+                      { value: "reading" as const, label: "Reading Material", desc: "Text-based with rich formatting", icon: BookOpen },
+                      { value: "presentation" as const, label: "Presentation with Narration", desc: "Slides + AI voiceover audio", icon: Presentation },
+                      { value: "mixed" as const, label: "Mixed (AI Decides)", desc: "AI picks best format per lesson", icon: Sparkles },
+                    ]).map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`relative flex flex-col items-center gap-1 p-4 rounded-xl cursor-pointer border-2 transition-all text-center ${
+                          outputFormat === opt.value
+                            ? "border-purple-400 bg-purple-50 shadow-sm"
+                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="outputFormat"
+                          value={opt.value}
+                          checked={outputFormat === opt.value}
+                          onChange={() => setOutputFormat(opt.value)}
+                          className="sr-only"
+                        />
+                        {opt.value === "mixed" && (
+                          <span className="absolute -top-2.5 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Recommended</span>
+                        )}
+                        <opt.icon className={`w-5 h-5 ${outputFormat === opt.value ? "text-purple-600" : "text-gray-400"}`} />
+                        <span className="text-sm font-semibold text-gray-800">{opt.label}</span>
+                        <span className="text-xs text-gray-500">{opt.desc}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Language */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Language <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => {
+                      setLanguage(e.target.value);
+                      if (e.target.value !== "Other...") setCustomLanguage("");
+                    }}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-sm bg-white text-gray-900 hover:border-gray-300"
+                  >
+                    <option>English</option>
+                    <option>Spanish (Español)</option>
+                    <option>French (Français)</option>
+                    <option>German (Deutsch)</option>
+                    <option>Portuguese (Português)</option>
+                    <option>Mandarin (中文)</option>
+                    <option>Japanese (日本語)</option>
+                    <option>Korean (한국어)</option>
+                    <option>Arabic (العربية)</option>
+                    <option>Hindi (हिन्दी)</option>
+                    <option>Other...</option>
+                  </select>
+                  {language === "Other..." && (
+                    <input
+                      type="text"
+                      value={customLanguage}
+                      onChange={(e) => setCustomLanguage(e.target.value)}
+                      placeholder="Enter language..."
+                      className="mt-2 w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-base bg-white text-gray-900 hover:border-gray-300"
+                    />
+                  )}
+                </div>
+
+                {/* Estimated Duration */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Estimated Duration (optional)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={estimatedDuration}
+                      onChange={(e) => setEstimatedDuration(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="e.g. 45"
+                      className="max-w-[140px] px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-base bg-white text-gray-900 hover:border-gray-300"
+                    />
+                    <span className="text-sm text-gray-500">minutes</span>
                   </div>
                 </div>
 

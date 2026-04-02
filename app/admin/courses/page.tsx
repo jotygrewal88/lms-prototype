@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Toast from "@/components/Toast";
 import { BookOpen, Trash2, Sparkles, Search, MoreHorizontal, Pencil } from "lucide-react";
 import AdminLayout from "@/components/layouts/AdminLayout";
 import RouteGuard from "@/components/RouteGuard";
@@ -24,6 +25,8 @@ export default function CoursesPage() {
   const [filterStatus, setFilterStatus] = useState<"" | CourseStatus>("");
   const [filterCategory, setFilterCategory] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [showGeneratingToast, setShowGeneratingToast] = useState(false);
+  const searchParams = useSearchParams();
 
   const currentUser = getCurrentUser();
   const isManager = currentUser.role === "MANAGER";
@@ -42,6 +45,13 @@ export default function CoursesPage() {
       return () => document.removeEventListener("click", handleClickOutside);
     }
   }, [openMenuId]);
+
+  useEffect(() => {
+    if (searchParams.get("toast") === "generating") {
+      setShowGeneratingToast(true);
+      window.history.replaceState({}, "", "/admin/courses");
+    }
+  }, [searchParams]);
 
   const handleDeleteCourse = (courseId: string, courseTitle: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -97,6 +107,13 @@ export default function CoursesPage() {
         return <Badge variant="warning">In Review</Badge>;
       case "rejected":
         return <Badge variant="error">Rejected</Badge>;
+      case "generating":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 animate-pulse bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+            <Sparkles className="w-3 h-3" />
+            Generating...
+          </span>
+        );
       default:
         return <Badge variant="default">Draft</Badge>;
     }
@@ -314,6 +331,14 @@ export default function CoursesPage() {
             </Card>
           )}
         </div>
+        {showGeneratingToast && (
+          <Toast
+            message="Your course is being generated. We'll notify you when it's ready."
+            type="info"
+            duration={5000}
+            onClose={() => setShowGeneratingToast(false)}
+          />
+        )}
       </AdminLayout>
     </RouteGuard>
   );

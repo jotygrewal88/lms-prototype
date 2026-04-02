@@ -266,7 +266,7 @@ export default function ChatArea({
             value={inputValue}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything"
+            placeholder="Ask anything..."
             disabled={isTyping}
             rows={1}
             className="w-full px-4 pt-3 pb-1 text-sm text-gray-900 placeholder-gray-400 bg-transparent border-none resize-none focus:outline-none disabled:opacity-50"

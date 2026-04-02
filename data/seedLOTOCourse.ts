@@ -1,11 +1,11 @@
 // Seed data: Lockout/Tagout (LOTO) Procedures — full realistic course
-import { Course, Lesson, Resource, Quiz, Question, CourseAssignment, KnowledgeCheck } from "@/types";
+import { Course, Lesson, Resource, Quiz, Question, CourseAssignment, KnowledgeCheck, Slide, NarrationData, KnowledgeCheckData, ChatMessage, GeneratedLesson } from "@/types";
 
 const now = new Date().toISOString();
 const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-// ─── Knowledge Checks ───────────────────────────────────────────────────────
+// ─── Knowledge Checks (on Lesson objects) ────────────────────────────────────
 
 const lesson1KCs: KnowledgeCheck[] = [
   {
@@ -79,7 +79,7 @@ const lesson3KCs: KnowledgeCheck[] = [
   },
 ];
 
-// ─── Lesson Content (HTML) ──────────────────────────────────────────────────
+// ─── Lesson 1 Content (HTML — kept from original) ───────────────────────────
 
 const lesson1Content = `
 <h2>Understanding Hazardous Energy</h2>
@@ -120,168 +120,67 @@ const lesson1Content = `
 <div class="callout" data-variant="danger">
   <strong>⛔ NOT Energy Isolating Devices:</strong> Push buttons, selector switches, interlock switches, and other control-circuit type devices are <strong>NOT</strong> energy isolating devices. They do not physically prevent energy from being transmitted and must never be relied upon as the sole means of energy isolation.
 </div>
-
-<div class="image-placeholder" data-caption="📸 Diagram: Types of Energy Isolating Devices — Circuit Breakers, Disconnect Switches, Line Valves, Block & Bleed Valves"></div>
-
-<h3>Identifying Energy Sources on Your Equipment</h3>
-<p>Before any lockout/tagout procedure, you must identify <strong>every</strong> energy source on the equipment. Use your facility's Equipment-Specific Energy Control Procedure (ESECP) as a guide. Each piece of equipment should have a documented procedure that lists:</p>
-<ul>
-  <li>All energy sources and their locations</li>
-  <li>The specific energy isolating devices for each source</li>
-  <li>The type of stored energy and methods for dissipation</li>
-  <li>Special hazards or considerations unique to that equipment</li>
-</ul>
 `;
 
-const lesson2Content = `
-<h2>The 6-Step Lockout/Tagout Procedure</h2>
-<p>The LOTO procedure follows six critical steps that must be performed in order. Skipping or rushing any step can result in serious injury or death. This procedure is mandated by OSHA 29 CFR 1910.147.</p>
+// ─── Lesson 3 Text Content (The 6-Step LOTO Process — detailed written steps) ─
 
-<div class="image-placeholder" data-caption="📸 Infographic: The 6-Step LOTO Procedure Flow — Preparation → Shutdown → Isolation → Lock & Tag → Stored Energy → Verification"></div>
+const lesson3TextContent = `
+<h2>The 6-Step Lockout/Tagout Procedure — Detailed Reference</h2>
+<p>This procedure follows six critical steps that must be performed in order. Skipping or rushing any step can result in serious injury or death.</p>
 
-<h3>Step 1: Preparation</h3>
-<p>Before beginning any lockout/tagout, you must thoroughly prepare:</p>
-<ul>
-  <li><strong>Identify all energy sources</strong> for the specific equipment using the Equipment-Specific Energy Control Procedure (ESECP)</li>
-  <li><strong>Identify all affected employees</strong> — anyone who operates or works near the equipment</li>
-  <li><strong>Gather required materials</strong> — personal safety locks, tags, hasps, lock boxes, and any special blocking/blanking devices needed</li>
-  <li><strong>Review the procedure</strong> — ensure you understand the specific isolation points and sequence</li>
-</ul>
-
-<h3>Step 2: Shutdown</h3>
-<p>Shut down the equipment using the <strong>normal stopping procedure</strong>. This means using the standard operating controls — not pulling disconnects or tripping breakers as a first step.</p>
-<ul>
-  <li>Notify all affected employees that a lockout is being performed and why</li>
-  <li>Allow the machine to complete its current cycle if safe to do so</li>
-  <li>Use the standard stop button or shutdown sequence</li>
-</ul>
-
-<h3>Step 3: Isolation</h3>
-<p>Locate and operate <strong>all energy isolating devices</strong> to disconnect the equipment from every energy source:</p>
-<ul>
-  <li>Open electrical disconnects</li>
-  <li>Close and block line valves</li>
-  <li>Disconnect pneumatic and hydraulic lines</li>
-  <li>Engage mechanical blocks or pins</li>
-</ul>
-
-<h3>Step 4: Lock & Tag Application</h3>
-<p>Each authorized employee performing maintenance must apply their <strong>own individual lock and tag</strong> to every energy isolating device.</p>
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <thead>
+    <tr style="background:#f3f4f6;">
+      <th style="padding:8px; text-align:left; border:1px solid #e5e7eb;">Step</th>
+      <th style="padding:8px; text-align:left; border:1px solid #e5e7eb;">Action</th>
+      <th style="padding:8px; text-align:left; border:1px solid #e5e7eb;">Key Requirements</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">1. Preparation</td><td style="padding:8px; border:1px solid #e5e7eb;">Identify energy sources, affected employees, and gather materials</td><td style="padding:8px; border:1px solid #e5e7eb;">Review ESECP for the specific equipment</td></tr>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">2. Shutdown</td><td style="padding:8px; border:1px solid #e5e7eb;">Shut down equipment using normal operating controls</td><td style="padding:8px; border:1px solid #e5e7eb;">Notify all affected employees before shutdown</td></tr>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">3. Isolation</td><td style="padding:8px; border:1px solid #e5e7eb;">Operate all energy isolating devices</td><td style="padding:8px; border:1px solid #e5e7eb;">Disconnect electrical, close valves, block mechanical</td></tr>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">4. Lock & Tag</td><td style="padding:8px; border:1px solid #e5e7eb;">Apply individual lock and tag to each isolating device</td><td style="padding:8px; border:1px solid #e5e7eb;">Each worker applies their own lock — never share</td></tr>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">5. Stored Energy</td><td style="padding:8px; border:1px solid #e5e7eb;">Release, restrain, or dissipate all residual energy</td><td style="padding:8px; border:1px solid #e5e7eb;">Bleed lines, discharge capacitors, block elevated parts</td></tr>
+    <tr><td style="padding:8px; border:1px solid #e5e7eb;">6. Verification</td><td style="padding:8px; border:1px solid #e5e7eb;">Attempt to restart; confirm zero energy state</td><td style="padding:8px; border:1px solid #e5e7eb;">Return controls to off position after verification</td></tr>
+  </tbody>
+</table>
 
 <div class="callout" data-variant="danger">
-  <strong>⚠️ CRITICAL:</strong> Each worker MUST apply their own individual lock. Never allow another employee to lock out on your behalf. Never share locks. Your lock is your lifeline — it guarantees that only YOU can remove it and re-energize the equipment.
-</div>
-
-<p>Each tag must clearly display:</p>
-<ol>
-  <li><strong>Employee name</strong> — who applied the lock</li>
-  <li><strong>Date and time</strong> — when the lock was applied</li>
-  <li><strong>Reason for lockout</strong> — what work is being performed</li>
-  <li><strong>Expected duration</strong> — when the lockout is expected to end</li>
-</ol>
-
-<h3>Step 5: Stored Energy Verification</h3>
-<p>After isolation, stored or residual energy must be <strong>released, restrained, or dissipated</strong>:</p>
-<ul>
-  <li><strong>Bleed hydraulic lines</strong> — relieve pressure to zero PSI</li>
-  <li><strong>Discharge capacitors</strong> — use approved grounding methods</li>
-  <li><strong>Block elevated parts</strong> — use mechanical stops, pins, or cribbing</li>
-  <li><strong>Relieve spring tension</strong> — release or block springs under tension</li>
-  <li><strong>Vent pneumatic pressure</strong> — bleed air from lines and tanks</li>
-  <li><strong>Allow thermal cool-down</strong> — wait for hot surfaces to reach safe temperatures</li>
-</ul>
-
-<div class="callout" data-variant="tip">
-  <strong>💡 Pro Tip:</strong> When bleeding hydraulic or pneumatic systems, open drain valves slowly. Rapidly releasing pressurized fluid can cause violent whipping of hoses or spray of hot fluid. Always wear appropriate PPE including face protection.
-</div>
-
-<h3>Step 6: Verification</h3>
-<p>This is the final safety check before any work begins:</p>
-<ol>
-  <li><strong>Attempt to restart</strong> the machine using the normal operating controls</li>
-  <li><strong>Confirm zero energy</strong> — the equipment should not start, move, or respond in any way</li>
-  <li><strong>Test indicators</strong> — use a voltage tester, pressure gauge, or other instruments to confirm isolation</li>
-  <li><strong>Return controls to off</strong> — after verification, return all operating controls to the "off" or "neutral" position</li>
-</ol>
-
-<div class="callout" data-variant="key-point">
-  <strong>✅ Only after successful verification of zero energy state may any servicing or maintenance work begin.</strong> If the equipment responds in any way during verification, immediately stop, re-evaluate, and re-isolate before proceeding.
+  <strong>⛔ CRITICAL:</strong> Never assume equipment is safe because it appears to be off. Always complete ALL six steps and verify zero energy state before beginning any maintenance or servicing work.
 </div>
 `;
 
-const lesson3Content = `
-<h2>Group Lockout & Complex Equipment</h2>
-<p>Many maintenance activities involve multiple workers, complex equipment with numerous energy sources, or extended durations that span shift changes. These situations require additional coordination and procedures beyond the basic 6-step LOTO process.</p>
+// ─── Lesson 4 Text Content (Equipment Details) ──────────────────────────────
 
-<h3>Group Lockout Procedures</h3>
-<p>When multiple authorized employees are working on the same equipment, a group lockout procedure must be used. The most common method uses a <strong>lockbox system</strong>:</p>
+const lesson4TextContent = `
+<h2>LOTO Equipment, Devices & Group Lockout</h2>
+<p>Proper lockout/tagout requires the right equipment for each situation. This section covers the devices you'll use and special procedures for group lockout scenarios.</p>
 
+<h3>Lockout Devices</h3>
+<ul>
+  <li><strong>Padlocks</strong> — Standardized safety padlocks (typically red or orange) with unique keys. Each authorized employee is assigned their own lock.</li>
+  <li><strong>Hasps</strong> — Multi-lock hasps allow multiple workers to lock out the same energy isolating device. The device cannot be operated until ALL locks are removed.</li>
+  <li><strong>Lockout Tags</strong> — Durable tags that identify who applied the lockout, when, and why. Tags must withstand 50 lbs of pull force per OSHA requirements.</li>
+  <li><strong>Valve Lockouts</strong> — Gate valve, ball valve, and butterfly valve lockout devices that prevent valve operation while locked.</li>
+  <li><strong>Circuit Breaker Lockouts</strong> — Devices that clamp onto circuit breakers to prevent them from being switched on.</li>
+  <li><strong>Plug Lockouts</strong> — Covers for electrical plugs that prevent re-connection.</li>
+  <li><strong>Group Lockboxes</strong> — Boxes that hold the keys to primary lockout devices. Each worker applies their personal lock to the box.</li>
+</ul>
+
+<h3>Group Lockout Procedure</h3>
+<p>When multiple authorized employees work on the same equipment:</p>
 <ol>
-  <li><strong>Primary authorized employee</strong> (usually the lead technician or supervisor) applies locks to all energy isolating devices</li>
-  <li>The keys to these primary locks are placed inside a <strong>group lockbox</strong></li>
-  <li>Each authorized employee applies their <strong>individual lock</strong> to the lockbox</li>
-  <li>The lockbox cannot be opened until <strong>every</strong> employee has removed their individual lock</li>
-  <li>Only after all individual locks are removed can the primary locks be removed from the energy isolating devices</li>
+  <li>The primary authorized employee applies locks to all energy isolating devices</li>
+  <li>Keys are placed in the group lockbox</li>
+  <li>Each worker applies their personal lock to the lockbox</li>
+  <li>The lockbox cannot be opened until every lock is removed</li>
 </ol>
-
-<div class="image-placeholder" data-caption="📸 Photo: Group Lockbox System — Multiple employee locks on a single lockbox containing the primary isolation lock keys"></div>
-
-<div class="callout" data-variant="key-point">
-  <strong>✅ Key Principle:</strong> In a group lockout, no single person can restore energy to the equipment. Every authorized employee maintains personal control of the lockout through their individual lock on the lockbox.
-</div>
-
-<h3>Shift Change Procedures</h3>
-<p>When a lockout must continue across shift changes (common for extended maintenance or overhauls), a documented shift change procedure is required:</p>
-
-<ol>
-  <li><strong>Incoming shift</strong> workers arrive and are briefed on the current lockout status</li>
-  <li>Each incoming worker applies their <strong>individual lock</strong> to the lockbox or energy isolating devices</li>
-  <li><strong>Only after</strong> all incoming locks are in place can outgoing workers remove their locks</li>
-  <li>There must be <strong>continuous lockout coverage</strong> — at no point should the equipment be without at least one lock</li>
-  <li>A <strong>shift change log</strong> must be maintained documenting the transfer</li>
-</ol>
-
-<div class="callout" data-variant="warning">
-  <strong>⚠️ Never leave equipment unprotected during a shift change.</strong> The incoming shift must apply their locks BEFORE the outgoing shift removes theirs. If there is any gap in coverage, a new full LOTO procedure must be performed, including re-verification.
-</div>
-
-<h3>Complex Equipment with Multiple Energy Sources</h3>
-<p>Industrial equipment frequently has multiple types of energy that must all be controlled. Consider this example:</p>
-
-<p><strong>Industrial Hydraulic Press:</strong></p>
-<ul>
-  <li><strong>Electrical</strong> — 480V 3-phase power supply, control circuits at 120V, PLC backup battery</li>
-  <li><strong>Hydraulic</strong> — Main cylinder at 2,500 PSI, accumulator pre-charge at 1,200 PSI</li>
-  <li><strong>Pneumatic</strong> — Air-operated clamps at 90 PSI, air logic circuits</li>
-  <li><strong>Gravitational</strong> — 8-ton ram in raised position, counterbalance weights</li>
-  <li><strong>Mechanical</strong> — Spring-loaded safety latches, counterbalance springs</li>
-</ul>
-
-<p>This single machine requires <strong>at least 7 isolation points</strong> to be properly locked out. The Equipment-Specific Energy Control Procedure documents each point, the isolation device, and the proper sequence.</p>
-
-<h3>Contractor and Outside Personnel</h3>
-<p>When contractors or outside service personnel perform work on your equipment:</p>
-<ul>
-  <li>The host employer must inform contractors of the LOTO requirements</li>
-  <li>Contractors must follow the host facility's LOTO procedures OR use their own equivalent procedures</li>
-  <li>Both employers must coordinate to ensure <strong>all workers are protected</strong></li>
-  <li>The host employer's authorized employees and contractor employees each apply their own locks</li>
-</ul>
-
-<h3>When Tagout-Only Is Permitted</h3>
-<p>OSHA allows tagout-only procedures (without lockout) <strong>only when</strong>:</p>
-<ul>
-  <li>The energy isolating device is <strong>physically incapable</strong> of being locked out (e.g., an older valve with no hasp attachment point)</li>
-  <li>The employer can demonstrate that tagout provides <strong>equivalent protection</strong> to lockout</li>
-  <li><strong>Additional safety measures</strong> are in place — such as removing fuses, blocking valve handles, or using extra warning signs</li>
-</ul>
-
-<div class="callout" data-variant="danger">
-  <strong>⛔ Important:</strong> Tagout alone is never as safe as lockout. When tagout-only is used, employers must take additional steps to achieve a level of safety equivalent to lockout. Whenever an energy isolating device CAN be locked out, it MUST be locked out.
-</div>
 `;
 
-const lesson4Content = `
+// ─── Assessment intro ────────────────────────────────────────────────────────
+
+const lesson6Content = `
 <h2>LOTO Certification Assessment</h2>
 <p>This assessment evaluates your understanding of Lockout/Tagout procedures as required by OSHA 29 CFR 1910.147. You must score <strong>85% or higher</strong> to earn your LOTO Certification.</p>
 
@@ -297,6 +196,284 @@ const lesson4Content = `
 
 <p>Review the previous lessons if needed before starting. When you're ready, click <strong>"Start Attempt"</strong> below.</p>
 `;
+
+// ─── Slide Data ──────────────────────────────────────────────────────────────
+
+const lesson2Slides: Slide[] = [
+  {
+    id: "sld_l2_01",
+    layoutType: "title",
+    title: "OSHA 1910.147 — Regulatory Requirements",
+    body: "Understanding the Control of Hazardous Energy Standard\nYour rights, obligations, and the regulatory framework that protects workers during maintenance and servicing.",
+  },
+  {
+    id: "sld_l2_02",
+    layoutType: "content",
+    title: "Scope of the Standard",
+    body: "OSHA 29 CFR 1910.147 applies to the control of energy during servicing and maintenance of machines and equipment. It covers situations where unexpected energization, start-up, or release of stored energy could harm employees.\n\nThe standard applies to all general industry employers and covers any form of energy — electrical, mechanical, hydraulic, pneumatic, chemical, thermal, and gravitational.",
+    speakerNotes: "Emphasize that this applies to ALL industries, not just manufacturing.",
+  },
+  {
+    id: "sld_l2_03",
+    layoutType: "key-point",
+    title: "Employer Obligations",
+    body: "• Develop and implement an energy control program\n• Provide lockout/tagout devices at no cost to employees\n• Establish Equipment-Specific Energy Control Procedures (ESECPs)\n• Conduct initial and periodic training for all affected employees\n• Perform annual inspections of energy control procedures\n• Maintain documentation of all training and inspections",
+  },
+  {
+    id: "sld_l2_04",
+    layoutType: "two-column",
+    title: "Employee Categories",
+    body: "AUTHORIZED Employees:\n— Perform lockout/tagout\n— Lock and tag energy isolating devices\n— Must complete full LOTO training\n— Carry their own assigned locks\n\nAFFECTED Employees:\n— Operate or work near locked-out equipment\n— Must NOT attempt to restart equipment\n— Must recognize lockout/tagout devices\n— Receive awareness-level training",
+  },
+  {
+    id: "sld_l2_05",
+    layoutType: "content",
+    title: "Employee Rights Under OSHA",
+    body: "Employees have the right to:\n• Refuse to work on equipment that is not properly locked out\n• Request copies of energy control procedures\n• Report LOTO violations without fear of retaliation\n• Access training records and inspection documentation\n• File a complaint with OSHA if they believe their employer is not complying with the standard",
+    speakerNotes: "Workers should know their whistleblower protections under Section 11(c) of the OSH Act.",
+  },
+  {
+    id: "sld_l2_06",
+    layoutType: "comparison",
+    title: "Lockout vs. Tagout",
+    body: "LOCKOUT: Physical restraint (padlock) on energy isolating device. Provides maximum protection. Required whenever the device CAN accept a lock.\n\nTAGOUT: Warning tag attached to energy isolating device. Provides less protection. Permitted ONLY when the device cannot accept a lock AND additional safety measures are implemented.",
+  },
+  {
+    id: "sld_l2_07",
+    layoutType: "key-point",
+    title: "Penalties for Non-Compliance",
+    body: "• Serious Violation: Up to $16,131 per violation\n• Willful Violation: Up to $161,323 per violation\n• Repeat Violation: Up to $161,323 per violation\n• Failure to Abate: Up to $16,131 per day\n\nLOTO violations are consistently among OSHA's top 10 most frequently cited standards. In 2023, there were over 2,500 citations issued.",
+    speakerNotes: "Penalty amounts are adjusted annually for inflation. These are 2024 figures.",
+  },
+  {
+    id: "sld_l2_08",
+    layoutType: "content",
+    title: "Required Documentation",
+    body: "Employers must maintain:\n\n1. Written energy control procedures for each piece of equipment\n2. Training certification records for all authorized and affected employees\n3. Annual inspection records signed by the inspector and each authorized employee\n4. Lock removal authorization records (when an employee's lock must be removed in their absence)\n5. Group lockout/tagout coordination records",
+  },
+];
+
+const lesson3NarrationSlides: Slide[] = [
+  {
+    id: "sld_l3n_01",
+    layoutType: "title",
+    title: "The 6-Step LOTO Process",
+    body: "A step-by-step walkthrough of the Lockout/Tagout procedure you'll perform every time you service or maintain equipment.",
+    speakerNotes: "Welcome to this narrated walkthrough of the 6-step LOTO process.",
+  },
+  {
+    id: "sld_l3n_02",
+    layoutType: "content",
+    title: "Step 1: Preparation",
+    body: "Before touching any equipment, you need to prepare:\n\n• Review the Equipment-Specific Energy Control Procedure\n• Identify every energy source on the machine\n• Determine which employees will be affected\n• Gather your personal lock, tag, and any specialized lockout devices\n• Notify all affected employees that a lockout is about to begin",
+    speakerNotes: "Preparation is the most critical step.",
+  },
+  {
+    id: "sld_l3n_03",
+    layoutType: "content",
+    title: "Step 2: Shutdown & Step 3: Isolation",
+    body: "SHUTDOWN: Use the machine's normal stopping controls. Allow it to complete its current cycle. Never pull disconnects as the first action.\n\nISOLATION: Now operate every energy isolating device:\n• Open electrical disconnects\n• Close and block line valves\n• Disconnect pneumatic and hydraulic lines\n• Engage mechanical blocks or pins",
+    speakerNotes: "Always shut down using normal controls first, then isolate.",
+  },
+  {
+    id: "sld_l3n_04",
+    layoutType: "key-point",
+    title: "Step 4: Lock & Tag Application",
+    body: "Apply YOUR OWN individual lock and tag to EVERY energy isolating device.\n\nYour tag must show:\n• Your name\n• Date and time applied\n• Reason for lockout\n• Expected duration\n\n⛔ Never let someone else lock out on your behalf. Your lock is your lifeline.",
+    speakerNotes: "This is non-negotiable. Each worker applies their own lock.",
+  },
+  {
+    id: "sld_l3n_05",
+    layoutType: "content",
+    title: "Step 5: Stored Energy Release",
+    body: "Even after isolation, residual energy remains in the system:\n\n• Bleed hydraulic and pneumatic lines to zero pressure\n• Discharge capacitors using approved grounding methods\n• Block or crib elevated machine components\n• Release or block springs under tension\n• Allow hot surfaces to cool to safe temperatures\n• Vent pressurized tanks and vessels",
+    speakerNotes: "Stored energy is the hidden danger. It's why verification is essential.",
+  },
+  {
+    id: "sld_l3n_06",
+    layoutType: "key-point",
+    title: "Step 6: Verification",
+    body: "The final safety check before any work begins:\n\n1. Attempt to restart the machine using normal controls\n2. Confirm the equipment does NOT respond in any way\n3. Use test instruments to verify zero energy (voltmeter, pressure gauge)\n4. Return all controls to the OFF position\n\n✅ Only after successful verification may maintenance work begin.",
+    speakerNotes: "If the equipment responds during verification, stop immediately and re-isolate.",
+  },
+];
+
+const lesson3NarrationData: NarrationData = {
+  script: `Welcome to the narrated walkthrough of the six-step Lockout/Tagout process. This is the procedure you'll follow every single time you perform servicing or maintenance on any piece of equipment in our facility.
+
+Let's start with Step One: Preparation. Before you touch any equipment, you need to prepare thoroughly. Pull up the Equipment-Specific Energy Control Procedure for the machine you'll be working on. This document lists every energy source, every isolation point, and the exact sequence you need to follow. Identify all affected employees — anyone who operates or works near this equipment needs to know a lockout is happening. Gather your personal safety lock, your tag, and any specialized lockout devices you'll need.
+
+Step Two is Shutdown. Use the machine's normal stopping controls. Let it complete its current cycle if it's safe to do so. Don't just pull the disconnect — use the standard stop button or shutdown sequence first. Notify everyone in the area that you're shutting down the equipment and performing a lockout.
+
+Step Three is Isolation. Now you physically disconnect the equipment from every energy source. Open electrical disconnects, close and block line valves, disconnect pneumatic and hydraulic lines, and engage any mechanical blocks or pins. You're creating a physical barrier between the equipment and its energy sources.
+
+Step Four is where you apply your lock and tag. This is non-negotiable — you apply YOUR own individual lock and tag to every energy isolating device. Your tag must clearly show your name, the date and time, the reason for the lockout, and how long you expect it to last. Never, ever let someone else lock out on your behalf. Your lock is literally your lifeline.
+
+Step Five is Stored Energy Release. Even after isolation, there's still energy trapped in the system. You need to bleed hydraulic and pneumatic lines down to zero pressure, discharge any capacitors using approved grounding methods, block or crib any elevated machine components, release springs under tension, and allow hot surfaces to cool. This stored energy is the hidden danger that catches people off guard.
+
+Finally, Step Six is Verification. This is your last safety check before you start working. Attempt to restart the machine using the normal operating controls. Confirm that the equipment does absolutely nothing — no movement, no sound, no response. Use test instruments like a voltmeter or pressure gauge to verify zero energy. Then return all controls to the off position. Only after successful verification can you begin your maintenance work. If the equipment responds in any way during this step, stop immediately, reassess, and re-isolate before proceeding.`,
+  audioDurationSeconds: 480,
+  slides: lesson3NarrationSlides,
+};
+
+const lesson4Slides: Slide[] = [
+  {
+    id: "sld_l4_01",
+    layoutType: "title",
+    title: "LOTO Equipment & Devices",
+    body: "Understanding the physical tools and devices used in Lockout/Tagout procedures.",
+  },
+  {
+    id: "sld_l4_02",
+    layoutType: "two-column",
+    title: "Personal Lockout Devices",
+    body: "PADLOCKS:\n— Standardized safety padlocks (red/orange)\n— Unique key per lock\n— Assigned to individual employees\n— Must be durable and identifiable\n\nTAGS:\n— Durable, weather-resistant\n— Must withstand 50 lbs pull force\n— Show employee name, date, reason\n— Never reused or shared",
+  },
+  {
+    id: "sld_l4_03",
+    layoutType: "content",
+    title: "Multi-Lock Hasps",
+    body: "A hasp allows multiple workers to lock out the same energy isolating device simultaneously.\n\nHow it works:\n1. The hasp is placed on the energy isolating device\n2. Each authorized worker attaches their personal padlock to the hasp\n3. The device cannot be operated until ALL locks are removed\n4. No single worker can re-energize equipment while others are still working",
+  },
+  {
+    id: "sld_l4_04",
+    layoutType: "content",
+    title: "Specialized Lockout Devices",
+    body: "• Gate Valve Lockouts — Clamp around valve handwheels to prevent turning\n• Ball Valve Lockouts — Fit over ball valve handles in the closed position\n• Circuit Breaker Lockouts — Clamp onto breaker toggle to prevent switching\n• Plug Lockouts — Enclose electrical plugs to prevent reconnection\n• Pneumatic Lockouts — Block air supply connections\n• Blind Flanges — Physically block pipeline flow",
+  },
+  {
+    id: "sld_l4_05",
+    layoutType: "key-point",
+    title: "Group Lockbox System",
+    body: "For group lockout:\n\n1. Lead technician locks ALL energy isolating devices\n2. Keys go into the group lockbox\n3. Every worker applies their personal lock to the lockbox\n4. Equipment stays locked until ALL workers remove their locks\n5. Only then can the lead remove the primary isolation locks\n\nThis ensures no single person can restore energy while anyone is still working.",
+  },
+  {
+    id: "sld_l4_06",
+    layoutType: "content",
+    title: "Inspecting & Maintaining LOTO Equipment",
+    body: "Before each use, inspect your lockout devices:\n\n• Padlock: Check that the shackle closes and locks properly, key turns smoothly\n• Tags: Verify they are legible, not torn, attachment is secure\n• Hasps: Confirm all lock holes are clear and the hasp closes fully\n• Valve lockouts: Ensure proper fit for the valve type and size\n\nDamaged or worn devices must be replaced immediately — never use a compromised lockout device.",
+  },
+];
+
+const lesson5NarrationSlides: Slide[] = [
+  {
+    id: "sld_l5n_01",
+    layoutType: "title",
+    title: "Real-World LOTO Scenarios",
+    body: "Analyzing actual incidents and near-misses to understand why proper Lockout/Tagout saves lives.",
+  },
+  {
+    id: "sld_l5n_02",
+    layoutType: "content",
+    title: "Case 1: The Conveyor Belt Incident",
+    body: "A maintenance technician was clearing a jam on a conveyor system. The electrical disconnect was pulled, but the pneumatic air supply was not isolated.\n\nWhile the technician reached into the conveyor mechanism, an air-operated clamp actuated unexpectedly, crushing his hand.\n\nRoot cause: Incomplete energy isolation — only one of two energy sources was controlled.",
+    speakerNotes: "This is a real scenario pattern. All energy sources must be identified and isolated.",
+  },
+  {
+    id: "sld_l5n_03",
+    layoutType: "content",
+    title: "Case 2: The Hydraulic Press Near-Miss",
+    body: "A press operator noticed a forming die was misaligned. She pressed the emergency stop and reached in to adjust the die without performing LOTO.\n\nA coworker, not knowing she was inside the press area, released the e-stop. The press cycled. Fortunately, the operator had pulled her arm back just in time.\n\nRoot cause: E-stop used instead of proper LOTO. E-stops are NOT energy isolating devices.",
+    speakerNotes: "E-stops do not physically prevent energy transmission.",
+  },
+  {
+    id: "sld_l5n_04",
+    layoutType: "key-point",
+    title: "Case 3: Shift Change Failure",
+    body: "During a shift change on a major overhaul, the outgoing crew removed their locks before the incoming crew arrived and applied theirs.\n\nFor 22 minutes, the equipment had no lockout protection. An electrician from another department, unaware of the maintenance, attempted to test-run the machine.\n\nA nearby worker shouted a warning just in time.\n\nLesson: Incoming locks must be applied BEFORE outgoing locks are removed — no exceptions.",
+  },
+  {
+    id: "sld_l5n_05",
+    layoutType: "content",
+    title: "Common Patterns in LOTO Incidents",
+    body: "Analyzing hundreds of LOTO-related incidents reveals recurring patterns:\n\n• 38% — Failure to identify all energy sources\n• 25% — Using control circuits (e-stops, buttons) instead of isolation devices\n• 18% — Skipping the verification step\n• 12% — Failure to control stored/residual energy\n• 7% — Shift change and group lockout coordination failures\n\nNearly all LOTO incidents are preventable by following the 6-step procedure completely.",
+    speakerNotes: "These percentages are based on aggregated OSHA incident analysis data.",
+  },
+];
+
+const lesson5NarrationData: NarrationData = {
+  script: `Let's look at some real-world scenarios that demonstrate why Lockout/Tagout procedures exist and what happens when they're not followed properly.
+
+Our first case involves a conveyor belt system. A maintenance technician was called to clear a jam. He pulled the electrical disconnect — good start — but he didn't isolate the pneumatic air supply that powered the conveyor's clamping mechanisms. While he was reaching into the conveyor to clear the jam, an air-operated clamp fired unexpectedly and crushed his hand. The root cause was incomplete energy isolation. He controlled the electrical energy but missed the pneumatic energy source entirely. This is exactly why the preparation step requires you to identify every energy source using the Equipment-Specific Energy Control Procedure.
+
+Our second case is a near-miss at a hydraulic press. An operator noticed a die was misaligned. She pressed the emergency stop button and reached in to adjust the die — without performing a proper lockout. A coworker who didn't know she was inside the press area released the emergency stop, and the press began to cycle. She pulled her arm back just barely in time. The lesson here is critical: emergency stop buttons are control circuit devices. They are NOT energy isolating devices. They do not physically prevent energy transmission, and they should never be relied upon as a substitute for proper Lockout/Tagout.
+
+Our third scenario involves a shift change failure. During a major equipment overhaul, the outgoing maintenance crew removed their locks and left before the incoming crew arrived. For twenty-two minutes, that equipment had zero lockout protection. An electrician from another department, completely unaware of the ongoing maintenance, walked up and attempted to test-run the machine. A nearby worker shouted a warning just in time to prevent a catastrophe. The rule is absolute: incoming workers must apply their locks before outgoing workers remove theirs. There must be continuous lockout coverage at all times.
+
+When we analyze the patterns across hundreds of LOTO incidents, we see that thirty-eight percent involve failure to identify all energy sources, twenty-five percent involve using control circuits instead of proper isolation devices, eighteen percent involve skipping verification, and twelve percent involve failure to control stored energy. Nearly every single one of these incidents was preventable by simply following the complete six-step procedure.`,
+  audioDurationSeconds: 360,
+  slides: lesson5NarrationSlides,
+};
+
+// ─── Knowledge Check Data (for Resource sections) ───────────────────────────
+
+const kc_l1_purpose: KnowledgeCheckData = {
+  question: "What is the primary purpose of LOTO procedures?",
+  type: "multiple-choice",
+  options: [
+    { text: "To protect workers from unexpected energization during maintenance", isCorrect: true },
+    { text: "To comply with insurance requirements", isCorrect: false },
+    { text: "To speed up maintenance operations", isCorrect: false },
+    { text: "To reduce equipment repair costs", isCorrect: false },
+  ],
+  explanation: "The primary purpose of LOTO is to protect workers from the unexpected release of hazardous energy during servicing and maintenance activities. While compliance and cost savings are secondary benefits, worker safety is the fundamental reason the standard exists.",
+};
+
+const kc_l2_regulatory: KnowledgeCheckData = {
+  question: "Which OSHA standard specifically covers Lockout/Tagout requirements?",
+  type: "multiple-choice",
+  options: [
+    { text: "29 CFR 1910.134 — Respiratory Protection", isCorrect: false },
+    { text: "29 CFR 1910.147 — Control of Hazardous Energy", isCorrect: true },
+    { text: "29 CFR 1910.178 — Powered Industrial Trucks", isCorrect: false },
+    { text: "29 CFR 1926.501 — Fall Protection", isCorrect: false },
+  ],
+  explanation: "29 CFR 1910.147 is the OSHA standard that specifically addresses the control of hazardous energy through lockout/tagout procedures.",
+};
+
+const kc_l3_first_step: KnowledgeCheckData = {
+  question: "What is the correct first step in the LOTO procedure?",
+  type: "multiple-choice",
+  options: [
+    { text: "Shut down the equipment", isCorrect: false },
+    { text: "Apply your lock to the disconnect", isCorrect: false },
+    { text: "Preparation — identify energy sources and gather materials", isCorrect: true },
+    { text: "Verify zero energy state", isCorrect: false },
+  ],
+  explanation: "Preparation is always the first step. Before any shutdown, you must identify all energy sources, determine affected employees, review the ESECP, and gather locks, tags, and devices.",
+};
+
+const kc_l3_verification: KnowledgeCheckData = {
+  question: "True or False: After applying locks and tags, you can immediately begin maintenance work.",
+  type: "true-false",
+  options: [
+    { text: "True", isCorrect: false },
+    { text: "False", isCorrect: true },
+  ],
+  explanation: "False. After applying locks and tags, you must first release stored energy (Step 5) and then verify zero energy state (Step 6) before any work can begin.",
+};
+
+const kc_l4_hasp: KnowledgeCheckData = {
+  question: "What is the purpose of a multi-lock hasp in LOTO?",
+  type: "multiple-choice",
+  options: [
+    { text: "To make the lockout look more official", isCorrect: false },
+    { text: "To allow multiple workers to each apply their own lock to the same isolation point", isCorrect: true },
+    { text: "To replace individual padlocks with a shared device", isCorrect: false },
+    { text: "To speed up the lockout process", isCorrect: false },
+  ],
+  explanation: "A multi-lock hasp allows multiple authorized employees to each apply their own individual padlock to the same energy isolating device, ensuring no one person can re-energize equipment while others are still working.",
+};
+
+const kc_l5_estop: KnowledgeCheckData = {
+  question: "An emergency stop button is an acceptable substitute for a full LOTO procedure.",
+  type: "true-false",
+  options: [
+    { text: "True", isCorrect: false },
+    { text: "False", isCorrect: true },
+  ],
+  explanation: "False. Emergency stop buttons are control-circuit devices, NOT energy isolating devices. They do not physically prevent energy transmission and must never be used as a substitute for proper Lockout/Tagout.",
+};
 
 // ─── Quiz Questions ─────────────────────────────────────────────────────────
 
@@ -433,11 +610,12 @@ export const lotoCourse: Course = {
   title: "Lockout/Tagout (LOTO) Procedures",
   description: "Complete training on Lockout/Tagout procedures as required by OSHA 29 CFR 1910.147. Covers hazardous energy identification, the 6-step LOTO procedure, group lockout, and complex equipment scenarios. Passing the final assessment earns your LOTO Certification.",
   category: "Safety",
-  estimatedMinutes: 60,
+  estimatedMinutes: 145,
   status: "published",
+  outputFormat: "mixed",
   tags: ["OSHA", "LOTO", "Safety", "Certification", "Energy Control"],
   standards: ["OSHA 1910.147"],
-  skills: ["skl_001", "skl_012"], // LOTO Certified, Electrical Safety
+  skills: ["skl_001", "skl_012"],
   policy: {
     progression: "linear",
     requireAllLessons: true,
@@ -453,7 +631,7 @@ export const lotoCourse: Course = {
     retakeCooldownMin: 30,
   },
   ownerUserId: "usr_admin_1",
-  lessonIds: ["lsn_loto_01", "lsn_loto_02", "lsn_loto_03", "lsn_loto_04"],
+  lessonIds: ["lsn_loto_01", "lsn_loto_02", "lsn_loto_03", "lsn_loto_04", "lsn_loto_05", "lsn_loto_06"],
   quizId: "qz_loto_full",
   scope: { type: "department", departmentIds: ["dept_a_maintenance", "dept_b_maintenance"] },
   skillsGranted: [
@@ -462,16 +640,58 @@ export const lotoCourse: Course = {
   metadata: {
     objectives: [
       "Identify all seven types of hazardous energy",
+      "Explain employer obligations and employee rights under OSHA 1910.147",
       "Perform the complete 6-step LOTO procedure",
+      "Select appropriate lockout devices for different equipment",
       "Apply group lockout and shift change procedures",
-      "Select appropriate energy isolating devices",
-      "Verify zero energy state before beginning work",
+      "Analyze real-world LOTO incidents and identify root causes",
     ],
     tags: ["OSHA", "LOTO", "Safety", "Certification"],
     difficulty: "intermediate",
     language: "en",
     readingLevel: "standard",
   },
+  aiGenerated: true,
+  conversationHistory: [
+    {
+      id: "msg_loto_a1",
+      role: "assistant",
+      content: "I've analyzed your setup context and built your **Lockout/Tagout (LOTO)** course. It includes **6 lessons** (~145 min), **6 quizzes** with 25 questions and targets **Maintenance Technicians** who need LOTO Certified.\n\nThe course uses a **Mixed** output format — I chose narrated walkthroughs for the conceptual lessons and text with slides for the procedural lessons.\n\nAll fields are now populated in the editor. You can edit any field directly, or ask me to refine lessons, adjust difficulty, or save when you're satisfied.",
+      timestamp: daysAgo(30),
+      attachedOutline: [
+        { title: "Introduction to Lockout/Tagout", description: "Overview of hazardous energy types, LOTO purpose, and regulatory context.", contentType: "text", content: "", duration: 20, quizQuestions: [] },
+        { title: "OSHA 1910.147 Regulatory Requirements", description: "Employer obligations, employee rights, and compliance framework.", contentType: "text", content: "", duration: 25, quizQuestions: [] },
+        { title: "The 6-Step LOTO Process", description: "Narrated walkthrough of preparation, shutdown, isolation, lockout, stored energy, and verification.", contentType: "text", content: "", duration: 30, quizQuestions: [] },
+        { title: "LOTO Equipment, Devices & Group Lockout", description: "Lock types, hasps, valve lockouts, group procedures, and shift changes.", contentType: "text", content: "", duration: 25, quizQuestions: [] },
+        { title: "Real-World Scenarios & Case Studies", description: "Narrated analysis of conveyor, hydraulic press, and shift-change incidents.", contentType: "text", content: "", duration: 20, quizQuestions: [] },
+        { title: "Final Assessment & Certification", description: "Comprehensive quiz covering all LOTO topics. Passing earns LOTO Certification.", contentType: "text", content: "", duration: 25, quizQuestions: [] },
+      ] as GeneratedLesson[],
+    },
+    {
+      id: "msg_loto_u1",
+      role: "user",
+      content: "Can you make the narration in lesson 3 more conversational?",
+      timestamp: daysAgo(29),
+    },
+    {
+      id: "msg_loto_a2",
+      role: "assistant",
+      content: "Done! I've updated the narration script for \"The 6-Step LOTO Process\" to use a more conversational tone with second person (\"you\") and more transitional phrases. Review the updated script in the Narrated Walkthrough editor. Want me to re-render the audio?",
+      timestamp: daysAgo(29),
+    },
+    {
+      id: "msg_loto_u2",
+      role: "user",
+      content: "Yes, and add a knowledge check after the energy types section in lesson 1.",
+      timestamp: daysAgo(28),
+    },
+    {
+      id: "msg_loto_a3",
+      role: "assistant",
+      content: "✅ **Audio re-render triggered** for Lesson 3 — ready in ~2 minutes.\n\n✅ **Added a knowledge check** to Lesson 1:\n\n*\"Which of the following is NOT a type of hazardous energy covered by LOTO?\"*\n\n- Electrical\n- Hydraulic\n- **Gravitational** ← correct answer\n- Pneumatic",
+      timestamp: daysAgo(28),
+    },
+  ] as ChatMessage[],
   createdAt: daysAgo(30),
   updatedAt: daysAgo(5),
 };
@@ -482,11 +702,11 @@ export const lotoLessons: Lesson[] = [
   {
     id: "lsn_loto_01",
     courseId: "crs_loto_full",
-    title: "Understanding Energy Sources & Hazards",
+    title: "Introduction to Lockout/Tagout",
     order: 0,
-    resourceIds: ["res_loto_01_text", "res_loto_01_img1", "res_loto_01_img2", "res_loto_01_pdf"],
+    resourceIds: ["res_loto_01_text", "res_loto_01_kc1"],
     knowledgeChecks: lesson1KCs,
-    estimatedMinutes: 15,
+    estimatedMinutes: 20,
     lessonType: "lesson",
     downloadableResources: [
       { title: "Energy Sources Quick Reference Card", url: "#", fileType: "pdf" },
@@ -498,11 +718,23 @@ export const lotoLessons: Lesson[] = [
   {
     id: "lsn_loto_02",
     courseId: "crs_loto_full",
-    title: "The 6-Step LOTO Procedure",
+    title: "OSHA 1910.147 Regulatory Requirements",
     order: 1,
-    resourceIds: ["res_loto_02_text", "res_loto_02_img1", "res_loto_02_pdf1", "res_loto_02_img2"],
+    resourceIds: ["res_loto_02_slides", "res_loto_02_kc1"],
     knowledgeChecks: lesson2KCs,
-    estimatedMinutes: 20,
+    estimatedMinutes: 25,
+    lessonType: "lesson",
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "lsn_loto_03",
+    courseId: "crs_loto_full",
+    title: "The 6-Step LOTO Process",
+    order: 2,
+    resourceIds: ["res_loto_03_narration", "res_loto_03_text", "res_loto_03_kc1", "res_loto_03_kc2"],
+    knowledgeChecks: lesson3KCs,
+    estimatedMinutes: 30,
     lessonType: "lesson",
     downloadableResources: [
       { title: "6-Step LOTO Procedure Poster", url: "#", fileType: "pdf" },
@@ -512,24 +744,34 @@ export const lotoLessons: Lesson[] = [
     updatedAt: daysAgo(5),
   },
   {
-    id: "lsn_loto_03",
+    id: "lsn_loto_04",
     courseId: "crs_loto_full",
-    title: "Group Lockout & Complex Equipment",
-    order: 2,
-    resourceIds: ["res_loto_03_text", "res_loto_03_img1", "res_loto_03_pdf", "res_loto_03_img2"],
-    knowledgeChecks: lesson3KCs,
-    estimatedMinutes: 15,
+    title: "LOTO Equipment, Devices & Group Lockout",
+    order: 3,
+    resourceIds: ["res_loto_04_text", "res_loto_04_slides", "res_loto_04_kc1"],
+    estimatedMinutes: 25,
     lessonType: "lesson",
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
   {
-    id: "lsn_loto_04",
+    id: "lsn_loto_05",
     courseId: "crs_loto_full",
-    title: "LOTO Certification Assessment",
-    order: 3,
-    resourceIds: ["res_loto_04_text"],
-    estimatedMinutes: 10,
+    title: "Real-World Scenarios & Case Studies",
+    order: 4,
+    resourceIds: ["res_loto_05_narration", "res_loto_05_kc1"],
+    estimatedMinutes: 20,
+    lessonType: "lesson",
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "lsn_loto_06",
+    courseId: "crs_loto_full",
+    title: "LOTO Final Assessment",
+    order: 5,
+    resourceIds: [],
+    estimatedMinutes: 15,
     lessonType: "assessment",
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
@@ -539,156 +781,159 @@ export const lotoLessons: Lesson[] = [
 // ─── Resources ──────────────────────────────────────────────────────────────
 
 export const lotoResources: Resource[] = [
-  // ─── Lesson 1: Understanding Energy Sources & Hazards ─────────────────────
+  // ─── Lesson 1: Introduction to Lockout/Tagout ─────────────────────────────
   {
     id: "res_loto_01_text",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_01",
     type: "text",
-    title: "Understanding Energy Sources & Hazards",
+    title: "Understanding Hazardous Energy",
     content: lesson1Content,
     order: 0,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
   {
-    id: "res_loto_01_img1",
+    id: "res_loto_01_kc1",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_01",
-    type: "image",
-    title: "Hazardous Energy Sources — Electrical Panel Lockout",
-    url: "https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=900&auto=format&fit=crop",
+    type: "knowledge-check",
+    title: "Knowledge Check: Purpose of LOTO",
+    knowledgeCheckData: kc_l1_purpose,
     order: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
-  {
-    id: "res_loto_01_img2",
-    courseId: "crs_loto_full",
-    lessonId: "lsn_loto_01",
-    type: "image",
-    title: "Energy Isolating Devices — Circuit Breaker with Lockout Hasp",
-    url: "https://images.unsplash.com/photo-1613665813446-82a78c468a1d?w=900&auto=format&fit=crop",
-    order: 2,
-    createdAt: daysAgo(30),
-    updatedAt: daysAgo(5),
-  },
-  {
-    id: "res_loto_01_pdf",
-    courseId: "crs_loto_full",
-    lessonId: "lsn_loto_01",
-    type: "pdf",
-    title: "OSHA Fact Sheet — Lockout/Tagout",
-    url: "https://www.osha.gov/sites/default/files/publications/factsheet-lockout-tagout.pdf",
-    fileName: "OSHA_Lockout_Tagout_FactSheet.pdf",
-    order: 3,
-    createdAt: daysAgo(30),
-    updatedAt: daysAgo(5),
-  },
 
-  // ─── Lesson 2: The 6-Step LOTO Procedure ──────────────────────────────────
+  // ─── Lesson 2: OSHA 1910.147 Regulatory Requirements ─────────────────────
   {
-    id: "res_loto_02_text",
+    id: "res_loto_02_slides",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_02",
-    type: "text",
-    title: "The 6-Step LOTO Procedure",
-    content: lesson2Content,
+    type: "slides",
+    title: "OSHA 1910.147 Regulatory Framework",
+    slides: lesson2Slides,
+    durationSec: 900,
     order: 0,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
   {
-    id: "res_loto_02_img1",
+    id: "res_loto_02_kc1",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_02",
-    type: "image",
-    title: "Lockout Devices — Padlocks, Hasps, and Tags Applied to Equipment",
-    url: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=900&auto=format&fit=crop",
+    type: "knowledge-check",
+    title: "Knowledge Check: Regulatory Requirements",
+    knowledgeCheckData: kc_l2_regulatory,
     order: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
-  {
-    id: "res_loto_02_pdf1",
-    courseId: "crs_loto_full",
-    lessonId: "lsn_loto_02",
-    type: "pdf",
-    title: "OSHA Quick Card — Steps for Lockout/Tagout",
-    url: "https://www.osha.gov/sites/default/files/publications/osha3120.pdf",
-    fileName: "OSHA_LOTO_QuickCard.pdf",
-    order: 2,
-    createdAt: daysAgo(30),
-    updatedAt: daysAgo(5),
-  },
-  {
-    id: "res_loto_02_img2",
-    courseId: "crs_loto_full",
-    lessonId: "lsn_loto_02",
-    type: "image",
-    title: "Verification Step — Technician Testing for Zero Energy State",
-    url: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=900&auto=format&fit=crop",
-    order: 3,
-    createdAt: daysAgo(30),
-    updatedAt: daysAgo(5),
-  },
 
-  // ─── Lesson 3: Group Lockout & Complex Equipment ──────────────────────────
+  // ─── Lesson 3: The 6-Step LOTO Process ────────────────────────────────────
+  {
+    id: "res_loto_03_narration",
+    courseId: "crs_loto_full",
+    lessonId: "lsn_loto_03",
+    type: "narrated-walkthrough",
+    title: "The 6-Step LOTO Process — Narrated Walkthrough",
+    narrationData: lesson3NarrationData,
+    durationSec: 480,
+    order: 0,
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
   {
     id: "res_loto_03_text",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_03",
     type: "text",
-    title: "Group Lockout & Complex Equipment",
-    content: lesson3Content,
-    order: 0,
-    createdAt: daysAgo(30),
-    updatedAt: daysAgo(5),
-  },
-  {
-    id: "res_loto_03_img1",
-    courseId: "crs_loto_full",
-    lessonId: "lsn_loto_03",
-    type: "image",
-    title: "Group Lockbox System — Multiple Locks Securing Shared Lockout",
-    url: "https://images.unsplash.com/photo-1590959651373-a3db0f38a961?w=900&auto=format&fit=crop",
+    title: "The 6-Step LOTO Procedure — Reference Guide",
+    content: lesson3TextContent,
     order: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
   {
-    id: "res_loto_03_pdf",
+    id: "res_loto_03_kc1",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_03",
-    type: "pdf",
-    title: "OSHA 1910.147 — Control of Hazardous Energy Standard (Full Text)",
-    url: "https://www.osha.gov/sites/default/files/publications/osha3151.pdf",
-    fileName: "OSHA_1910_147_Standard.pdf",
+    type: "knowledge-check",
+    title: "Knowledge Check: First Step",
+    knowledgeCheckData: kc_l3_first_step,
     order: 2,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
   {
-    id: "res_loto_03_img2",
+    id: "res_loto_03_kc2",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_03",
-    type: "image",
-    title: "Complex Industrial Equipment — Hydraulic Press with Multiple Energy Sources",
-    url: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=900&auto=format&fit=crop",
+    type: "knowledge-check",
+    title: "Knowledge Check: Verification",
+    knowledgeCheckData: kc_l3_verification,
     order: 3,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
 
-  // ─── Lesson 4: Assessment (text only) ─────────────────────────────────────
+  // ─── Lesson 4: LOTO Equipment, Devices & Group Lockout ───────────────────
   {
     id: "res_loto_04_text",
     courseId: "crs_loto_full",
     lessonId: "lsn_loto_04",
     type: "text",
-    title: "LOTO Certification Assessment",
-    content: lesson4Content,
+    title: "LOTO Equipment & Group Lockout Procedures",
+    content: lesson4TextContent,
     order: 0,
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "res_loto_04_slides",
+    courseId: "crs_loto_full",
+    lessonId: "lsn_loto_04",
+    type: "slides",
+    title: "LOTO Devices & Group Lockout",
+    slides: lesson4Slides,
+    durationSec: 600,
+    order: 1,
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "res_loto_04_kc1",
+    courseId: "crs_loto_full",
+    lessonId: "lsn_loto_04",
+    type: "knowledge-check",
+    title: "Knowledge Check: Multi-Lock Hasps",
+    knowledgeCheckData: kc_l4_hasp,
+    order: 2,
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+
+  // ─── Lesson 5: Real-World Scenarios & Case Studies ────────────────────────
+  {
+    id: "res_loto_05_narration",
+    courseId: "crs_loto_full",
+    lessonId: "lsn_loto_05",
+    type: "narrated-walkthrough",
+    title: "Real-World LOTO Scenarios — Narrated Analysis",
+    narrationData: lesson5NarrationData,
+    durationSec: 360,
+    order: 0,
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(5),
+  },
+  {
+    id: "res_loto_05_kc1",
+    courseId: "crs_loto_full",
+    lessonId: "lsn_loto_05",
+    type: "knowledge-check",
+    title: "Knowledge Check: E-Stop vs. LOTO",
+    knowledgeCheckData: kc_l5_estop,
+    order: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(5),
   },
@@ -699,7 +944,6 @@ export const lotoResources: Resource[] = [
 export const lotoQuiz: Quiz = {
   id: "qz_loto_full",
   courseId: "crs_loto_full",
-  // No lessonId — this is a course-level quiz
   title: "LOTO Certification Assessment",
   description: "Demonstrate your knowledge of Lockout/Tagout procedures. You must score 85% or higher to earn your LOTO Certification.",
   questions: lotoQuizQuestions,

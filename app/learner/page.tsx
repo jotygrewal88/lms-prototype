@@ -146,11 +146,19 @@ export default function LearnerDashboard() {
   const sortedActiveCourses = getSortedCourses(activeCourses);
 
   const handleCourseClick = (courseId: string) => {
-    router.push(`/learner/courses/${courseId}`);
+    if (courseId === "crs_loto_full") {
+      router.push(`/learner/course/${courseId}`);
+    } else {
+      router.push(`/learner/courses/${courseId}`);
+    }
   };
 
   const handleResume = (courseId: string, lessonId: string) => {
-    router.push(`/learner/courses/${courseId}/lessons/${lessonId}`);
+    if (courseId === "crs_loto_full") {
+      router.push(`/learner/course/${courseId}`);
+    } else {
+      router.push(`/learner/courses/${courseId}/lessons/${lessonId}`);
+    }
   };
 
   // Get resume course/lesson info
