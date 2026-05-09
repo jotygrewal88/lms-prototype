@@ -246,16 +246,43 @@ function CoursesPageInner() {
                     ) : (
                       filteredCourses.map((course) => {
                         const isAI = course.aiGenerated === true;
+                        // Filler / demo-only courses (see data/keter/seedCourses.ts)
+                        // render normally but are non-interactive: no
+                        // navigation on row click, no row-level action
+                        // menu, and `cursor-default` so the cursor signals
+                        // they're visual-only. The two real courses
+                        // (keter-course-stockouts and any wizard-generated
+                        // course) keep their full click + menu behavior.
+                        const isFiller = course.id.startsWith("keter-filler-");
 
                         return (
                           <tr
                             key={course.id}
-                            className="hover:bg-gray-50 cursor-pointer"
-                            onClick={() => router.push(`/keter/admin/courses/${course.id}`)}
+                            className={
+                              isFiller
+                                ? "cursor-default"
+                                : "hover:bg-gray-50 cursor-pointer"
+                            }
+                            onClick={
+                              isFiller
+                                ? undefined
+                                : () =>
+                                    router.push(
+                                      `/keter/admin/courses/${course.id}`,
+                                    )
+                            }
                           >
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">
                               <div className="flex items-center gap-2">
-                                <span className="hover:text-blue-600 transition-colors">{course.title}</span>
+                                <span
+                                  className={
+                                    isFiller
+                                      ? ""
+                                      : "hover:text-blue-600 transition-colors"
+                                  }
+                                >
+                                  {course.title}
+                                </span>
                                 {isAI && (
                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-50 text-purple-500 text-[10px] font-medium rounded flex-shrink-0">
                                     <Sparkles className="w-2.5 h-2.5" />
@@ -290,7 +317,7 @@ function CoursesPageInner() {
                               {getStatusBadge(course)}
                             </td>
                             <td className="px-4 py-3 text-sm text-right">
-                              {!isManager && (
+                              {!isManager && !isFiller && (
                                 <div className="relative inline-block">
                                   <button
                                     onClick={(e) => {

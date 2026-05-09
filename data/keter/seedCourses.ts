@@ -375,39 +375,249 @@ const stockoutsLessons: Lesson[] = [
   },
 ];
 
-export const keterCourses: Course[] = [
+// ─── Filler / demo-only courses ────────────────────────────────────────────
+//
+// These six entries populate the Keter admin course list so the demo
+// doesn't read as "two real courses + an empty page." Each filler course
+// has an empty lessonIds array and an id starting with `keter-filler-`,
+// which the admin course list uses to disable click navigation (see
+// app/keter/admin/courses/page.tsx): clicking a filler card does nothing
+// rather than opening a broken empty editor. The two real courses
+// (Stockouts below and any wizard-generated course) keep their normal
+// click-to-edit behavior.
+//
+// Statuses are intentionally mixed (Published / AI Draft / In Review) so
+// the list looks organically populated. Categories, durations, output
+// formats, and difficulty levels also vary so the cards don't read as
+// templated.
+
+const stockoutsCourse: Course = {
+  id: COURSE_ID,
+  title: "Reducing Stockouts on Critical Spare Parts",
+  description:
+    "Practical training for Maintenance Technicians and Maintenance Planners on identifying critical spare parts, predicting stockouts, and using the Anderson Plant inventory system to keep production running.",
+  category: "Operations",
+  estimatedMinutes: 45,
+  status: "published",
+  outputFormat: "mixed",
+  tags: ["Spare Parts", "Inventory", "Maintenance Planning", "Anderson Plant"],
+  standards: [],
+  skills: [],
+  policy: keterDefaultPolicy,
+  ownerUserId: "usr_admin_1",
+  lessonIds: stockoutsLessons.map((l) => l.id),
+  scope: { type: "company-wide" },
+  metadata: {
+    objectives: [
+      "Identify critical spare parts using the Anderson Plant asset register.",
+      "Recognize the leading indicators of an impending stockout.",
+      "Use the Anderson Plant inventory system to place a planned replenishment order.",
+    ],
+    tags: ["Spare Parts", "Inventory", "Maintenance Planning"],
+    difficulty: "intermediate",
+    language: "en",
+    readingLevel: "standard",
+  },
+  aiGenerated: false,
+  synthesisType: "full-course",
+  createdAt: daysAgo(7),
+  updatedAt: daysAgo(1),
+};
+
+const keterFillerCourses: Course[] = [
   {
-    id: COURSE_ID,
-    title: "Reducing Stockouts on Critical Spare Parts",
+    id: "keter-filler-orientation",
+    title: "New Hire Plant Orientation \u2014 Anderson",
     description:
-      "Practical training for Maintenance Technicians and Maintenance Planners on identifying critical spare parts, predicting stockouts, and using the Anderson Plant inventory system to keep production running.",
-    category: "Operations",
-    estimatedMinutes: 45,
+      "Day-one orientation covering plant layout, safety protocols, reporting structure, emergency procedures, and an introduction to UpKeep tools used at Anderson.",
+    category: "Onboarding",
+    estimatedMinutes: 120,
     status: "published",
-    outputFormat: "mixed",
-    tags: ["Spare Parts", "Inventory", "Maintenance Planning", "Anderson Plant"],
+    outputFormat: "presentation",
+    tags: ["Onboarding", "Plant Tour", "Anderson Plant", "New Hire"],
     standards: [],
     skills: [],
     policy: keterDefaultPolicy,
     ownerUserId: "usr_admin_1",
-    lessonIds: stockoutsLessons.map((l) => l.id),
+    lessonIds: [],
     scope: { type: "company-wide" },
     metadata: {
-      objectives: [
-        "Identify critical spare parts using the Anderson Plant asset register.",
-        "Recognize the leading indicators of an impending stockout.",
-        "Use the Anderson Plant inventory system to place a planned replenishment order.",
-      ],
-      tags: ["Spare Parts", "Inventory", "Maintenance Planning"],
+      objectives: [],
+      tags: ["Onboarding", "Plant Tour"],
+      difficulty: "beginner",
+      language: "en",
+      readingLevel: "standard",
+    },
+    aiGenerated: false,
+    synthesisType: "full-course",
+    createdAt: daysAgo(45),
+    updatedAt: daysAgo(30),
+  },
+  {
+    id: "keter-filler-forklift",
+    title: "Forklift & Material Handling Certification \u2014 Anderson Plant",
+    description:
+      "OSHA-compliant powered industrial truck operator training covering pre-shift inspection, load handling, narrow-aisle navigation, and incident reporting for the Anderson plant floor.",
+    category: "Safety",
+    estimatedMinutes: 90,
+    status: "published",
+    outputFormat: "mixed",
+    tags: ["Forklift", "OSHA", "Material Handling", "Anderson Plant"],
+    standards: [],
+    skills: [],
+    policy: keterDefaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" },
+    metadata: {
+      objectives: [],
+      tags: ["Forklift", "OSHA"],
       difficulty: "intermediate",
       language: "en",
       readingLevel: "standard",
     },
     aiGenerated: false,
     synthesisType: "full-course",
-    createdAt: daysAgo(7),
+    createdAt: daysAgo(30),
+    updatedAt: daysAgo(18),
+  },
+  {
+    id: "keter-filler-hazcom",
+    title: "Hazard Communication & Resin Safety",
+    description:
+      "OSHA HazCom standard applied to plastics manufacturing: SDS access, label interpretation, resin handling, and personal protective equipment for Anderson's resin storage areas.",
+    category: "Safety",
+    estimatedMinutes: 30,
+    status: "published",
+    outputFormat: "reading",
+    tags: ["HazCom", "OSHA", "Resin Safety", "PPE"],
+    standards: [],
+    skills: [],
+    policy: keterDefaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" },
+    metadata: {
+      objectives: [],
+      tags: ["HazCom", "OSHA"],
+      difficulty: "beginner",
+      language: "en",
+      readingLevel: "standard",
+    },
+    aiGenerated: false,
+    synthesisType: "full-course",
+    createdAt: daysAgo(20),
+    updatedAt: daysAgo(11),
+  },
+  {
+    id: "keter-filler-hot-work",
+    title: "Hot Work & Welding Permit Procedures",
+    description:
+      "Permit-required hot work procedures including fire watch responsibilities, atmospheric testing, and Anderson plant authorization protocols.",
+    category: "Safety",
+    estimatedMinutes: 60,
+    status: "published",
+    outputFormat: "mixed",
+    tags: ["Hot Work", "Welding", "Permits", "Safety"],
+    standards: [],
+    skills: [],
+    policy: keterDefaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" },
+    metadata: {
+      objectives: [],
+      tags: ["Hot Work", "Welding"],
+      difficulty: "advanced",
+      language: "en",
+      readingLevel: "standard",
+    },
+    aiGenerated: false,
+    synthesisType: "full-course",
+    createdAt: daysAgo(14),
+    updatedAt: daysAgo(6),
+  },
+  {
+    id: "keter-filler-quality-inspection",
+    title: "Quality Inspection Standards for Molded Plastics",
+    description:
+      "Visual and dimensional inspection criteria for molded parts, accept/reject decision authority, and documentation standards for Anderson's quality records.",
+    category: "Quality",
+    estimatedMinutes: 75,
+    status: "ai-draft",
+    outputFormat: "mixed",
+    tags: ["Quality", "Inspection", "Anderson Plant"],
+    standards: [],
+    skills: [],
+    policy: keterDefaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" },
+    metadata: {
+      objectives: [],
+      tags: ["Quality", "Inspection"],
+      difficulty: "intermediate",
+      language: "en",
+      readingLevel: "standard",
+    },
+    aiGenerated: true,
+    synthesisType: "full-course",
+    createdAt: daysAgo(3),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "keter-filler-confined-space",
+    title: "Confined Space Entry \u2014 Tank & Silo Operations",
+    description:
+      "Confined space classification, attendant and entrant responsibilities, atmospheric monitoring, and rescue planning for tanks, silos, and below-grade work areas.",
+    category: "Safety",
+    estimatedMinutes: 75,
+    status: "in-review",
+    outputFormat: "presentation",
+    tags: ["Confined Space", "OSHA", "Safety", "Tank Operations"],
+    standards: [],
+    skills: [],
+    policy: keterDefaultPolicy,
+    ownerUserId: "usr_admin_1",
+    lessonIds: [],
+    scope: { type: "company-wide" },
+    metadata: {
+      objectives: [],
+      tags: ["Confined Space", "OSHA"],
+      difficulty: "advanced",
+      language: "en",
+      readingLevel: "standard",
+    },
+    aiGenerated: false,
+    synthesisType: "full-course",
+    createdAt: daysAgo(2),
     updatedAt: daysAgo(1),
   },
+];
+
+// Final list order (the admin course list renders in seed order). Filler
+// entries are interleaved around the real Stockouts course so the demo
+// doesn't read as "all filler then one real course at the bottom":
+//
+//   1. Orientation         (filler, Published)
+//   2. Forklift            (filler, Published)
+//   3. HazCom              (filler, Published)
+//   4. Stockouts           (real,   Published)
+//   5. Hot Work            (filler, Published)
+//   6. Quality Inspection  (filler, AI Draft)
+//   7. Confined Space      (filler, In Review)
+//
+// Wizard-generated courses (e.g. the Anderson Injection Molding cert)
+// are appended by createCourse() and therefore land at the end of the
+// list, after the In Review filler.
+export const keterCourses: Course[] = [
+  keterFillerCourses[0], // Orientation
+  keterFillerCourses[1], // Forklift
+  keterFillerCourses[2], // HazCom
+  stockoutsCourse,
+  keterFillerCourses[3], // Hot Work
+  keterFillerCourses[4], // Quality Inspection
+  keterFillerCourses[5], // Confined Space
 ];
 
 export const keterLessons: Lesson[] = stockoutsLessons;
