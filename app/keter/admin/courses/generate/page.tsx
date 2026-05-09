@@ -10,32 +10,63 @@ import {
   getUsers,
   getJobTitles,
   createCourse,
+  createLesson,
+  createResource,
+  createEmptyQuizFor,
+  updateQuiz,
   getCurrentUser,
   subscribe,
-} from "@/lib/store";
+} from "@/lib/keter/store";
+// Keter — Anderson uses a Keter-specific Markdown → HTML converter that fixes
+// blockquote rendering and emits class="callout-..." on tables/blockquotes so
+// the existing `hasCustomElements` bypass in components/keter/learner/player/
+// ResourceText.tsx skips TipTap (which would otherwise strip <table> tags).
+import { markdownToHtml } from "@/lib/keter/markdownToHtml";
 import AdminLayout from "@/components/layouts/AdminLayout";
-import RouteGuard from "@/components/RouteGuard";
-import { generateObjectivesForTopic, detectCategory } from "@/lib/mockAIAgent";
-import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, Library, Search, Check, BookOpen, Presentation, Mic, Loader2 } from "lucide-react";
+import KeterRouteGuard from "@/components/keter/KeterRouteGuard";
+import {
+  generateObjectivesForTopic,
+  detectCategory,
+  generateAgentResponse,
+  ANDERSON_CONVERSATION_TURNS,
+} from "@/lib/keter/mockAIAgent";
+import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, Library, Search, Check, BookOpen, Presentation } from "lucide-react";
 
 export default function GenerateCoursePage() {
   const router = useRouter();
 
-  // Form state (pre-filled with mock data for quick demo)
-  const [topic, setTopic] = useState("Lockout/Tagout Safety Procedures");
+  // Form state — pre-filled with the Anderson Plant Injection Molding demo
+  // values. The Keter demo opens the wizard already populated and the
+  // presenter clicks straight through to "Start Building".
+  const [topic, setTopic] = useState(
+    "Injection Molding Technician Certification: Anderson Plant",
+  );
   const [synthesisType, setSynthesisType] = useState<SynthesisType>("full-course");
-  const [targetRole, setTargetRole] = useState("Maintenance Technician");
-  // Multi-select skills picker. The Foundry demo defaults to the LOTO skill
-  // preselected so canSubmit unblocks immediately, but admins can pick any
-  // number of skills the course should grant on completion.
-  const [targetSkillIds, setTargetSkillIds] = useState<string[]>(["skl_loto"]);
-  const [audienceLevel, setAudienceLevel] = useState<"new-hire" | "experienced" | "recertification" | "">("");
+  // Multi-select target job titles. Anderson IM cert targets both Operators
+  // and Technicians, so both ship preselected.
+  const [targetRoles, setTargetRoles] = useState<string[]>([
+    "Injection Molding Operator",
+    "Injection Molding Technician",
+  ]);
+  // Multi-select skills picker. Empty by default — admins can pick any
+  // number of skills the course should grant on completion. (The mock
+  // agent's targetSkillName below uses a comma-joined string when more
+  // than one is selected.)
+  const [targetSkillIds, setTargetSkillIds] = useState<string[]>([]);
+  // Anderson IM is targeted at "experienced" learners, which the wizard's
+  // metadata mapping converts to difficulty "intermediate" below.
+  const [audienceLevel, setAudienceLevel] = useState<"new-hire" | "experienced" | "recertification" | "">("experienced");
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("mixed");
   const [language, setLanguage] = useState("English");
   const [customLanguage, setCustomLanguage] = useState("");
-  const [estimatedDuration, setEstimatedDuration] = useState<number | "">("");
-  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>(["lib_002", "lib_004"]);
-  const [additionalContext, setAdditionalContext] = useState("Focus on annual recertification requirements and hands-on verification procedures.");
+  const [estimatedDuration, setEstimatedDuration] = useState<number | "">(120);
+  // All 3 Keter library items preselected so canSubmit unblocks immediately.
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([
+    "keter_lib_001",
+    "keter_lib_002",
+    "keter_lib_003",
+  ]);
+  const [additionalContext, setAdditionalContext] = useState("");
   const [quizPlacement, setQuizPlacement] = useState<"per-lesson" | "end-of-course" | "both">("both");
   const [sourceSearch, setSourceSearch] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,8 +85,8 @@ export default function GenerateCoursePage() {
       setSkills(getActiveSkillsV2());
       const allUsers = getUsers();
       // Merge user-derived job-title strings with the JobTitle seed list so
-      // titles added to data/seedJobTitles.ts appear in the picker even when
-      // no user yet has that jobTitleText (additive sharing).
+      // the 6 Keter titles appended to data/seedJobTitles.ts appear in the
+      // picker (additive sharing).
       const userTitles = allUsers.map((u) => u.jobTitleText).filter(Boolean) as string[];
       const seedTitles = getJobTitles().map((jt) => jt.name);
       const titles = Array.from(new Set([...userTitles, ...seedTitles])).sort();
@@ -88,9 +119,6 @@ export default function GenerateCoursePage() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [loadingDone, setLoadingDone] = useState(false);
   const hasRedirected = useRef(false);
-  const [showNarrationScreen, setShowNarrationScreen] = useState(false);
-  const [waitingHere, setWaitingHere] = useState(false);
-  const [createdCourseId, setCreatedCourseId] = useState<string | null>(null);
   const loadingSteps = [
     "Analyzing your selected sources...",
     "Mapping organizational skill gaps...",
@@ -100,19 +128,15 @@ export default function GenerateCoursePage() {
     "Finalizing course outline...",
   ];
 
-  // When loading finishes, create the course and either redirect or show narration screen
+  // When loading finishes, create the course and redirect to the editor.
+  // The previous "Rendering Audio Narration" interstitial was removed: in
+  // the Keter demo, narrated walkthroughs are pre-built by the mock agent,
+  // so there's no real audio render step and the interstitial only added
+  // friction. The presenter goes straight from "Start Building" → editor.
   useEffect(() => {
     if (loadingDone && !hasRedirected.current) {
       hasRedirected.current = true;
-      if (outputFormat === "reading") {
-        doCreateAndRedirect();
-      } else {
-        const courseId = doCreateCourse();
-        if (courseId) {
-          setCreatedCourseId(courseId);
-          setShowNarrationScreen(true);
-        }
-      }
+      doCreateAndRedirect();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingDone]);
@@ -122,9 +146,6 @@ export default function GenerateCoursePage() {
     setIsSubmitting(true);
     setLoadingStep(0);
     setLoadingDone(false);
-    setShowNarrationScreen(false);
-    setWaitingHere(false);
-    setCreatedCourseId(null);
     hasRedirected.current = false;
 
     // Animate through loading steps
@@ -148,6 +169,10 @@ export default function GenerateCoursePage() {
       const selectedSources = sources.filter((s) => selectedSourceIds.includes(s.id));
       const selectedSourceTitles = selectedSources.map((s) => s.title);
       const targetSkillObjs = skills.filter((s) => targetSkillIds.includes(s.id));
+      const targetSkillNamesJoined =
+        targetSkillObjs.length > 0
+          ? targetSkillObjs.map((s) => s.name).join(", ")
+          : undefined;
 
       const setupMessage: ChatMessage = {
         id: `msg_setup_${Date.now()}`,
@@ -156,10 +181,8 @@ export default function GenerateCoursePage() {
           `Setup context:`,
           `Topic: ${topic.trim()}`,
           `Course Type: ${synthesisType}`,
-          targetRole ? `Target Job Title: ${targetRole}` : null,
-          targetSkillObjs.length > 0
-            ? `Target Skills: ${targetSkillObjs.map((s) => s.name).join(", ")}`
-            : null,
+          targetRoles.length > 0 ? `Target Job Titles: ${targetRoles.join(", ")}` : null,
+          targetSkillNamesJoined ? `Target Skills: ${targetSkillNamesJoined}` : null,
           audienceLevel ? `Audience Level: ${audienceLevel}` : null,
           `Library Sources: ${selectedSourceTitles.join(", ")}`,
           `Quiz Placement: ${quizPlacement}`,
@@ -170,9 +193,35 @@ export default function GenerateCoursePage() {
         timestamp: new Date().toISOString(),
       };
 
+      // Pre-seed the 3-turn agent conversation that should be visible in the
+      // editor's agent sidebar after Start Building. Because hasAssistantMsg
+      // becomes true, the editor will NOT auto-fire generateAgentResponse —
+      // we therefore have to create the Anderson lessons + final quiz here.
+      const baseTs = Date.now();
+      const seededTurns: ChatMessage[] = ANDERSON_CONVERSATION_TURNS.map(
+        (turn, idx) => ({
+          id: `msg_keter_${baseTs}_${idx}`,
+          role: turn.role,
+          content: turn.content,
+          timestamp: new Date(baseTs + idx).toISOString(),
+        }),
+      );
+
+      // Difficulty: experienced → intermediate (Keter wizard demo default).
+      const keterDifficulty: "beginner" | "intermediate" | "advanced" | undefined =
+        audienceLevel === "new-hire"
+          ? "beginner"
+          : audienceLevel === "experienced" || audienceLevel === "recertification"
+          ? "intermediate"
+          : undefined;
+
       const autoObjectives = generateObjectivesForTopic(topic.trim());
       const autoCategory = detectCategory(topic.trim());
-      const autoDescription = `A ${synthesisType === "micro-lesson" ? "micro-lesson" : "comprehensive training course"} covering ${topic.trim().toLowerCase()}. ${targetRole ? `Designed for ${targetRole}.` : "Suitable for all relevant personnel."}`;
+      const audienceClause =
+        targetRoles.length > 0
+          ? `Designed for ${targetRoles.join(" and ")}.`
+          : "Suitable for all relevant personnel.";
+      const autoDescription = `A ${synthesisType === "micro-lesson" ? "micro-lesson" : "comprehensive training course"} covering ${topic.trim().toLowerCase()}. ${audienceClause}`;
 
       const newCourse = createCourse({
         title: topic.trim(),
@@ -186,24 +235,169 @@ export default function GenerateCoursePage() {
         synthesisType,
         sourceIds: selectedSourceIds,
         sourceAttributions: selectedSourceTitles,
-        conversationHistory: [setupMessage],
+        conversationHistory: [setupMessage, ...seededTurns],
         suggestedSkillIds: targetSkillIds,
         metadata: {
           objectives: autoObjectives,
-          difficulty: audienceLevel === "new-hire" ? "beginner" : audienceLevel === "recertification" ? "intermediate" : undefined,
+          difficulty: keterDifficulty,
+          tags: [],
+          language: language === "English" ? "en" : language,
+          readingLevel: "standard",
         },
       });
 
-      console.log("[GENERATE] Course created:", {
+      // Pre-create the Anderson Plant Injection Molding lessons and final
+      // assessment. The Keter mock agent's generateAgentResponse returns the
+      // canonical outline regardless of input — we run it synchronously-ish
+      // (it sleeps internally; we ignore the promise's latency here because
+      // the wizard's loading screen has already animated through).
+      void generateAgentResponse({
+        userMessage: "Build this course",
+        conversationHistory: [setupMessage],
+        context: {
+          selectedSourceTitles,
+          selectedSourceIds,
+          targetSkillName: targetSkillNamesJoined,
+          targetRole: targetRoles[0],
+          synthesisType,
+          isNewCourse: true,
+          currentCourseTitle: topic.trim(),
+          currentLessonCount: 0,
+        },
+      }).then((response) => {
+        if (response.fieldUpdates) {
+          // Apply the canonical Anderson IM metadata returned by the agent.
+          // (We can't call updateCourse here because the wizard already
+          // rendered the loading screen — but doCreateCourse already wrote
+          // the title/description/etc., so we only need to merge the
+          // agent's richer values into the course via the store getter.)
+          // The editor will render whatever's in the store on mount.
+          // No-op: the lesson outline below is what matters most for demo.
+        }
+        if (response.attachedOutline && response.attachedOutline.length > 0) {
+          for (let i = 0; i < response.attachedOutline.length; i++) {
+            const gl = response.attachedOutline[i];
+            const lesson = createLesson({
+              courseId: newCourse.id,
+              title: gl.title,
+              order: i,
+              resourceIds: [],
+              sourceAttributions: gl.sourceAttributions,
+              estimatedMinutes: gl.duration,
+              lessonType: gl.contentType === "quiz" ? "assessment" : "lesson",
+            });
+
+            // ───────────────────────────────────────────────────────────────
+            // Additive sections-iteration block (Option A).
+            //
+            // Reads the Keter-only `sections` field on each KeterGeneratedLesson
+            // (populated by lib/keter/mockAIAgent.ts) and persists each
+            // section to the corresponding lesson via createResource. This
+            // block is purely additive — if `sections` is absent or empty the
+            // loop is skipped and pre-existing wizard behavior is preserved.
+            //
+            // Section schemas match types.ts:
+            //   - text                  → Resource.content (HTML, converted from MD)
+            //   - slides                → Resource.slides: Slide[]
+            //   - narrated-walkthrough  → Resource.narrationData: NarrationData
+            //   - knowledge-check       → Resource.knowledgeCheckData: KnowledgeCheckData
+            // ───────────────────────────────────────────────────────────────
+            const keterSections = (gl as { sections?: unknown }).sections;
+            if (Array.isArray(keterSections) && keterSections.length > 0) {
+              for (const section of keterSections as Array<
+                | { kind: "text"; title: string; markdown: string }
+                | { kind: "slides"; title: string; slides: import("@/types").Slide[] }
+                | { kind: "narrated-walkthrough"; title: string; narration: import("@/types").NarrationData }
+                | { kind: "knowledge-check"; title: string; check: import("@/types").KnowledgeCheckData }
+              >) {
+                if (section.kind === "text") {
+                  createResource({
+                    lessonId: lesson.id,
+                    courseId: newCourse.id,
+                    type: "text",
+                    title: section.title,
+                    content: markdownToHtml(section.markdown),
+                  });
+                } else if (section.kind === "slides") {
+                  createResource({
+                    lessonId: lesson.id,
+                    courseId: newCourse.id,
+                    type: "slides",
+                    title: section.title,
+                    slides: section.slides,
+                  });
+                } else if (section.kind === "narrated-walkthrough") {
+                  createResource({
+                    lessonId: lesson.id,
+                    courseId: newCourse.id,
+                    type: "narrated-walkthrough",
+                    title: section.title,
+                    narrationData: section.narration,
+                  });
+                } else if (section.kind === "knowledge-check") {
+                  createResource({
+                    lessonId: lesson.id,
+                    courseId: newCourse.id,
+                    type: "knowledge-check",
+                    title: section.title,
+                    knowledgeCheckData: section.check,
+                  });
+                }
+              }
+            }
+
+          }
+        }
+
+        // Course-level Final Assessment quiz. Sourced from the top-level
+        // `finalQuiz` field on the agent response (NOT a 6th outline entry),
+        // so the lesson list shows exactly the 5 content lessons and the
+        // final assessment lives only on the course Quiz tab.
+        const finalQuiz = response.finalQuiz;
+        if (finalQuiz && finalQuiz.questions && finalQuiz.questions.length > 0) {
+          const quiz = createEmptyQuizFor(newCourse.id);
+          const now = new Date().toISOString();
+          const questions = finalQuiz.questions.map((qq, qIdx) => ({
+            id: `q_keter_${baseTs}_${qIdx}`,
+            type: "mcq" as const,
+            prompt: qq.question,
+            options: qq.options.map((optText, optIdx) => ({
+              id: `opt_keter_${baseTs}_${qIdx}_${optIdx}`,
+              text: optText,
+              correct: optIdx === qq.correctIndex,
+            })),
+            explanation: qq.explanation,
+            required: true,
+            points: 1,
+            createdAt: now,
+            updatedAt: now,
+          }));
+          updateQuiz(quiz.id, {
+            title: finalQuiz.title,
+            description: finalQuiz.description,
+            questions,
+            config: {
+              passingScore: finalQuiz.passingScore,
+              shuffleQuestions: true,
+              shuffleOptions: true,
+              showRationales: true,
+            },
+          });
+        }
+      });
+
+      console.log("[GENERATE] Keter course created:", {
         id: newCourse.id,
         aiGenerated: newCourse.aiGenerated,
         status: newCourse.status,
         convHistoryLen: newCourse.conversationHistory?.length,
         sourceIds: newCourse.sourceIds,
+        targetRoles,
       });
 
       return newCourse.id;
-    } catch {
+    } catch (err) {
+      console.error("[GENERATE] Keter course creation failed:", err);
       alert("Failed to create course. Please try again.");
       setIsSubmitting(false);
       return null;
@@ -213,28 +407,15 @@ export default function GenerateCoursePage() {
   const doCreateAndRedirect = () => {
     const courseId = doCreateCourse();
     if (courseId) {
-      router.push(`/admin/courses/${courseId}/edit`);
+      router.push(`/keter/admin/courses/${courseId}/edit`);
     }
   };
 
-  const handleContinueWorking = () => {
-    router.push("/admin/courses?toast=generating");
-  };
-
-  const handleWaitHere = () => {
-    setWaitingHere(true);
-    setTimeout(() => {
-      if (createdCourseId) {
-        router.push(`/admin/courses/${createdCourseId}/edit`);
-      }
-    }, 3000);
-  };
-
   return (
-    <RouteGuard allowedRoles={["ADMIN"]}>
+    <KeterRouteGuard allowedRoles={["ADMIN"]}>
       <AdminLayout>
         {/* ═══ LOADING SCREEN ═══ */}
-        {isSubmitting && !showNarrationScreen && (
+        {isSubmitting && (
           <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
             <div className="max-w-md mx-auto text-center px-6">
               {/* Animated icon */}
@@ -293,47 +474,6 @@ export default function GenerateCoursePage() {
           </div>
         )}
 
-        {/* ═══ NARRATION RENDERING SCREEN ═══ */}
-        {isSubmitting && showNarrationScreen && (
-          <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
-            <div className="max-w-md mx-auto text-center px-6">
-              <div className="relative mb-8">
-                <div className="w-20 h-20 mx-auto bg-purple-100 rounded-2xl flex items-center justify-center animate-pulse">
-                  <Mic className="w-10 h-10 text-purple-600" />
-                </div>
-              </div>
-
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">Rendering Audio Narration</h2>
-              <p className="text-sm text-gray-500 mb-8">
-                This may take a few minutes.<br />
-                We&apos;ll notify you when it&apos;s ready.
-              </p>
-
-              {waitingHere ? (
-                <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-                  <p className="text-sm text-gray-500">Almost ready...</p>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={handleContinueWorking}
-                    className="px-5 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Continue Working &rarr;
-                  </button>
-                  <button
-                    onClick={handleWaitHere}
-                    className="px-5 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-                  >
-                    Wait Here
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ═══ FORM ═══ */}
         {!isSubmitting && (
         <div className="min-h-[calc(100vh-64px)] bg-gray-50 py-8">
@@ -341,7 +481,7 @@ export default function GenerateCoursePage() {
             {/* Header */}
             <div className="mb-8">
               <button
-                onClick={() => router.push("/admin/courses")}
+                onClick={() => router.push("/keter/admin/courses")}
                 className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors mb-4"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -408,7 +548,7 @@ export default function GenerateCoursePage() {
                     type="text"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    placeholder="e.g., Lockout/Tagout Safety, Confined Space Entry, PPE Selection..."
+                    placeholder="e.g., Injection Molding Technician Certification, Press Operations, Defect Troubleshooting..."
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-base bg-white text-gray-900 hover:border-gray-300"
                   />
                   <p className="text-xs text-gray-400 mt-1">The main subject area for the generated course.</p>
@@ -622,24 +762,50 @@ export default function GenerateCoursePage() {
               {/* ═══ STEP 2: Who's it for? ═══ */}
               {wizardStep === 2 && (
               <div className="p-6 space-y-6 animate-in fade-in duration-200">
-                {/* Target Job Title + Target Skill (side by side) */}
+                {/* Target Job Titles (multi-select) + Target Skill */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Target Job Title
+                      Target Job Titles
+                      {targetRoles.length > 0 && (
+                        <span className="text-xs font-normal text-purple-600 ml-2">
+                          {targetRoles.length} selected
+                        </span>
+                      )}
                     </label>
-                    <select
-                      value={targetRole}
-                      onChange={(e) => setTargetRole(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all text-sm bg-white text-gray-900 hover:border-gray-300"
-                    >
-                      <option value="">Any job title</option>
-                      {jobTitles.map((title) => (
-                        <option key={title} value={title}>
-                          {title}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="max-h-44 overflow-y-auto border-2 border-gray-200 rounded-lg bg-gray-50 p-2 space-y-1">
+                      {jobTitles.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-3">No job titles available</p>
+                      ) : (
+                        jobTitles.map((title) => {
+                          const checked = targetRoles.includes(title);
+                          return (
+                            <label
+                              key={title}
+                              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                                checked
+                                  ? "bg-purple-50 border border-purple-200"
+                                  : "hover:bg-white border border-transparent"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setTargetRoles((prev) =>
+                                    prev.includes(title)
+                                      ? prev.filter((r) => r !== title)
+                                      : [...prev, title],
+                                  )
+                                }
+                                className="accent-purple-600"
+                              />
+                              <span className="text-sm text-gray-700">{title}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -816,7 +982,7 @@ export default function GenerateCoursePage() {
                 {wizardStep === 1 ? (
                   <>
                     <button
-                      onClick={() => router.push("/admin/courses")}
+                      onClick={() => router.push("/keter/admin/courses")}
                       className="flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                     >
                       Cancel
@@ -855,6 +1021,6 @@ export default function GenerateCoursePage() {
         </div>
         )}
       </AdminLayout>
-    </RouteGuard>
+    </KeterRouteGuard>
   );
 }

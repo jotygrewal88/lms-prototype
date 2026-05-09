@@ -127,4 +127,78 @@ export const seedJobTitles: JobTitle[] = [
     createdAt: daysAgo(90),
     updatedAt: daysAgo(10),
   },
+
+  // ─── Keter — Anderson Plant job titles (additive; demo only) ───────────────
+  {
+    id: "jt_keter_injection_molding_operator",
+    name: "Injection Molding Operator",
+    department: "Production",
+    site: "Anderson Plant",
+    description:
+      "Operates injection molding presses on the Anderson Plant production floor. Performs startup/shutdown, monitors cycle quality, and escalates abnormal output to the shift technician.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "jt_keter_injection_molding_technician",
+    name: "Injection Molding Technician",
+    department: "Production",
+    site: "Anderson Plant",
+    description:
+      "Sets up and tunes injection molding presses, performs mold changeovers, troubleshoots cycle defects, and supports operators across the Anderson Plant production lines.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "jt_keter_maintenance_technician",
+    name: "Maintenance Technician",
+    department: "Maintenance",
+    site: "Anderson Plant",
+    description:
+      "Performs preventive and corrective maintenance on Anderson Plant production assets. Owns spare-parts pulls, lockout/tagout discipline, and first-line repairs.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "jt_keter_maintenance_planner",
+    name: "Maintenance Planner",
+    department: "Maintenance",
+    site: "Anderson Plant",
+    description:
+      "Plans preventive maintenance, schedules work orders, and manages spare-parts inventory levels to prevent stockouts on Anderson Plant critical assets.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "jt_keter_production_supervisor",
+    name: "Production Supervisor",
+    department: "Production",
+    site: "Anderson Plant",
+    description:
+      "Supervises a production shift on the Anderson Plant floor, enforces safety and quality standards, and coordinates with maintenance to keep presses running.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "jt_keter_plant_manager",
+    name: "Plant Manager",
+    department: "Operations",
+    site: "Anderson Plant",
+    description:
+      "Owns operational performance of the Anderson Plant: production output, safety, quality, and maintenance reliability.",
+    requiredSkills: [],
+    active: true,
+    createdAt: daysAgo(7),
+    updatedAt: daysAgo(1),
+  },
 ];

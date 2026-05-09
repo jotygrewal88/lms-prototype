@@ -48,6 +48,10 @@ export function getNavigationItems(role: Role): NavItem[] {
       path: "/admin/courses",
     },
     {
+      label: "Keter — Anderson",
+      path: "/keter/admin/courses",
+    },
+    {
       label: "Onboarding",
       path: "/admin/onboarding",
     },

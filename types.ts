@@ -409,6 +409,11 @@ export interface Slide {
   body: string;
   speakerNotes?: string;
   imageUrl?: string;
+  // Optional inline SVG markup (raw <svg>...</svg> string). Read only by the
+  // Keter SlideFrame, which renders it via dangerouslySetInnerHTML between the
+  // title and the body. The original Courses module's slide renderer ignores
+  // this field, so populating it on a Slide does not affect that surface.
+  diagram?: string;
 }
 
 export interface NarrationData {

@@ -22,7 +22,8 @@ import {
   Sparkles,
   Milestone,
   AlertTriangle,
-  Zap
+  Zap,
+  Factory
 } from "lucide-react";
 import { getCurrentUser, getCourses, getActiveOnboardingAssignmentCount, getOpenSignals, getPendingTrainingResponses, subscribe } from "@/lib/store";
 import { getNavigationItems } from "@/lib/permissions";
@@ -32,6 +33,7 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   "Dashboard": LayoutDashboard,
   "Analytics": BarChart3,
   "Courses": BookOpen,
+  "Keter — Anderson": Factory,
   "Library": Library,
   "Trainings": GraduationCap,
   "Compliance": ClipboardList,
