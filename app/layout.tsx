@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import BrandProvider from "@/components/BrandProvider";
 import DevSmokeTest from "@/components/DevSmokeTest";
+import InactivityWatcher from "@/components/passwordless/InactivityWatcher";
 
 export const metadata: Metadata = {
   title: "UpKeep Learn",
@@ -27,6 +28,7 @@ export default function RootLayout({
         </a>
         <BrandProvider>
           <DevSmokeTest />
+          <InactivityWatcher />
           <div id="main-content">
             {children}
           </div>

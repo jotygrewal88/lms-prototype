@@ -247,6 +247,43 @@ h2 {
   }
 }
 
+/* Passwordless welcome slip: hidden on screen, isolated full-size for print. */
+.welcome-print-root {
+  display: none;
+}
+
+@media print {
+  /* When a welcome slip preview is mounted, print ONLY the slip(s). */
+  body:has(.welcome-print-root) * {
+    visibility: hidden !important;
+  }
+  body:has(.welcome-print-root) .welcome-print-root,
+  body:has(.welcome-print-root) .welcome-print-root * {
+    visibility: visible !important;
+  }
+  body:has(.welcome-print-root) .welcome-print-root {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .welcome-slip-page {
+    break-after: page;
+    page-break-after: always;
+    display: flex;
+    justify-content: center;
+  }
+  .welcome-slip-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  @page {
+    size: letter portrait;
+    margin: 0.5in;
+  }
+}
+
 /* TipTap/ProseMirror Editor Styles */
 .ProseMirror {
   outline: none;

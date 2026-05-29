@@ -46,6 +46,21 @@ export interface User {
   departmentId?: string;
   managerId?: string;
   active: boolean;
+  // Passwordless login prototype: how this user signs in. Undefined = email (default).
+  authMethod?: "email" | "passwordless";
+  employeeId?: string;    // For passwordless learners (e.g., "EMP-1042")
+}
+
+// Passwordless login prototype: per-learner PIN/login state (admin-managed).
+export type PasswordlessStatus = "pending_first_login" | "active";
+
+export interface PasswordlessRecord {
+  userId: string;
+  employeeId: string;
+  starterPin: string;      // Admin-issued starter PIN (also re-issued on reset)
+  customPin?: string;      // PIN the learner chose during first-time setup
+  status: PasswordlessStatus;
+  lastLoginAt?: string;    // ISO timestamp; absent when pending first login
 }
 
 // Explicit access grants (for cross-team visibility beyond direct reports)

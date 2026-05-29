@@ -53,6 +53,7 @@ import {
   Shield,
 } from "lucide-react";
 import AssignCourseModal from "@/components/users/AssignCourseModal";
+import PasswordlessLearnerControls from "@/components/admin/passwordless/PasswordlessLearnerControls";
 
 type FilterTab = "all" | "in_progress" | "completed" | "overdue";
 
@@ -170,10 +171,11 @@ export default function UserProfilePage() {
         <AdminLayout>
           <div className="flex flex-col items-center justify-center h-64 gap-4">
             <AlertCircle className="w-12 h-12 text-red-500" />
-            <p className="text-gray-700 font-medium">You don't have permission to view this profile</p>
+            <p className="text-gray-700 font-medium">You don&apos;t have access to this learner</p>
+            <p className="text-sm text-gray-500">They&apos;re not on your team. Ask an admin if you need access.</p>
             <Button variant="secondary" onClick={() => router.push("/admin/users")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Users
+              Back to my team
             </Button>
           </div>
         </AdminLayout>
@@ -310,6 +312,9 @@ export default function UserProfilePage() {
               </div>
             </div>
           </Card>
+
+          {/* Passwordless login controls (admin-only, passwordless learners only) */}
+          <PasswordlessLearnerControls user={user} />
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

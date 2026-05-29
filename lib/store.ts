@@ -2,7 +2,7 @@
 // Phase II Epic 1: Extended with Course Library
 "use client";
 
-import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, CertificateTemplate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType, CourseMetadata, OrgStyleGuide, StyleAuditIssue, IgnoredLint, QuizAttempt, GradedQuestion, CoursePolicy, QuizPolicy, Skill, getFullName, LibraryItem, UserAccessGrant, UserAdditionalManager, AccessGrantRelationship } from "@/types";
+import { Organization, User, Site, Department, Training, TrainingCompletion, ReminderRule, EscalationLog, Notification, ChangeLog, AuditSnapshot, NotificationTemplate, Scope, Course, Lesson, Resource, Section, Quiz, Question, CourseAssignment, ProgressCourse, ProgressLesson, Certificate, CertificateTemplate, VersionSnapshot, AuditEvent, AiAction, VersionedEntityType, CourseMetadata, OrgStyleGuide, StyleAuditIssue, IgnoredLint, QuizAttempt, GradedQuestion, CoursePolicy, QuizPolicy, Skill, getFullName, LibraryItem, UserAccessGrant, UserAdditionalManager, AccessGrantRelationship, PasswordlessRecord } from "@/types";
 import { 
   organization as seedOrg, 
   users as seedUsers, 
@@ -32,6 +32,7 @@ import { seedRoleSkillRequirements, seedWorkContextSkillRequirements } from "@/d
 import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
 import { seedSynthesisHistory } from "@/data/seedSynthesisDrafts";
 import { lotoCourse, lotoLessons, lotoResources, lotoQuiz, lotoAssignment } from "@/data/seedLOTOCourse";
+import { passwordlessDirectory as seedPasswordlessDirectory } from "@/data/passwordlessDirectory";
 import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult, OnboardingPath, OnboardingAssignment, OrganizationProfile, OperationalSignal, ContentCurrency, SignalType, SignalSeverity, SignalStatus, TrainingResponse, TrainingResponseStatus, TrainingResponseType } from "@/types";
 import { seedJobTitles } from "@/data/seedJobTitles";
 import { seedOnboardingPaths, seedOnboardingAssignments } from "@/data/seedOnboarding";
@@ -47,6 +48,8 @@ export type { Scope };
 let currentUser: User = seedUsers[0]; // Default to Admin
 let organization: Organization = { ...seedOrg };
 const users: User[] = [...seedUsers];
+// Passwordless login prototype: admin-managed PIN / login-state directory.
+let passwordlessRecords: PasswordlessRecord[] = seedPasswordlessDirectory.map(r => ({ ...r }));
 const sites: Site[] = [...seedSites];
 const departments: Department[] = [...seedDepartments];
 let trainings: Training[] = [...seedTrainings];
@@ -518,6 +521,161 @@ export function reactivateUser(userId: string): void {
     { action: 'user_reactivate' }
   );
   
+  notifyListeners();
+}
+
+// ─── Passwordless login prototype (admin-managed) ──────────────────────────
+
+// Generate a random 6-digit starter PIN (mock).
+export function generateStarterPin(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Generate a unique-ish Employee ID like "EMP-48217" (mock).
+export function generateEmployeeId(): string {
+  let candidate = "";
+  do {
+    candidate = `EMP-${Math.floor(10000 + Math.random() * 90000)}`;
+  } while (users.some(u => u.employeeId === candidate));
+  return candidate;
+}
+
+export function isPasswordlessUser(userId: string): boolean {
+  const user = users.find(u => u.id === userId);
+  return user?.authMethod === "passwordless";
+}
+
+export function getPasswordlessRecord(userId: string): PasswordlessRecord | undefined {
+  return passwordlessRecords.find(r => r.userId === userId);
+}
+
+export function getPasswordlessRecordByEmployeeId(employeeId: string): PasswordlessRecord | undefined {
+  const target = employeeId.trim().toLowerCase();
+  return passwordlessRecords.find(r => r.employeeId.toLowerCase() === target);
+}
+
+// Create a new passwordless learner: adds the User and a directory record with
+// a system-generated starter PIN. Returns the user and the starter PIN to print.
+export function createPasswordlessLearner(input: {
+  firstName: string;
+  lastName: string;
+  employeeId: string;
+  siteId?: string;
+  departmentId?: string;
+  managerId?: string;
+  jobTitleText?: string;
+}): { user: User; starterPin: string } {
+  if (users.some(u => u.employeeId && u.employeeId.toLowerCase() === input.employeeId.trim().toLowerCase())) {
+    throw new Error(`Employee ID ${input.employeeId} is already in use`);
+  }
+
+  const id = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const newUser: User = {
+    id,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    email: "",
+    role: "LEARNER",
+    jobTitleText: input.jobTitleText?.trim() || undefined,
+    siteId: input.siteId || undefined,
+    departmentId: input.departmentId || undefined,
+    managerId: input.managerId || undefined,
+    active: true,
+    authMethod: "passwordless",
+    employeeId: input.employeeId.trim(),
+  };
+  users.push(newUser);
+
+  const starterPin = generateStarterPin();
+  passwordlessRecords.push({
+    userId: id,
+    employeeId: newUser.employeeId!,
+    starterPin,
+    status: "pending_first_login",
+  });
+
+  notifyListeners();
+  return { user: newUser, starterPin };
+}
+
+// Bulk-create passwordless learners (CSV import). Creates all rows, then
+// notifies once. Returns each created user with its generated starter PIN.
+export function bulkCreatePasswordlessLearners(
+  inputs: Array<{
+    firstName: string;
+    lastName: string;
+    employeeId: string;
+    siteId?: string;
+    departmentId?: string;
+    managerId?: string;
+    jobTitleText?: string;
+  }>
+): Array<{ user: User; starterPin: string }> {
+  const results: Array<{ user: User; starterPin: string }> = [];
+  for (const input of inputs) {
+    const id = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newUser: User = {
+      id,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      email: "",
+      role: "LEARNER",
+      jobTitleText: input.jobTitleText?.trim() || undefined,
+      siteId: input.siteId || undefined,
+      departmentId: input.departmentId || undefined,
+      managerId: input.managerId || undefined,
+      active: true,
+      authMethod: "passwordless",
+      employeeId: input.employeeId.trim(),
+    };
+    users.push(newUser);
+
+    const starterPin = generateStarterPin();
+    passwordlessRecords.push({
+      userId: id,
+      employeeId: newUser.employeeId!,
+      starterPin,
+      status: "pending_first_login",
+    });
+    results.push({ user: newUser, starterPin });
+  }
+
+  notifyListeners();
+  return results;
+}
+
+// Admin resets a learner's PIN: issues a new starter PIN, clears their custom
+// PIN, and forces first-time setup again. Returns the new starter PIN.
+export function resetLearnerPin(userId: string): string {
+  const record = passwordlessRecords.find(r => r.userId === userId);
+  if (!record) throw new Error("Passwordless record not found");
+
+  const starterPin = generateStarterPin();
+  record.starterPin = starterPin;
+  record.customPin = undefined;
+  record.status = "pending_first_login";
+  record.lastLoginAt = undefined;
+
+  notifyListeners();
+  return starterPin;
+}
+
+// Learner finished first-time setup (or changed PIN): store their chosen PIN.
+export function setLearnerCustomPin(userId: string, pin: string): void {
+  const record = passwordlessRecords.find(r => r.userId === userId);
+  if (!record) return;
+  record.customPin = pin;
+  record.status = "active";
+  record.lastLoginAt = new Date().toISOString();
+  notifyListeners();
+}
+
+// Record a successful login (updates last-login timestamp).
+export function recordLearnerLogin(userId: string): void {
+  const record = passwordlessRecords.find(r => r.userId === userId);
+  if (!record) return;
+  record.lastLoginAt = new Date().toISOString();
+  if (record.status === "pending_first_login") record.status = "active";
   notifyListeners();
 }
 

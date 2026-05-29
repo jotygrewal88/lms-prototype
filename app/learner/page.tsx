@@ -6,6 +6,7 @@ import Link from "next/link";
 import LearnerLayout from "@/components/layouts/LearnerLayout";
 import RouteGuard from "@/components/RouteGuard";
 import CourseCard from "@/components/learner/CourseCard";
+import InactivityNotice from "@/components/passwordless/InactivityNotice";
 import {
   getCurrentUser,
   getAssignedCoursesForUser,
@@ -174,6 +175,7 @@ export default function LearnerDashboard() {
     <RouteGuard allowedRoles={["LEARNER"]}>
       <LearnerLayout>
         <div className="space-y-6">
+          <InactivityNotice />
           {/* Hero Section */}
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
