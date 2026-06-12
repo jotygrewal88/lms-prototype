@@ -28,8 +28,14 @@ import {
   getJobTitleById,
   getUserSkillGapsByJobTitle,
   getActiveUserSkillRecordsByUserId,
+  getOnboardingAssignmentsByUserId,
+  getOnboardingPathById,
+  cancelOnboardingAssignment,
+  getOnboardingPermissions,
 } from "@/lib/store";
-import { User, Course, TrainingCompletion, Certificate, ProgressCourse, getFullName } from "@/types";
+import { User, Course, TrainingCompletion, Certificate, ProgressCourse, OnboardingAssignment, getFullName } from "@/types";
+import OnboardingPlanView from "@/components/onboarding/OnboardingPlanView";
+import AssignOnboardingPathModal from "@/components/users/AssignOnboardingPathModal";
 import {
   ArrowLeft,
   User as UserIcon,
@@ -51,6 +57,8 @@ import {
   Users,
   ChevronRight,
   Shield,
+  Sparkles,
+  XCircle,
 } from "lucide-react";
 import AssignCourseModal from "@/components/users/AssignCourseModal";
 import PasswordlessLearnerControls from "@/components/admin/passwordless/PasswordlessLearnerControls";
@@ -78,7 +86,10 @@ export default function UserProfilePage() {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-  
+  const [onboardingAssignments, setOnboardingAssignments] = useState<OnboardingAssignment[]>([]);
+  const [isAssignOnboardingOpen, setIsAssignOnboardingOpen] = useState(false);
+  const [cancelConfirmAssignmentId, setCancelConfirmAssignmentId] = useState<string | null>(null);
+
   const sites = getSites();
   const departments = getDepartments();
   const currentUser = getCurrentUser();
@@ -137,6 +148,7 @@ export default function UserProfilePage() {
       
       setAssignedCourses(coursesWithProgress);
       setCertificates(getCertificatesByUserId(userId));
+      setOnboardingAssignments(getOnboardingAssignmentsByUserId(userId));
     };
     
     loadData();
@@ -361,6 +373,15 @@ export default function UserProfilePage() {
               </div>
             </Card>
           </div>
+
+          {/* Onboarding Section */}
+          <OnboardingTabSection
+            user={user}
+            assignments={onboardingAssignments}
+            currentUserId={currentUser?.id || ""}
+            onOpenAssign={() => setIsAssignOnboardingOpen(true)}
+            onRequestCancel={(id) => setCancelConfirmAssignmentId(id)}
+          />
 
           {/* Assigned Courses Section */}
           <Card>
@@ -868,6 +889,31 @@ export default function UserProfilePage() {
         }}
       />
 
+      {/* Assign Onboarding Path Modal */}
+      {isAssignOnboardingOpen && (
+        <AssignOnboardingPathModal
+          user={user}
+          onClose={() => setIsAssignOnboardingOpen(false)}
+          onAssigned={(pathTitle) => {
+            setIsAssignOnboardingOpen(false);
+            setToast({ message: `Assigned "${pathTitle}" to ${getFullName(user)}.`, type: "success" });
+          }}
+        />
+      )}
+
+      {/* Cancel Onboarding Confirmation */}
+      {cancelConfirmAssignmentId && (
+        <CancelOnboardingConfirm
+          userName={getFullName(user)}
+          onConfirm={() => {
+            cancelOnboardingAssignment(cancelConfirmAssignmentId);
+            setCancelConfirmAssignmentId(null);
+            setToast({ message: "Onboarding assignment cancelled.", type: "info" });
+          }}
+          onClose={() => setCancelConfirmAssignmentId(null)}
+        />
+      )}
+
       {toast && (
         <Toast
           message={toast.message}
@@ -876,6 +922,133 @@ export default function UserProfilePage() {
         />
       )}
     </RouteGuard>
+  );
+}
+
+/* ─── Onboarding Tab Section ──────────────────────────────────────────── */
+
+function OnboardingTabSection({
+  user,
+  assignments,
+  currentUserId,
+  onOpenAssign,
+  onRequestCancel,
+}: {
+  user: User;
+  assignments: OnboardingAssignment[];
+  currentUserId: string;
+  onOpenAssign: () => void;
+  onRequestCancel: (assignmentId: string) => void;
+}) {
+  // Prefer active → completed → cancelled (whichever exists first)
+  const sorted = [...assignments].sort((a, b) => {
+    const order = { active: 0, completed: 1, cancelled: 2 } as const;
+    return order[a.status] - order[b.status];
+  });
+  const a = sorted[0];
+  const path = a ? getOnboardingPathById(a.pathId) : null;
+
+  // Permissions for the viewer:
+  //  - Admin role  → canOverride: true, canMarkTodos: true
+  //  - Direct/additional manager → canOverride: true, canMarkTodos: true
+  //  - Self viewing own admin profile → canMarkTodos only
+  const { canOverride, canMarkTodos } = getOnboardingPermissions(
+    currentUserId,
+    user.id,
+  );
+
+  return (
+    <Card>
+      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-emerald-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Onboarding</h2>
+        </div>
+        {a && a.status === "active" && canOverride && (
+          <button
+            onClick={() => onRequestCancel(a.id)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+            type="button"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            Cancel Onboarding
+          </button>
+        )}
+      </div>
+      <div className="p-6">
+        {!a || !path ? (
+          <div className="text-center py-8">
+            <Sparkles className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">
+              No onboarding path is assigned to {getFullName(user)} yet.
+            </p>
+            {canOverride && (
+              <Button
+                variant="primary"
+                onClick={onOpenAssign}
+                className="mt-3"
+              >
+                <Plus className="w-4 h-4" />
+                Assign Onboarding Path
+              </Button>
+            )}
+          </div>
+        ) : (
+          <OnboardingPlanView
+            path={path}
+            assignment={a}
+            mode="admin"
+            canMarkTodos={canMarkTodos && a.status === "active"}
+            canOverride={canOverride && a.status === "active"}
+          />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/* ─── Cancel Onboarding Confirmation ──────────────────────────────────── */
+
+function CancelOnboardingConfirm({
+  userName,
+  onConfirm,
+  onClose,
+}: {
+  userName: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl max-w-md w-full shadow-xl p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+            <XCircle className="w-5 h-5 text-red-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold text-gray-900">Cancel Onboarding?</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              This will remove <span className="font-medium">{userName}</span> from their onboarding
+              path. Their progress will be saved but they will no longer be assigned.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            Keep Assigned
+          </Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+          >
+            <XCircle className="w-4 h-4" />
+            Cancel Onboarding
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -222,7 +222,7 @@ export default function UsersPage() {
               <div className="relative">
                 <Button variant="primary" onClick={() => setAddMenuOpen((o) => !o)}>
                   <Plus className="w-4 h-4" />
-                  Add learner
+                  Add user
                   <ChevronDown className="w-4 h-4" />
                 </Button>
                 {addMenuOpen && (

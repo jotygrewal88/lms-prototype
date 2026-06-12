@@ -2,8 +2,8 @@
 // Reads REAL data from the store: job title skills, library sources
 // Groups skills by priority into phases, generates realistic courses
 
-import type { OnboardingPath, OnboardingPhase, OnboardingPhaseCourse, SkillV2, LibraryItem } from "@/types";
-import { getJobTitleById, getSkillV2ById, getLibraryItems } from "@/lib/store";
+import type { OnboardingPath, OnboardingPhase, OnboardingPhaseCourse, SkillV2, LibraryItem, Training } from "@/types";
+import { getJobTitleById, getSkillV2ById, getLibraryItems, getTrainings } from "@/lib/store";
 
 // Skill-to-source matching heuristics
 const SKILL_SOURCE_HINTS: Record<string, { keywords: string[]; regRefs: string[] }> = {
@@ -167,6 +167,79 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
   const skillsGap: string[] = [];
   const usedSourceIds = new Set<string>();
   let courseIdCounter = 0;
+  let todoCounter = 0;
+  let trainingItemCounter = 0;
+
+  // Pull the active trainings catalog — we'll pick relevant ones to link.
+  const activeTrainings = getTrainings().filter((t) => t.status === "active");
+  const usedTrainingIds = new Set<string>();
+
+  // Pick the most relevant active training for a given skill: it must grant
+  // that skill, and we shouldn't link the same training twice within one path.
+  function pickTrainingForSkill(skillId: string): Training | undefined {
+    return activeTrainings.find(
+      (t) =>
+        !usedTrainingIds.has(t.id) &&
+        (t.skillsGranted || []).some((s) => s.skillId === skillId),
+    );
+  }
+
+  // Pick a "generic" training (orientation-style) by tag/title keywords.
+  function pickTrainingByKeyword(keywords: string[]): Training | undefined {
+    return activeTrainings.find((t) => {
+      if (usedTrainingIds.has(t.id)) return false;
+      const text = `${t.title} ${t.description || ""} ${(t.tags || []).join(" ")}`.toLowerCase();
+      return keywords.some((kw) => text.includes(kw));
+    });
+  }
+
+  // Build a phase item linked to a real Training. Mirrors addOnboardingTraining
+  // in the store so view + edit modes treat it as a proper linked-training item.
+  function buildTrainingItem(training: Training): OnboardingPhaseCourse {
+    trainingItemCounter++;
+    usedTrainingIds.add(training.id);
+    const grants = (training.skillsGranted || []).map((s) => s.skillId);
+    // Mark these as covered too — the AI is committing to deliver them.
+    for (const sid of grants) {
+      if (!skillsCovered.includes(sid)) skillsCovered.push(sid);
+    }
+    return {
+      id: `gen_tr_${trainingItemCounter}`,
+      kind: "training",
+      title: training.title,
+      category: training.category || "",
+      estimatedMinutes: 60,
+      skillsGranted: grants,
+      sourceAttributions: [],
+      lessons: [],
+      linkedTrainingId: training.id,
+    };
+  }
+
+  // Build a "to-do" phase item — a manual task outside the LMS (HR sign-in,
+  // shadowing, manager 1:1s, etc.). Real onboarding paths always mix these
+  // with formal courses, so we sprinkle them through every phase.
+  function buildTodo(
+    title: string,
+    minutes: number,
+    note: string,
+  ): OnboardingPhaseCourse {
+    todoCounter++;
+    return {
+      id: `gen_t_${todoCounter}`,
+      kind: "todo",
+      title,
+      category: "",
+      estimatedMinutes: minutes,
+      skillsGranted: [],
+      sourceAttributions: [],
+      lessons: [],
+      todoNote: note,
+    };
+  }
+
+  const roleLabel = jt.name;
+  const siteLabel = jt.site && jt.site !== "All Sites" ? jt.site : "the site";
 
   function buildCourse(skillId: string): OnboardingPhaseCourse | null {
     const skill = getSkillV2ById(skillId);
@@ -198,7 +271,8 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
       skillsGranted: [skillId],
       sourceAttributions: matchedSources,
       passingScore: isCert ? 85 : undefined,
-      lessons: lessons.map((l) => ({
+      lessons: lessons.map((l, li) => ({
+        id: `gen_l_${courseIdCounter}_${li}`,
         title: l.title,
         estimatedMinutes: l.min,
         isAssessment: l.isAssessment,
@@ -213,6 +287,25 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
 
   // Phase 1: Safety Orientation (Day 1) -- always present
   const phase1Courses: OnboardingPhaseCourse[] = [];
+
+  // Day-1 to-dos: every new hire does these regardless of role.
+  phase1Courses.push(
+    buildTodo(
+      "Sign in with HR and complete new-hire paperwork",
+      30,
+      "Bring two forms of ID. HR will walk you through the I-9, direct deposit, emergency contacts, and benefits enrollment.",
+    ),
+    buildTodo(
+      "Pick up your badge, hard hat, and PPE from facilities",
+      15,
+      `Stop by the facilities office at ${siteLabel}. They'll issue your access badge, hi-vis vest, hard hat, safety glasses, and a steel-toe boot voucher.`,
+    ),
+    buildTodo(
+      "Facility walkthrough with your supervisor",
+      30,
+      "Walk every production floor, the maintenance shop, and all emergency exits. Note the locations of eyewash stations, AEDs, fire extinguishers, and your muster point.",
+    ),
+  );
 
   // Add a general orientation course
   phaseCounter++;
@@ -233,9 +326,9 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
     skillsGranted: [],
     sourceAttributions: orientationSources.slice(0, 3),
     lessons: [
-      { title: "Hazard Recognition & Risk Assessment", estimatedMinutes: 15, isAssessment: false },
-      { title: "Personal Protective Equipment", estimatedMinutes: 15, isAssessment: false },
-      { title: "Safety Awareness Assessment", estimatedMinutes: 15, isAssessment: true },
+      { id: `gen_l_${courseIdCounter}_0`, title: "Hazard Recognition & Risk Assessment", estimatedMinutes: 15, isAssessment: false },
+      { id: `gen_l_${courseIdCounter}_1`, title: "Personal Protective Equipment", estimatedMinutes: 15, isAssessment: false },
+      { id: `gen_l_${courseIdCounter}_2`, title: "Safety Awareness Assessment", estimatedMinutes: 15, isAssessment: true },
     ],
   });
 
@@ -245,6 +338,12 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
     const faCourse = buildCourse("skl_first_aid");
     if (faCourse) phase1Courses.push(faCourse);
   }
+
+  // Day-1 hands-on training: PPE walkthrough (or similar orientation training)
+  const ppeTraining =
+    pickTrainingByKeyword(["ppe", "personal protective"]) ||
+    pickTrainingByKeyword(["orientation", "safety fundamentals"]);
+  if (ppeTraining) phase1Courses.push(buildTrainingItem(ppeTraining));
 
   phases.push({
     id: `gen_ph_${phaseCounter}`,
@@ -261,12 +360,35 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
   for (const req of critical) {
     if (req.skillId === "skl_first_aid") continue; // already in Phase 1
     const course = buildCourse(req.skillId);
-    if (course) criticalCourses.push(course);
-    else skillsGap.push(req.skillId);
+    if (course) {
+      criticalCourses.push(course);
+      continue;
+    }
+    // No course template exists — try to fill with a real Training instead.
+    const tr = pickTrainingForSkill(req.skillId);
+    if (tr) {
+      criticalCourses.push(buildTrainingItem(tr));
+    } else {
+      skillsGap.push(req.skillId);
+    }
   }
 
   if (criticalCourses.length > 0) {
     phaseCounter++;
+    // Add real-world to-dos that complement the certification courses
+    const phase2Items: OnboardingPhaseCourse[] = [
+      buildTodo(
+        `Shadow a senior ${roleLabel} on a full shift`,
+        120,
+        "Spend at least 2 hours observing how a tenured teammate runs the job — how they document work, hand off shifts, and escalate issues. Bring questions.",
+      ),
+      buildTodo(
+        "1:1 introductions with adjacent department leads",
+        60,
+        "Schedule 15-minute intros with the leads you'll work with most often. Ask each about their top pain point this quarter — that's where you can add value fast.",
+      ),
+      ...criticalCourses,
+    ];
     phases.push({
       id: `gen_ph_${phaseCounter}`,
       name: "Core Safety Certifications",
@@ -274,7 +396,7 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
       timeline: "Week 1",
       dayStart: 2,
       dayEnd: 7,
-      courses: criticalCourses,
+      courses: phase2Items,
     });
   }
 
@@ -283,13 +405,29 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
   for (const req of high) {
     if (skillsCovered.includes(req.skillId)) continue;
     const course = buildCourse(req.skillId);
-    if (course) highCourses.push(course);
-    else skillsGap.push(req.skillId);
+    if (course) {
+      highCourses.push(course);
+      continue;
+    }
+    const tr = pickTrainingForSkill(req.skillId);
+    if (tr) {
+      highCourses.push(buildTrainingItem(tr));
+    } else {
+      skillsGap.push(req.skillId);
+    }
   }
 
   if (highCourses.length > 0) {
     phaseCounter++;
     const isShortPath = totalSkills <= 4;
+    const phase3Items: OnboardingPhaseCourse[] = [
+      buildTodo(
+        "Hands-on equipment walkdown with your mentor",
+        120,
+        "Your mentor will walk you through 2-3 pieces of equipment end-to-end. Bring a notebook — write down model numbers, common failure modes, and the tools you'd grab for each task.",
+      ),
+      ...highCourses,
+    ];
     phases.push({
       id: `gen_ph_${phaseCounter}`,
       name: "Equipment & Role-Specific Training",
@@ -297,7 +435,7 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
       timeline: isShortPath ? "Week 2" : "Week 2-3",
       dayStart: 8,
       dayEnd: isShortPath ? 14 : 21,
-      courses: highCourses,
+      courses: phase3Items,
     });
   }
 
@@ -307,9 +445,23 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
     if (skillsCovered.includes(req.skillId)) continue;
     if (!req.required && req.priority === "low") continue; // skip optional low-priority
     const course = buildCourse(req.skillId);
-    if (course) medLowCourses.push(course);
-    else skillsGap.push(req.skillId);
+    if (course) {
+      medLowCourses.push(course);
+      continue;
+    }
+    const tr = pickTrainingForSkill(req.skillId);
+    if (tr) {
+      medLowCourses.push(buildTrainingItem(tr));
+    } else {
+      skillsGap.push(req.skillId);
+    }
   }
+
+  // Always wrap up with a fire-safety / emergency drill training before the
+  // completion review — every facility runs one of these.
+  const fireTraining =
+    pickTrainingByKeyword(["fire", "emergency", "evacuation"]);
+  if (fireTraining) medLowCourses.push(buildTrainingItem(fireTraining));
 
   // Always add completion review
   courseIdCounter++;
@@ -321,13 +473,26 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
     skillsGranted: [],
     sourceAttributions: [],
     lessons: [
-      { title: "Comprehensive Onboarding Review Assessment", estimatedMinutes: 30, isAssessment: true },
+      { id: `gen_l_${courseIdCounter}_0`, title: "Comprehensive Onboarding Review Assessment", estimatedMinutes: 30, isAssessment: true },
     ],
   });
 
   if (medLowCourses.length > 0) {
     phaseCounter++;
     const isShortPath = totalSkills <= 4;
+    const phase4Items: OnboardingPhaseCourse[] = [
+      ...medLowCourses,
+      buildTodo(
+        "30-day check-in with your manager",
+        30,
+        "Reflect on what's clicking and what isn't. Align on 60- and 90-day goals, and confirm any certification renewals are scheduled in the system.",
+      ),
+      buildTodo(
+        "Submit your first independent piece of work",
+        45,
+        "Complete and document a real piece of work without your mentor present — exactly as you'd be expected to operate going forward.",
+      ),
+    ];
     phases.push({
       id: `gen_ph_${phaseCounter}`,
       name: "Compliance & Completion",
@@ -335,7 +500,7 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
       timeline: isShortPath ? "Week 2" : "Week 4",
       dayStart: isShortPath ? 8 : 22,
       dayEnd: isShortPath ? 14 : 30,
-      courses: medLowCourses,
+      courses: phase4Items,
     });
   }
 
@@ -363,7 +528,7 @@ export async function generateOnboardingPath(input: GenerateInput): Promise<Omit
     totalEstimatedMinutes,
     phases,
     skillsCovered,
-    skillsGap: [...new Set(skillsGap)],
+    skillsGap: [...new Set(skillsGap)].filter((s) => !skillsCovered.includes(s)),
     confidenceScore: confidence,
     sourceIds: [...usedSourceIds],
     additionalInstructions: input.additionalInstructions,

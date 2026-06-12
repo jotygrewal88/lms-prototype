@@ -1080,15 +1080,34 @@ export interface UserSkillGapResult {
 
 export type OnboardingPathStatus = "draft" | "published" | "archived";
 
+// "course"   = links to a real Course in the Upkeep Learn library (or legacy embedded course)
+// "training" = links to a Training record in the trainings module (can be external,
+//              in-person, third-party, etc.)
+// "todo"     = manual to-do item outside the LMS (e.g. "Pick up badge from facilities")
+export type OnboardingPhaseItemKind = "course" | "training" | "todo";
+
 export interface OnboardingPhaseCourse {
   id: string;
+  kind?: OnboardingPhaseItemKind; // defaults to "course" for legacy items
   title: string;
   category: string;
   estimatedMinutes: number;
   skillsGranted: string[];
   sourceAttributions: string[];
   passingScore?: number;
-  lessons: { title: string; estimatedMinutes: number; isAssessment: boolean }[];
+  lessons: { id: string; title: string; estimatedMinutes: number; isAssessment?: boolean }[];
+
+  // For kind === "course": optional link to a real Course in the library.
+  // When present, title/estimatedMinutes/skillsGranted should be treated as a
+  // cache of the linked course's data.
+  linkedCourseId?: string;
+
+  // For kind === "training": link to a Training record in the trainings module.
+  // Like linkedCourseId, the title/skills/etc. are a cache of the linked training.
+  linkedTrainingId?: string;
+
+  // For kind === "todo": free-form note shown under the title.
+  todoNote?: string;
 }
 
 export interface OnboardingPhase {
@@ -1139,6 +1158,10 @@ export interface OnboardingAssignment extends Timestamped {
   }[];
   skillsEarned: string[];
   assignedByUserId: string;
+  // Per-item completion state for "to-do" phase items (the only item kind a
+  // learner can manually check off). Courses and trainings derive their status
+  // from real ProgressCourse / TrainingCompletion records instead.
+  todoCompletions?: { phaseId: string; itemId: string; completedAt: string }[];
 }
 
 // ============================================================================

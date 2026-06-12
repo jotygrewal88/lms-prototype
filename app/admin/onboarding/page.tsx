@@ -8,9 +8,12 @@ import RouteGuard from "@/components/RouteGuard";
 import Button from "@/components/Button";
 import { subscribe, getJobTitles, getOnboardingPaths } from "@/lib/store";
 import PathsTab from "@/components/admin/onboarding/PathsTab";
+import AssignmentsTab from "@/components/admin/onboarding/AssignmentsTab";
 import GenerateWizard from "@/components/admin/onboarding/GenerateWizard";
 import PathPreview from "@/components/admin/onboarding/PathPreview";
 import BatchGenerateModal from "@/components/admin/onboarding/BatchGenerateModal";
+
+type OnboardingTab = "paths" | "assignments";
 
 function OnboardingPageInner() {
   const router = useRouter();
@@ -19,10 +22,14 @@ function OnboardingPageInner() {
   const actionParam = searchParams.get("action");
   const jobTitleIdParam = searchParams.get("jobTitleId");
   const previewParam = searchParams.get("preview");
+  const tabParam = searchParams.get("tab");
 
   const [showWizard, setShowWizard] = useState(actionParam === "generate");
   const [previewPathId, setPreviewPathId] = useState<string | null>(previewParam || null);
   const [showBatchGenerate, setShowBatchGenerate] = useState(false);
+  const [activeTab, setActiveTab] = useState<OnboardingTab>(
+    tabParam === "assignments" ? "assignments" : "paths",
+  );
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -32,7 +39,19 @@ function OnboardingPageInner() {
   useEffect(() => {
     if (actionParam === "generate") setShowWizard(true);
     if (previewParam) setPreviewPathId(previewParam);
-  }, [actionParam, previewParam]);
+    if (tabParam === "assignments" || tabParam === "paths") {
+      setActiveTab(tabParam as OnboardingTab);
+    }
+  }, [actionParam, previewParam, tabParam]);
+
+  const switchTab = useCallback(
+    (tab: OnboardingTab) => {
+      setActiveTab(tab);
+      const url = tab === "assignments" ? `/admin/onboarding?tab=assignments` : `/admin/onboarding`;
+      router.replace(url, { scroll: false });
+    },
+    [router],
+  );
 
   const openWizard = useCallback(
     (jtId?: string) => {
@@ -104,17 +123,53 @@ function OnboardingPageInner() {
               <h1 className="text-3xl font-bold text-gray-900">Onboarding</h1>
               <p className="text-gray-500 mt-1">Create and manage onboarding programs for new hires</p>
             </div>
-            <Button variant="primary" onClick={() => openWizard()} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Generate New Path
-            </Button>
+            {activeTab === "paths" && (
+              <Button
+                variant="primary"
+                onClick={() => openWizard()}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Generate New Path
+              </Button>
+            )}
           </div>
 
-          <PathsTab
-            onGenerate={openWizard}
-            onPreview={openPreview}
-            onBatchGenerate={() => setShowBatchGenerate(true)}
-          />
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 mb-6">
+            <button
+              type="button"
+              onClick={() => switchTab("paths")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === "paths"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Paths
+            </button>
+            <button
+              type="button"
+              onClick={() => switchTab("assignments")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === "assignments"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Assignments
+            </button>
+          </div>
+
+          {activeTab === "paths" ? (
+            <PathsTab
+              onGenerate={openWizard}
+              onPreview={openPreview}
+              onBatchGenerate={() => setShowBatchGenerate(true)}
+            />
+          ) : (
+            <AssignmentsTab />
+          )}
         </div>
 
         {showBatchGenerate && (

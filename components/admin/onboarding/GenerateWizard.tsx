@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import {
   Search,
   ChevronDown,
+  ChevronRight,
   AlertTriangle,
   CheckCircle2,
   ArrowLeft,
@@ -11,6 +12,15 @@ import {
   Rocket,
   Loader2,
   Info,
+  Book,
+  GraduationCap,
+  ClipboardList,
+  Sparkles,
+  Link2,
+  Repeat,
+  X,
+  Save,
+  Lightbulb,
 } from "lucide-react";
 import Button from "@/components/Button";
 import {
@@ -22,9 +32,31 @@ import {
   getOnboardingPaths,
   createOnboardingPath,
   getOrganizationProfile,
+  getCourses,
+  getTrainings,
 } from "@/lib/store";
 import { generateOnboardingPath } from "@/lib/mockOnboardingGenerator";
-import type { JobTitle, SkillV2, LibraryItem } from "@/types";
+import {
+  suggestMatches,
+  searchCandidates,
+  confidenceLabel,
+  CONFIDENCE_THRESHOLD,
+  type MatchCandidate,
+} from "@/lib/onboardingMatchSuggester";
+import type { JobTitle, OnboardingPath, OnboardingPhaseCourse } from "@/types";
+
+// What the user has decided for each phase item.
+// Absence in the map = no decision yet (generator's link still in effect).
+interface ItemDecision {
+  linkedCourseId?: string;
+  linkedTrainingId?: string;
+  linkedTitle?: string;
+  // When set, the user explicitly asked to leave this unlinked (overrides any
+  // pre-existing generator link).
+  cleared?: boolean;
+}
+
+type GeneratedDraft = Omit<OnboardingPath, "id" | "createdAt" | "updatedAt">;
 
 const PRIORITY_COLORS: Record<string, { dot: string; bg: string; label: string }> = {
   critical: { dot: "bg-red-500", bg: "bg-red-50 text-red-700", label: "Critical" },
@@ -59,6 +91,12 @@ export default function GenerateWizard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const hasCompleted = useRef(false);
+  // Step 4 state — populated after generation.
+  const [generatedDraft, setGeneratedDraft] = useState<GeneratedDraft | null>(null);
+  const [itemDecisions, setItemDecisions] = useState<Map<string, ItemDecision>>(new Map());
+  const [expandedPhaseIds, setExpandedPhaseIds] = useState<Set<string>>(new Set());
+  const [swapPickerItem, setSwapPickerItem] = useState<OnboardingPhaseCourse | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const allJTs = getJobTitles().filter((jt) => jt.active);
   const allSkills = getActiveSkillsV2();
@@ -197,14 +235,65 @@ export default function GenerateWizard({
         additionalInstructions: additionalInstructions.trim() || undefined,
       });
       clearInterval(interval);
-      const created = createOnboardingPath(result);
-      if (!hasCompleted.current) {
-        hasCompleted.current = true;
-        onComplete(created.id);
-      }
+      // Don't save yet — show the review step so admins can accept/swap
+      // suggested course/training matches before committing.
+      setGeneratedDraft(result);
+      setExpandedPhaseIds(new Set(result.phases.map((p) => p.id)));
+      setItemDecisions(new Map());
+      setIsGenerating(false);
+      setStep(4);
     } catch {
       clearInterval(interval);
       setIsGenerating(false);
+    }
+  };
+
+  // Save the path after the admin has reviewed suggested matches in Step 4.
+  // Applies each ItemDecision to the corresponding item before persisting.
+  const handleSaveReviewed = () => {
+    if (!generatedDraft) return;
+    setIsSaving(true);
+    const finalDraft: GeneratedDraft = {
+      ...generatedDraft,
+      phases: generatedDraft.phases.map((ph) => ({
+        ...ph,
+        courses: ph.courses.map((item) => {
+          const decision = itemDecisions.get(item.id);
+          if (!decision) return item;
+          // Explicit unlink wins.
+          if (decision.cleared) {
+            return {
+              ...item,
+              linkedCourseId: undefined,
+              linkedTrainingId: undefined,
+            };
+          }
+          if (decision.linkedCourseId) {
+            return {
+              ...item,
+              kind: "course",
+              title: decision.linkedTitle || item.title,
+              linkedCourseId: decision.linkedCourseId,
+              linkedTrainingId: undefined,
+            };
+          }
+          if (decision.linkedTrainingId) {
+            return {
+              ...item,
+              kind: "training",
+              title: decision.linkedTitle || item.title,
+              linkedCourseId: undefined,
+              linkedTrainingId: decision.linkedTrainingId,
+            };
+          }
+          return item;
+        }),
+      })),
+    };
+    const created = createOnboardingPath(finalDraft);
+    if (!hasCompleted.current) {
+      hasCompleted.current = true;
+      onComplete(created.id);
     }
   };
 
@@ -243,12 +332,12 @@ export default function GenerateWizard({
       {/* Stepper header */}
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-lg font-semibold text-gray-900">Generate Onboarding Path</h2>
-        <span className="text-sm text-gray-500">Step {step} of 3</span>
+        <span className="text-sm text-gray-500">Step {step} of 4</span>
       </div>
 
       {/* Step indicators */}
       <div className="flex items-center gap-2 mb-8">
-        {[1, 2, 3].map((s) => (
+        {[1, 2, 3, 4].map((s) => (
           <div key={s} className="flex items-center gap-2 flex-1">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -261,7 +350,7 @@ export default function GenerateWizard({
             >
               {s < step ? <CheckCircle2 className="w-4 h-4" /> : s}
             </div>
-            {s < 3 && (
+            {s < 4 && (
               <div className={`flex-1 h-0.5 ${s < step ? "bg-emerald-200" : "bg-gray-200"}`} />
             )}
           </div>
@@ -544,6 +633,735 @@ export default function GenerateWizard({
           </div>
         </div>
       )}
+
+      {/* ─── STEP 4: Review AI Suggestions ─── */}
+      {step === 4 && generatedDraft && (
+        <ReviewMatchesStep
+          draft={generatedDraft}
+          itemDecisions={itemDecisions}
+          setItemDecisions={setItemDecisions}
+          expandedPhaseIds={expandedPhaseIds}
+          setExpandedPhaseIds={setExpandedPhaseIds}
+          onOpenPicker={setSwapPickerItem}
+          onBack={() => {
+            setStep(3);
+            setGeneratedDraft(null);
+          }}
+          onCancel={onCancel}
+          onSave={handleSaveReviewed}
+          isSaving={isSaving}
+        />
+      )}
+
+      {/* Swap picker modal */}
+      {swapPickerItem && generatedDraft && (
+        <SwapPickerModal
+          item={swapPickerItem}
+          draft={generatedDraft}
+          itemDecisions={itemDecisions}
+          onClose={() => setSwapPickerItem(null)}
+          onPick={(candidate) => {
+            setItemDecisions((prev) => {
+              const next = new Map(prev);
+              next.set(swapPickerItem.id, {
+                cleared: false,
+                linkedCourseId: candidate.kind === "course" ? candidate.id : undefined,
+                linkedTrainingId: candidate.kind === "training" ? candidate.id : undefined,
+                linkedTitle: candidate.title,
+              });
+              return next;
+            });
+            setSwapPickerItem(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Step 4: Review Matches ────────────────────────────────────────────── */
+
+interface ReviewStepProps {
+  draft: GeneratedDraft;
+  itemDecisions: Map<string, ItemDecision>;
+  setItemDecisions: React.Dispatch<React.SetStateAction<Map<string, ItemDecision>>>;
+  expandedPhaseIds: Set<string>;
+  setExpandedPhaseIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onOpenPicker: (item: OnboardingPhaseCourse) => void;
+  onBack: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+  isSaving: boolean;
+}
+
+function ReviewMatchesStep({
+  draft,
+  itemDecisions,
+  setItemDecisions,
+  expandedPhaseIds,
+  setExpandedPhaseIds,
+  onOpenPicker,
+  onBack,
+  onCancel,
+  onSave,
+  isSaving,
+}: ReviewStepProps) {
+  const publishedCourses = useMemo(
+    () => getCourses().filter((c) => c.status === "published"),
+    []
+  );
+  const activeTrainings = useMemo(
+    () => getTrainings().filter((t) => t.status === "active"),
+    []
+  );
+
+  // Resolve the committed link for an item:
+  //  decision.cleared → unlinked
+  //  decision with id → uses decision values
+  //  no decision → uses generator's pre-linked values (if any)
+  const resolveLink = (item: OnboardingPhaseCourse): {
+    linkedCourseId?: string;
+    linkedTrainingId?: string;
+    linkedTitle?: string;
+  } => {
+    const decision = itemDecisions.get(item.id);
+    if (decision) {
+      if (decision.cleared) return {};
+      return decision;
+    }
+    return {
+      linkedCourseId: item.linkedCourseId,
+      linkedTrainingId: item.linkedTrainingId,
+      linkedTitle: item.title,
+    };
+  };
+
+  // Build the global "in-use" exclusion sets so suggestions don't repeat.
+  const { usedCourseIds, usedTrainingIds } = useMemo(() => {
+    const courses = new Set<string>();
+    const trainings = new Set<string>();
+    for (const ph of draft.phases) {
+      for (const item of ph.courses) {
+        const link = resolveLink(item);
+        if (link.linkedCourseId) courses.add(link.linkedCourseId);
+        if (link.linkedTrainingId) trainings.add(link.linkedTrainingId);
+      }
+    }
+    return { usedCourseIds: courses, usedTrainingIds: trainings };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, itemDecisions]);
+
+  // Lookups for displaying linked titles when only IDs are known.
+  const courseById = useMemo(() => {
+    const m = new Map<string, string>();
+    publishedCourses.forEach((c) => m.set(c.id, c.title));
+    return m;
+  }, [publishedCourses]);
+  const trainingById = useMemo(() => {
+    const m = new Map<string, string>();
+    activeTrainings.forEach((t) => m.set(t.id, t.title));
+    return m;
+  }, [activeTrainings]);
+
+  // Summary counts
+  const allNonTodoItems = draft.phases.flatMap((p) =>
+    p.courses.filter((c) => c.kind !== "todo")
+  );
+  const linkedCount = allNonTodoItems.filter((item) => {
+    const l = resolveLink(item);
+    return Boolean(l.linkedCourseId || l.linkedTrainingId);
+  }).length;
+  const placeholderCount = allNonTodoItems.length - linkedCount;
+
+  const togglePhase = (id: string) => {
+    setExpandedPhaseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const acceptSuggestion = (item: OnboardingPhaseCourse, candidate: MatchCandidate) => {
+    setItemDecisions((prev) => {
+      const next = new Map(prev);
+      next.set(item.id, {
+        cleared: false,
+        linkedCourseId: candidate.kind === "course" ? candidate.id : undefined,
+        linkedTrainingId: candidate.kind === "training" ? candidate.id : undefined,
+        linkedTitle: candidate.title,
+      });
+      return next;
+    });
+  };
+
+  const clearLink = (item: OnboardingPhaseCourse) => {
+    setItemDecisions((prev) => {
+      const next = new Map(prev);
+      next.set(item.id, { cleared: true });
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header summary */}
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+        <div className="flex items-start gap-3">
+          <Sparkles className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-emerald-900">
+              Review and match real content to each item
+            </h3>
+            <p className="text-xs text-emerald-800 mt-1">
+              We&apos;ve searched your library and trainings module for the best match for each AI-generated
+              slot. Accept the suggestion, swap to a different record, or leave it as a placeholder you&apos;ll
+              build later. To-dos don&apos;t need linking.
+            </p>
+            <div className="flex items-center gap-4 mt-3 text-xs">
+              <span className="flex items-center gap-1.5 text-emerald-800">
+                <Link2 className="w-3.5 h-3.5" />
+                <span className="font-semibold">{linkedCount}</span> linked
+              </span>
+              <span className="flex items-center gap-1.5 text-amber-700">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span className="font-semibold">{placeholderCount}</span> placeholder
+                {placeholderCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Phases */}
+      <div className="space-y-3">
+        {draft.phases.map((phase, phaseIdx) => {
+          const isExpanded = expandedPhaseIds.has(phase.id);
+          const items = phase.courses;
+          const phaseLinked = items.filter((item) => {
+            if (item.kind === "todo") return false;
+            const l = resolveLink(item);
+            return Boolean(l.linkedCourseId || l.linkedTrainingId);
+          }).length;
+          const phaseTotal = items.filter((i) => i.kind !== "todo").length;
+          return (
+            <div key={phase.id} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+              <button
+                type="button"
+                onClick={() => togglePhase(phase.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-gray-500">
+                      Phase {phaseIdx + 1}
+                    </span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{phase.timeline}</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 mt-0.5">{phase.name}</h4>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500">
+                    {items.length} item{items.length === 1 ? "" : "s"}
+                  </span>
+                  {phaseTotal > 0 && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-medium ${
+                        phaseLinked === phaseTotal
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {phaseLinked}/{phaseTotal} linked
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="divide-y divide-gray-100 border-t border-gray-100">
+                  {items.map((item) => (
+                    <ReviewItemRow
+                      key={item.id}
+                      item={item}
+                      committedLink={resolveLink(item)}
+                      publishedCourses={publishedCourses}
+                      activeTrainings={activeTrainings}
+                      excluded={{
+                        // Exclude every used record EXCEPT this item's own commit
+                        // (so it can keep its current link as the suggestion).
+                        courseIds: new Set(
+                          [...usedCourseIds].filter(
+                            (id) => id !== resolveLink(item).linkedCourseId,
+                          ),
+                        ),
+                        trainingIds: new Set(
+                          [...usedTrainingIds].filter(
+                            (id) => id !== resolveLink(item).linkedTrainingId,
+                          ),
+                        ),
+                      }}
+                      courseById={courseById}
+                      trainingById={trainingById}
+                      onAccept={(cand) => acceptSuggestion(item, cand)}
+                      onSwap={() => onOpenPicker(item)}
+                      onClear={() => clearLink(item)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+        <Button variant="secondary" onClick={onBack} disabled={isSaving}>
+          <ArrowLeft className="w-4 h-4" />
+          Regenerate
+        </Button>
+        <Button variant="secondary" onClick={onCancel} disabled={isSaving}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" /> Save Path
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Step 4: One item row ──────────────────────────────────────────────── */
+
+interface ReviewItemRowProps {
+  item: OnboardingPhaseCourse;
+  committedLink: { linkedCourseId?: string; linkedTrainingId?: string; linkedTitle?: string };
+  publishedCourses: ReturnType<typeof getCourses>;
+  activeTrainings: ReturnType<typeof getTrainings>;
+  excluded: { courseIds: Set<string>; trainingIds: Set<string> };
+  courseById: Map<string, string>;
+  trainingById: Map<string, string>;
+  onAccept: (candidate: MatchCandidate) => void;
+  onSwap: () => void;
+  onClear: () => void;
+}
+
+function ReviewItemRow({
+  item,
+  committedLink,
+  publishedCourses,
+  activeTrainings,
+  excluded,
+  courseById,
+  trainingById,
+  onAccept,
+  onSwap,
+  onClear,
+}: ReviewItemRowProps) {
+  // Suggestion regardless of current state (so we always have something to
+  // recommend if the admin clears the current link).
+  const matches = useMemo(
+    () => suggestMatches(item, publishedCourses, activeTrainings, excluded),
+    [item, publishedCourses, activeTrainings, excluded],
+  );
+
+  const isTodo = item.kind === "todo";
+  const isCommitted = Boolean(
+    committedLink.linkedCourseId || committedLink.linkedTrainingId,
+  );
+
+  // Visual kind for the row icon (matches PathPreview's icon mapping).
+  const renderKindIcon = () => {
+    if (isTodo) return <ClipboardList className="w-4 h-4 text-violet-500" />;
+    // Use whatever the item resolves to today
+    if (committedLink.linkedTrainingId) {
+      return <GraduationCap className="w-4 h-4 text-emerald-600" />;
+    }
+    return <Book className="w-4 h-4 text-blue-500" />;
+  };
+
+  if (isTodo) {
+    return (
+      <div className="px-4 py-3 bg-violet-50/30 flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">{renderKindIcon()}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-900">{item.title}</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 bg-violet-100 rounded">
+              <ClipboardList className="w-2.5 h-2.5" />
+              To-Do
+            </span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 bg-emerald-100 rounded">
+              <CheckCircle2 className="w-2.5 h-2.5" />
+              Confirmed
+            </span>
+          </div>
+          {item.todoNote && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.todoNote}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Resolved title of the currently committed record (for the "Linked" pill).
+  const committedTitle = committedLink.linkedCourseId
+    ? courseById.get(committedLink.linkedCourseId) || committedLink.linkedTitle || item.title
+    : committedLink.linkedTrainingId
+    ? trainingById.get(committedLink.linkedTrainingId) || committedLink.linkedTitle || item.title
+    : null;
+
+  // Was the generator's link a Training-as-fallback (no course existed in the
+  // library to cover this skill)? We detect it by: original item was a training,
+  // and the suggester didn't find a course alternative.
+  const isFallbackTraining =
+    item.kind === "training" &&
+    !matches.viable.some((c) => c.kind === "course");
+  // Course alternative for training-kind items.
+  const courseAlternative =
+    item.kind === "training" ? matches.viable.find((c) => c.kind === "course") : null;
+
+  return (
+    <div className="px-4 py-3 flex items-start gap-3">
+      <div className="flex-shrink-0 mt-0.5">{renderKindIcon()}</div>
+      <div className="flex-1 min-w-0">
+        {/* Title row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-900">{item.title}</span>
+              {isCommitted && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-100 rounded">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  Linked
+                </span>
+              )}
+              {!isCommitted && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded">
+                  Placeholder
+                </span>
+              )}
+            </div>
+            {item.skillsGranted.length > 0 && (
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Skills: {item.skillsGranted.join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Committed state */}
+        {isCommitted && committedTitle && (
+          <div className="mt-2 rounded border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 min-w-0">
+                {committedLink.linkedCourseId ? (
+                  <Book className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                ) : (
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                )}
+                <span className="text-xs text-gray-700 truncate">
+                  Linked to <span className="font-medium text-gray-900">{committedTitle}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onSwap}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  <Repeat className="w-3 h-3" /> Swap
+                </button>
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-600 hover:text-red-600"
+                  title="Leave as placeholder (no link)"
+                >
+                  <X className="w-3 h-3" /> Unlink
+                </button>
+              </div>
+            </div>
+
+            {/* Course alternative callout for fallback trainings */}
+            {item.kind === "training" && courseAlternative &&
+              committedLink.linkedTrainingId === item.linkedTrainingId && (
+                <div className="mt-2 pt-2 border-t border-emerald-200 flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-[11px] text-gray-600 flex items-center gap-1">
+                    <Lightbulb className="w-3 h-3 text-amber-500" />
+                    A course exists that covers this skill:{" "}
+                    <span className="font-medium text-gray-800">
+                      {courseAlternative.title}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onAccept(courseAlternative)}
+                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    Swap to course →
+                  </button>
+                </div>
+              )}
+
+            {isFallbackTraining && committedLink.linkedTrainingId === item.linkedTrainingId && (
+              <p className="mt-1.5 text-[11px] text-gray-500 italic">
+                Covered by training — no course in the library covers this skill yet.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Suggestion state (not committed yet) */}
+        {!isCommitted && matches.top && (
+          <div className="mt-2 rounded border border-blue-200 bg-blue-50/50 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 min-w-0">
+                {matches.top.kind === "course" ? (
+                  <Book className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                ) : (
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                )}
+                <span className="text-xs text-gray-700 truncate">
+                  Suggested: <span className="font-medium text-gray-900">{matches.top.title}</span>
+                </span>
+                <ConfidencePill confidence={matches.top.confidence} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onAccept(matches.top!)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                >
+                  <CheckCircle2 className="w-3 h-3" /> Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={onSwap}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  <Repeat className="w-3 h-3" /> Swap
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* No match state */}
+        {!isCommitted && !matches.top && (
+          <div className="mt-2 rounded border border-dashed border-gray-300 bg-gray-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[11px] text-gray-500">
+              No good match in the library or trainings module — leave as placeholder or search.
+            </p>
+            <button
+              type="button"
+              onClick={onSwap}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+            >
+              <Search className="w-3 h-3" /> Search & link
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConfidencePill({ confidence }: { confidence: number }) {
+  const { label, color } = confidenceLabel(confidence);
+  const colorClasses: Record<string, string> = {
+    emerald: "bg-emerald-100 text-emerald-700",
+    blue: "bg-blue-100 text-blue-700",
+    amber: "bg-amber-100 text-amber-700",
+    gray: "bg-gray-100 text-gray-600",
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded ${colorClasses[color]}`}
+      title={`${Math.round(confidence * 100)}% skill overlap`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* ─── Swap picker modal ─────────────────────────────────────────────────── */
+
+interface SwapPickerProps {
+  item: OnboardingPhaseCourse;
+  draft: GeneratedDraft;
+  itemDecisions: Map<string, ItemDecision>;
+  onClose: () => void;
+  onPick: (candidate: MatchCandidate) => void;
+}
+
+function SwapPickerModal({ item, draft, itemDecisions, onClose, onPick }: SwapPickerProps) {
+  const [query, setQuery] = useState("");
+  const [filterKind, setFilterKind] = useState<"all" | "course" | "training">("all");
+  const publishedCourses = useMemo(
+    () => getCourses().filter((c) => c.status === "published"),
+    []
+  );
+  const activeTrainings = useMemo(
+    () => getTrainings().filter((t) => t.status === "active"),
+    []
+  );
+
+  // Reuse the wizard's exclusion logic: exclude all currently committed
+  // records (from generator or post-decision) EXCEPT this item's own current
+  // committed value (which doesn't matter here — the modal is for changing it).
+  const excluded = useMemo(() => {
+    const courses = new Set<string>();
+    const trainings = new Set<string>();
+    for (const ph of draft.phases) {
+      for (const it of ph.courses) {
+        if (it.id === item.id) continue; // ignore current item
+        const decision = itemDecisions.get(it.id);
+        const link = decision
+          ? decision.cleared
+            ? {}
+            : { linkedCourseId: decision.linkedCourseId, linkedTrainingId: decision.linkedTrainingId }
+          : { linkedCourseId: it.linkedCourseId, linkedTrainingId: it.linkedTrainingId };
+        if (link.linkedCourseId) courses.add(link.linkedCourseId);
+        if (link.linkedTrainingId) trainings.add(link.linkedTrainingId);
+      }
+    }
+    return { courseIds: courses, trainingIds: trainings };
+  }, [draft, itemDecisions, item.id]);
+
+  const results = useMemo(
+    () =>
+      searchCandidates({
+        query,
+        itemSkills: item.skillsGranted,
+        publishedCourses,
+        activeTrainings,
+        excluded,
+        limit: 100,
+      }).filter((c) => filterKind === "all" || c.kind === filterKind),
+    [query, item.skillsGranted, publishedCourses, activeTrainings, excluded, filterKind]
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl max-w-2xl w-full shadow-xl flex flex-col max-h-[80vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Repeat className="w-5 h-5 text-blue-500" />
+              Swap match for &ldquo;{item.title}&rdquo;
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Pick a published course or active training to link to this item.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="px-6 py-3 border-b border-gray-200 space-y-2 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by title, description, or category..."
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300"
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {(["all", "course", "training"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setFilterKind(k)}
+                className={`px-2.5 py-1 text-xs font-medium rounded ${
+                  filterKind === k
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {k === "all" ? "All" : k === "course" ? "Courses" : "Trainings"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Results */}
+        <div className="flex-1 overflow-y-auto px-2 py-1">
+          {results.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <Search className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No matching records found.</p>
+            </div>
+          ) : (
+            results.map((cand) => (
+              <button
+                key={`${cand.kind}_${cand.id}`}
+                type="button"
+                onClick={() => onPick(cand)}
+                className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-gray-50 text-left"
+              >
+                <div className="flex-shrink-0 mt-0.5">
+                  {cand.kind === "course" ? (
+                    <Book className="w-4 h-4 text-blue-500" />
+                  ) : (
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">{cand.title}</span>
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
+                        cand.kind === "course"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-emerald-100 text-emerald-700"
+                      }`}
+                    >
+                      {cand.kind === "course" ? "Course" : "Training"}
+                    </span>
+                    {cand.confidence >= CONFIDENCE_THRESHOLD && (
+                      <ConfidencePill confidence={cand.confidence} />
+                    )}
+                  </div>
+                  {cand.skillsGranted.length > 0 && (
+                    <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+                      Grants: {cand.skillsGranted.join(", ")}
+                    </p>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-end flex-shrink-0">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -28,7 +28,7 @@ import {
   getJobTitles,
   getJobTitleById,
   getOnboardingPathByJobTitleId,
-  createOnboardingAssignment,
+  assignOnboardingPathToUser,
   analyzeRoleChangeGaps,
   getSkillV2ById,
   createTrainingResponse,
@@ -363,38 +363,45 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
           });
         }
         
-        // Create onboarding assignment if applicable
-        if (assignOnboarding && selectedJobTitleId && !isEditing) {
+        // Auto-assign published onboarding path if applicable. We re-resolve the
+        // path at submit time so that if it was archived between when the modal
+        // opened and now, we can fail gracefully and surface a warning toast
+        // without blocking user creation.
+        let onboardingArchived = false;
+        if (assignOnboarding && selectedJobTitleId) {
           const obPath = getOnboardingPathByJobTitleId(selectedJobTitleId);
           if (obPath) {
-            createOnboardingAssignment({
-              pathId: obPath.id,
-              userId: newUser.id,
-              status: "active",
-              startDate: onboardingStartDate,
-              phaseProgress: obPath.phases.map((ph, i) => ({
-                phaseId: ph.id,
-                status: i === 0 ? "in_progress" : "locked",
-                coursesCompleted: 0,
-                coursesTotal: ph.courses.length,
-              })),
-              skillsEarned: [],
-              assignedByUserId: currentUser.id,
-            });
+            const assignment = assignOnboardingPathToUser(
+              newUser.id,
+              obPath.id,
+              onboardingStartDate,
+              currentUser.id,
+            );
+            if (!assignment) onboardingArchived = true;
           }
         }
 
         setNewlyCreatedUser(newUser);
-        
+
+        if (onboardingArchived) {
+          setToast({
+            message:
+              "Onboarding path was no longer available and was not assigned. You can assign one from the user's profile.",
+            type: "info",
+          });
+        }
+
         // Show training assignment modal for new learners
         if (role === "LEARNER") {
           setShowAssignTrainings(true);
         } else {
-          setToast({ message: "User created successfully", type: "success" });
+          if (!onboardingArchived) {
+            setToast({ message: "User created successfully", type: "success" });
+          }
           setTimeout(() => {
             onClose();
             setToast(null);
-          }, 1500);
+          }, onboardingArchived ? 3000 : 1500);
         }
       }
     } catch (err: any) {
@@ -700,7 +707,10 @@ export default function NewUserModal({ isOpen, onClose, editUser }: NewUserModal
                             onChange={(e) => setAssignOnboarding(e.target.checked)}
                             className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                           />
-                          Assign this onboarding path to the new user
+                          <span>
+                            Assign onboarding path:{" "}
+                            <span className="font-semibold">{obPath.title}</span>
+                          </span>
                         </label>
                         {assignOnboarding && (
                           <div className="mt-2">

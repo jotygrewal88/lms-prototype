@@ -33,7 +33,7 @@ import { libraryItems as seedLibraryItems } from "@/data/seedLibrary";
 import { seedSynthesisHistory } from "@/data/seedSynthesisDrafts";
 import { lotoCourse, lotoLessons, lotoResources, lotoQuiz, lotoAssignment } from "@/data/seedLOTOCourse";
 import { passwordlessDirectory as seedPasswordlessDirectory } from "@/data/passwordlessDirectory";
-import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult, OnboardingPath, OnboardingAssignment, OrganizationProfile, OperationalSignal, ContentCurrency, SignalType, SignalSeverity, SignalStatus, TrainingResponse, TrainingResponseStatus, TrainingResponseType } from "@/types";
+import type { SkillV2, UserSkillRecord, RoleSkillRequirement, WorkContextSkillRequirement, SynthesisHistory, AISynthesisSettings, JobTitle, UserSkillGapResult, OnboardingPath, OnboardingPhase, OnboardingPhaseCourse, OnboardingAssignment, OnboardingPhaseStatus, OrganizationProfile, OperationalSignal, ContentCurrency, SignalType, SignalSeverity, SignalStatus, TrainingResponse, TrainingResponseStatus, TrainingResponseType } from "@/types";
 import { seedJobTitles } from "@/data/seedJobTitles";
 import { seedOnboardingPaths, seedOnboardingAssignments } from "@/data/seedOnboarding";
 import { seedOperationalSignals, seedContentCurrencies } from "@/data/seedSignals";
@@ -5108,6 +5108,412 @@ export function archiveOnboardingPath(id: string): OnboardingPath | null {
 }
 
 // ============================================================================
+// ONBOARDING PATH STRUCTURE EDITING — phases, courses, lessons
+// ============================================================================
+
+// Generates a short unique-ish id for nested onboarding entities.
+function nextOnboardingId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+}
+
+// Recalculates derived fields on a path (totalEstimatedMinutes, skillsCovered,
+// skillsGap, sourceIds) from the current phases/courses tree. Must be called
+// after any mutation to the structure.
+function recomputeOnboardingPathDerived(pathId: string): OnboardingPath | null {
+  const path = onboardingPaths.find((p) => p.id === pathId);
+  if (!path) return null;
+
+  const activeSkills = getActiveSkillsV2();
+  const activeSkillIds = new Set(activeSkills.map((s) => s.id));
+
+  let totalMinutes = 0;
+  const coveredSet = new Set<string>();
+  const sourceSet = new Set<string>();
+
+  for (const phase of path.phases) {
+    for (const course of phase.courses) {
+      totalMinutes += course.estimatedMinutes || 0;
+      for (const sid of course.skillsGranted) {
+        if (activeSkillIds.has(sid)) coveredSet.add(sid);
+      }
+      for (const srcId of course.sourceAttributions) {
+        sourceSet.add(srcId);
+      }
+    }
+  }
+
+  const skillsCovered = Array.from(coveredSet);
+  const jt = getJobTitleById(path.jobTitleId);
+  const requiredSkillIds = jt?.requiredSkills.map((r) => r.skillId) ?? [];
+  const skillsGap = requiredSkillIds.filter((sid) => !coveredSet.has(sid));
+  const sourceIds = Array.from(sourceSet);
+
+  return updateOnboardingPath(pathId, {
+    totalEstimatedMinutes: totalMinutes,
+    skillsCovered,
+    skillsGap,
+    sourceIds,
+  });
+}
+
+// ---- Phase helpers --------------------------------------------------------
+
+export function addOnboardingPhase(pathId: string): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+
+  const lastPhase = path.phases[path.phases.length - 1];
+  const dayStart = lastPhase ? lastPhase.dayEnd + 1 : 1;
+  const dayEnd = dayStart;
+  const phaseNumber = path.phases.length + 1;
+
+  const newPhase: OnboardingPhase = {
+    id: nextOnboardingId("obp_ph"),
+    name: "New Phase",
+    description: "",
+    timeline: `Week ${Math.max(1, Math.ceil(dayStart / 7))}`,
+    dayStart,
+    dayEnd,
+    courses: [],
+  };
+
+  updateOnboardingPath(pathId, { phases: [...path.phases, newPhase] });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function updateOnboardingPhase(
+  pathId: string,
+  phaseId: string,
+  updates: Partial<Omit<OnboardingPhase, "id" | "courses">>
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((p) => (p.id === phaseId ? { ...p, ...updates } : p));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function deleteOnboardingPhase(pathId: string, phaseId: string): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.filter((p) => p.id !== phaseId);
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function reorderOnboardingPhases(pathId: string, orderedPhaseIds: string[]): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const map = new Map(path.phases.map((p) => [p.id, p]));
+  const reordered: OnboardingPhase[] = [];
+  for (const pid of orderedPhaseIds) {
+    const ph = map.get(pid);
+    if (ph) reordered.push(ph);
+  }
+  // Append any phases not in the ordered list (defensive).
+  for (const ph of path.phases) {
+    if (!orderedPhaseIds.includes(ph.id)) reordered.push(ph);
+  }
+  updateOnboardingPath(pathId, { phases: reordered });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+// ---- Course helpers -------------------------------------------------------
+
+function findCourseLocation(
+  path: OnboardingPath,
+  courseId: string
+): { phaseIdx: number; courseIdx: number; course: OnboardingPhaseCourse } | null {
+  for (let i = 0; i < path.phases.length; i++) {
+    const phase = path.phases[i];
+    const courseIdx = phase.courses.findIndex((c) => c.id === courseId);
+    if (courseIdx !== -1) return { phaseIdx: i, courseIdx, course: phase.courses[courseIdx] };
+  }
+  return null;
+}
+
+export function addOnboardingCourse(
+  pathId: string,
+  phaseId: string,
+  linkedCourseId?: string,
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  if (!path.phases.find((p) => p.id === phaseId)) return null;
+
+  const courseId = nextOnboardingId("obp_c");
+
+  // If linking to a real Course, copy its display data so the path can be
+  // viewed offline without re-fetching, and so skills coverage/derived stats
+  // pick up the right values immediately.
+  let seed: Partial<OnboardingPhaseCourse> = {};
+  if (linkedCourseId) {
+    const c = getCourseById(linkedCourseId);
+    if (c) {
+      seed = {
+        title: c.title,
+        category: c.category || "",
+        estimatedMinutes: c.estimatedMinutes || 0,
+        skillsGranted: (c.skillsGranted || []).map((s) => s.skillId),
+        sourceAttributions: c.sourceIds || [],
+        linkedCourseId: c.id,
+      };
+    }
+  }
+
+  const newCourse: OnboardingPhaseCourse = {
+    id: courseId,
+    kind: "course",
+    title: "New Course",
+    category: "",
+    estimatedMinutes: 30,
+    skillsGranted: [],
+    sourceAttributions: [],
+    lessons: [],
+    ...seed,
+  };
+
+  const newPhases = path.phases.map((p) =>
+    p.id === phaseId ? { ...p, courses: [...p.courses, newCourse] } : p
+  );
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function addOnboardingTraining(
+  pathId: string,
+  phaseId: string,
+  trainingId: string,
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  if (!path.phases.find((p) => p.id === phaseId)) return null;
+
+  const training = getTrainingById(trainingId);
+  if (!training) return null;
+
+  // Trainings don't carry a duration field, so we leave an explicit 60 min
+  // default for the admin to adjust. Skills are copied from the training.
+  const newItem: OnboardingPhaseCourse = {
+    id: nextOnboardingId("obp_c"),
+    kind: "training",
+    title: training.title,
+    category: training.category || "",
+    estimatedMinutes: 60,
+    skillsGranted: (training.skillsGranted || []).map((s) => s.skillId),
+    sourceAttributions: [],
+    lessons: [],
+    linkedTrainingId: training.id,
+  };
+
+  const newPhases = path.phases.map((p) =>
+    p.id === phaseId ? { ...p, courses: [...p.courses, newItem] } : p,
+  );
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function addOnboardingTodoItem(
+  pathId: string,
+  phaseId: string,
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  if (!path.phases.find((p) => p.id === phaseId)) return null;
+
+  const newItem: OnboardingPhaseCourse = {
+    id: nextOnboardingId("obp_c"),
+    kind: "todo",
+    title: "New to-do",
+    category: "",
+    estimatedMinutes: 15,
+    skillsGranted: [],
+    sourceAttributions: [],
+    lessons: [],
+    todoNote: "",
+  };
+
+  const newPhases = path.phases.map((p) =>
+    p.id === phaseId ? { ...p, courses: [...p.courses, newItem] } : p
+  );
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function updateOnboardingCourse(
+  pathId: string,
+  courseId: string,
+  updates: Partial<Omit<OnboardingPhaseCourse, "id" | "lessons">>
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.map((c) => (c.id === courseId ? { ...c, ...updates } : c)),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function deleteOnboardingCourse(pathId: string, courseId: string): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.filter((c) => c.id !== courseId),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function reorderOnboardingCourses(
+  pathId: string,
+  phaseId: string,
+  orderedCourseIds: string[]
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => {
+    if (ph.id !== phaseId) return ph;
+    const courseMap = new Map(ph.courses.map((c) => [c.id, c]));
+    const reordered: OnboardingPhaseCourse[] = [];
+    for (const cid of orderedCourseIds) {
+      const c = courseMap.get(cid);
+      if (c) reordered.push(c);
+    }
+    for (const c of ph.courses) {
+      if (!orderedCourseIds.includes(c.id)) reordered.push(c);
+    }
+    return { ...ph, courses: reordered };
+  });
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function moveOnboardingCourse(
+  pathId: string,
+  courseId: string,
+  toPhaseId: string,
+  toIndex?: number
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const loc = findCourseLocation(path, courseId);
+  if (!loc) return null;
+  if (!path.phases.find((p) => p.id === toPhaseId)) return null;
+
+  const course = loc.course;
+  const newPhases = path.phases.map((ph) => {
+    if (ph.id === path.phases[loc.phaseIdx].id) {
+      return { ...ph, courses: ph.courses.filter((c) => c.id !== courseId) };
+    }
+    return ph;
+  });
+  const targetIdx = newPhases.findIndex((ph) => ph.id === toPhaseId);
+  if (targetIdx === -1) return null;
+  const target = newPhases[targetIdx];
+  const insertAt = toIndex === undefined ? target.courses.length : Math.max(0, Math.min(toIndex, target.courses.length));
+  const updatedCourses = [...target.courses];
+  updatedCourses.splice(insertAt, 0, course);
+  newPhases[targetIdx] = { ...target, courses: updatedCourses };
+
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+// ---- Lesson helpers -------------------------------------------------------
+
+export function addOnboardingLesson(pathId: string, courseId: string): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.map((c) =>
+      c.id === courseId
+        ? {
+            ...c,
+            lessons: [
+              ...c.lessons,
+              { id: nextOnboardingId("obp_l"), title: "New Lesson", estimatedMinutes: 5, isAssessment: false },
+            ],
+          }
+        : c
+    ),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function updateOnboardingLesson(
+  pathId: string,
+  courseId: string,
+  lessonId: string,
+  updates: Partial<{ title: string; estimatedMinutes: number; isAssessment: boolean }>
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.map((c) =>
+      c.id === courseId
+        ? {
+            ...c,
+            lessons: c.lessons.map((l) => (l.id === lessonId ? { ...l, ...updates } : l)),
+          }
+        : c
+    ),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function deleteOnboardingLesson(
+  pathId: string,
+  courseId: string,
+  lessonId: string
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.map((c) =>
+      c.id === courseId
+        ? { ...c, lessons: c.lessons.filter((l) => l.id !== lessonId) }
+        : c
+    ),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+export function reorderOnboardingLessons(
+  pathId: string,
+  courseId: string,
+  orderedLessonIds: string[]
+): OnboardingPath | null {
+  const path = getOnboardingPathById(pathId);
+  if (!path) return null;
+  const newPhases = path.phases.map((ph) => ({
+    ...ph,
+    courses: ph.courses.map((c) => {
+      if (c.id !== courseId) return c;
+      const lessonMap = new Map(c.lessons.map((l) => [l.id, l]));
+      const reordered: typeof c.lessons = [];
+      for (const lid of orderedLessonIds) {
+        const l = lessonMap.get(lid);
+        if (l) reordered.push(l);
+      }
+      for (const l of c.lessons) {
+        if (!orderedLessonIds.includes(l.id)) reordered.push(l);
+      }
+      return { ...c, lessons: reordered };
+    }),
+  }));
+  updateOnboardingPath(pathId, { phases: newPhases });
+  return recomputeOnboardingPathDerived(pathId);
+}
+
+// ============================================================================
 // ONBOARDING ASSIGNMENTS CRUD
 // ============================================================================
 
@@ -5151,6 +5557,375 @@ export function updateOnboardingAssignment(
   };
   notifyListeners();
   return onboardingAssignments[idx];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Onboarding assignment — item status, phase progress, and lifecycle helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Status of a single phase item from a learner's perspective.
+ * - Courses: derived from ProgressCourse for the linked course
+ * - Trainings: derived from TrainingCompletion for the linked training
+ * - To-Dos: derived from the assignment's todoCompletions array
+ * Items with no linked record default to "not_started" (placeholder).
+ */
+export type OnboardingItemStatus = "not_started" | "in_progress" | "completed";
+
+export function getOnboardingItemStatus(
+  item: OnboardingPhaseCourse,
+  phaseId: string,
+  assignment: OnboardingAssignment,
+): { status: OnboardingItemStatus; completedAt?: string } {
+  if (item.kind === "todo") {
+    const todo = (assignment.todoCompletions || []).find(
+      (t) => t.phaseId === phaseId && t.itemId === item.id,
+    );
+    return todo
+      ? { status: "completed", completedAt: todo.completedAt }
+      : { status: "not_started" };
+  }
+
+  if (item.kind === "training" || item.linkedTrainingId) {
+    if (!item.linkedTrainingId) return { status: "not_started" };
+    const completion = completions.find(
+      (c) => c.userId === assignment.userId && c.trainingId === item.linkedTrainingId,
+    );
+    if (!completion) return { status: "not_started" };
+    if (completion.status === "COMPLETED" || completion.status === "EXEMPT") {
+      return { status: "completed", completedAt: completion.completedAt };
+    }
+    return { status: "not_started" };
+  }
+
+  // Course (default kind)
+  if (!item.linkedCourseId) return { status: "not_started" };
+  const progress = progressCourses.find(
+    (p) => p.userId === assignment.userId && p.courseId === item.linkedCourseId,
+  );
+  if (!progress) return { status: "not_started" };
+  if (progress.status === "completed") {
+    return { status: "completed", completedAt: progress.completedAt };
+  }
+  if (progress.status === "in_progress") return { status: "in_progress" };
+  return { status: "not_started" };
+}
+
+/**
+ * Recompute the phaseProgress array AND the assignment status from real
+ * completion data and to-do checks. Called after any state change that
+ * could affect completion (todo toggle, course completion, etc.).
+ *
+ * Phase status rules:
+ *   - locked     → previous phase exists and is not yet completed
+ *   - completed  → every item in this phase has status "completed"
+ *   - in_progress → at least one item complete or in progress, or previous phase complete
+ * If every phase is complete, the assignment is marked completed.
+ */
+export function recomputeOnboardingAssignment(
+  assignmentId: string,
+): OnboardingAssignment | null {
+  const idx = onboardingAssignments.findIndex((a) => a.id === assignmentId);
+  if (idx === -1) return null;
+  const assignment = onboardingAssignments[idx];
+  if (assignment.status === "cancelled") return assignment;
+
+  const path = onboardingPaths.find((p) => p.id === assignment.pathId);
+  if (!path) return assignment;
+
+  const newPhaseProgress: OnboardingAssignment["phaseProgress"] = [];
+  let allPhasesComplete = true;
+  let previousPhaseComplete = true; // phase 1 is always unlocked
+
+  for (const phase of path.phases) {
+    const items = phase.courses;
+    let completedCount = 0;
+    let anyInProgress = false;
+    for (const item of items) {
+      const { status } = getOnboardingItemStatus(item, phase.id, assignment);
+      if (status === "completed") completedCount++;
+      else if (status === "in_progress") anyInProgress = true;
+    }
+    const total = items.length;
+    const allComplete = total > 0 && completedCount === total;
+    let phaseStatus: OnboardingPhaseStatus;
+    if (!previousPhaseComplete) {
+      phaseStatus = "locked";
+    } else if (allComplete) {
+      phaseStatus = "completed";
+    } else if (completedCount > 0 || anyInProgress) {
+      phaseStatus = "in_progress";
+    } else {
+      // Previous phase complete (or first phase) but nothing started yet
+      phaseStatus = "in_progress";
+    }
+    if (!allComplete) allPhasesComplete = false;
+    newPhaseProgress.push({
+      phaseId: phase.id,
+      status: phaseStatus,
+      coursesCompleted: completedCount,
+      coursesTotal: total,
+    });
+    previousPhaseComplete = allComplete;
+  }
+
+  const now = new Date().toISOString();
+  const updated: OnboardingAssignment = {
+    ...assignment,
+    phaseProgress: newPhaseProgress,
+    status:
+      allPhasesComplete && newPhaseProgress.length > 0
+        ? "completed"
+        : assignment.status === "completed"
+        ? "active" // un-complete if a previously-completed item got un-marked
+        : assignment.status,
+    completedAt:
+      allPhasesComplete && newPhaseProgress.length > 0
+        ? assignment.completedAt || now
+        : undefined,
+    updatedAt: now,
+  };
+  onboardingAssignments[idx] = updated;
+  return updated;
+}
+
+/**
+ * Toggle a to-do item's completion state on an onboarding assignment.
+ * Recomputes phase progress and overall completion as a side effect.
+ */
+export function toggleOnboardingTodoCompletion(
+  assignmentId: string,
+  phaseId: string,
+  itemId: string,
+): OnboardingAssignment | null {
+  const idx = onboardingAssignments.findIndex((a) => a.id === assignmentId);
+  if (idx === -1) return null;
+  const assignment = onboardingAssignments[idx];
+  const todos = assignment.todoCompletions || [];
+  const existing = todos.findIndex(
+    (t) => t.phaseId === phaseId && t.itemId === itemId,
+  );
+  const now = new Date().toISOString();
+  const nextTodos =
+    existing >= 0
+      ? todos.filter((_, i) => i !== existing) // uncheck
+      : [...todos, { phaseId, itemId, completedAt: now }]; // check
+  onboardingAssignments[idx] = {
+    ...assignment,
+    todoCompletions: nextTodos,
+    updatedAt: now,
+  };
+  const recomputed = recomputeOnboardingAssignment(assignmentId);
+  notifyListeners();
+  return recomputed;
+}
+
+/**
+ * Assign an existing published path to an existing user. Fills the gap in
+ * the original design where assignment only happened at user creation.
+ *
+ * If the user already has an active assignment to a different path, this
+ * still creates a new one — caller is responsible for any UI guardrails.
+ * Returns null if the path is not published.
+ */
+export function assignOnboardingPathToUser(
+  userId: string,
+  pathId: string,
+  startDate: string,
+  assignedByUserId: string,
+): OnboardingAssignment | null {
+  const path = onboardingPaths.find((p) => p.id === pathId);
+  if (!path || path.status !== "published") return null;
+  return createOnboardingAssignment({
+    pathId,
+    userId,
+    status: "active",
+    startDate,
+    phaseProgress: path.phases.map((ph, i) => ({
+      phaseId: ph.id,
+      status: i === 0 ? "in_progress" : "locked",
+      coursesCompleted: 0,
+      coursesTotal: ph.courses.length,
+    })),
+    skillsEarned: [],
+    assignedByUserId,
+  });
+}
+
+/**
+ * Cancel an active assignment. Progress is preserved on the record so
+ * managers can review what was completed before cancellation.
+ */
+export function cancelOnboardingAssignment(
+  assignmentId: string,
+): OnboardingAssignment | null {
+  return updateOnboardingAssignment(assignmentId, { status: "cancelled" });
+}
+
+/**
+ * Permission helper for who can manage a learner's onboarding plan
+ * (mark items complete on their behalf, see all phases unlocked, cancel).
+ *
+ * Rules:
+ *  - ADMINs can manage anyone's onboarding
+ *  - The learner's direct manager (`managerId`) can manage theirs
+ *  - Any additional manager (co-manager / matrix / coverage / mentor) can too
+ *  - The learner themselves can ONLY toggle their own to-dos — they can never
+ *    "override" course/training completion (those reflect real progress).
+ *    That case is gated by canMarkTodos separately, not by this function.
+ */
+export interface OnboardingPermissions {
+  /** True when the viewer can mark/unmark courses, trainings, AND to-dos and
+   *  see all phases as unlocked. */
+  canOverride: boolean;
+  /** True when the viewer can check/uncheck to-do items only. Implied by
+   *  canOverride; also true when the viewer is the learner themselves on
+   *  an active assignment. */
+  canMarkTodos: boolean;
+}
+
+export function getOnboardingPermissions(
+  currentUserId: string,
+  targetUserId: string,
+): OnboardingPermissions {
+  const currentUser = users.find((u) => u.id === currentUserId);
+  const targetUser = users.find((u) => u.id === targetUserId);
+  if (!currentUser || !targetUser) {
+    return { canOverride: false, canMarkTodos: false };
+  }
+  const isAdmin = currentUser.role === "ADMIN";
+  const isDirectManager = targetUser.managerId === currentUser.id;
+  const isAdditionalManager = userAdditionalManagers.some(
+    (m) => m.userId === targetUser.id && m.managerId === currentUser.id,
+  );
+  const isSelf = currentUser.id === targetUser.id;
+  const canOverride = isAdmin || isDirectManager || isAdditionalManager;
+  const canMarkTodos = canOverride || isSelf;
+  return { canOverride, canMarkTodos };
+}
+
+/**
+ * Admin/manager override: mark a course complete (or incomplete) for a
+ * specific user. Creates a ProgressCourse if one doesn't exist, otherwise
+ * updates it. Triggers skill granting on completion (same as a real
+ * learner completion). Recomputes any onboarding assignments that include
+ * this course as a linked item.
+ *
+ * `completed = false` flips status back to "in_progress" but does NOT
+ * revoke previously granted skills — those need a separate admin action.
+ */
+export function setCourseCompletionForUser(
+  userId: string,
+  courseId: string,
+  completed: boolean,
+): ProgressCourse | null {
+  const course = courses.find((c) => c.id === courseId);
+  if (!course) return null;
+  const now = timestamp();
+
+  let progress = progressCourses.find(
+    (p) => p.userId === userId && p.courseId === courseId,
+  );
+
+  if (!progress) {
+    // Create from scratch
+    const totalLessons = course.lessonIds.length;
+    progress = {
+      id: `pc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      userId,
+      courseId,
+      status: completed ? "completed" : "in_progress",
+      lessonDoneCount: completed ? totalLessons : 0,
+      lessonTotal: totalLessons,
+      completedAt: completed ? now : undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    progressCourses.push(progress);
+  } else {
+    const idx = progressCourses.findIndex((p) => p.id === progress!.id);
+    progressCourses[idx] = {
+      ...progress,
+      status: completed ? "completed" : "in_progress",
+      lessonDoneCount: completed ? progress.lessonTotal : progress.lessonDoneCount,
+      completedAt: completed ? progress.completedAt || now : undefined,
+      updatedAt: now,
+    };
+    progress = progressCourses[idx];
+  }
+
+  if (completed) {
+    grantSkillsFromCourse(userId, courseId, now);
+  }
+
+  // Recompute any onboarding assignments that include this course.
+  for (const a of onboardingAssignments) {
+    if (a.userId !== userId) continue;
+    const path = onboardingPaths.find((p) => p.id === a.pathId);
+    if (!path) continue;
+    const hasItem = path.phases.some((ph) =>
+      ph.courses.some((it) => it.linkedCourseId === courseId),
+    );
+    if (hasItem) recomputeOnboardingAssignment(a.id);
+  }
+  notifyListeners();
+  return progress;
+}
+
+/**
+ * Admin/manager override: mark a training complete (or incomplete) for a
+ * specific user. Creates a TrainingCompletion if one doesn't exist, otherwise
+ * updates it. Triggers skill granting on completion. Recomputes onboarding
+ * assignments that include this training.
+ */
+export function setTrainingCompletionForUser(
+  userId: string,
+  trainingId: string,
+  completed: boolean,
+): TrainingCompletion | null {
+  const training = trainings.find((t) => t.id === trainingId);
+  if (!training) return null;
+  const now = new Date().toISOString();
+
+  let completion = completions.find(
+    (c) => c.userId === userId && c.trainingId === trainingId,
+  );
+
+  if (!completion) {
+    completion = {
+      id: `tc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      trainingId,
+      userId,
+      status: completed ? "COMPLETED" : "ASSIGNED",
+      dueAt: now, // synthesize a due date — admin is creating this on the fly
+      completedAt: completed ? now : undefined,
+    };
+    completions.push(completion);
+  } else {
+    const idx = completions.findIndex((c) => c.id === completion!.id);
+    completions[idx] = {
+      ...completion,
+      status: completed ? "COMPLETED" : "ASSIGNED",
+      completedAt: completed ? completion.completedAt || now : undefined,
+    };
+    completion = completions[idx];
+  }
+
+  if (completed) {
+    grantSkillsFromTraining(userId, trainingId, now);
+  }
+
+  for (const a of onboardingAssignments) {
+    if (a.userId !== userId) continue;
+    const path = onboardingPaths.find((p) => p.id === a.pathId);
+    if (!path) continue;
+    const hasItem = path.phases.some((ph) =>
+      ph.courses.some((it) => it.linkedTrainingId === trainingId),
+    );
+    if (hasItem) recomputeOnboardingAssignment(a.id);
+  }
+  notifyListeners();
+  return completion;
 }
 
 // ============================================================================

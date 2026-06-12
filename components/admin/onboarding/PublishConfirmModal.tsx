@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { CheckCircle2, AlertTriangle, X } from "lucide-react";
+import React, { useMemo } from "react";
+import { CheckCircle2, AlertTriangle, X, Link2Off } from "lucide-react";
 import Button from "@/components/Button";
 import {
   publishOnboardingPath,
@@ -25,6 +25,53 @@ export default function PublishConfirmModal({
   const currentUser = getCurrentUser();
   const totalCourses = path.phases.reduce((s, p) => s + p.courses.length, 0);
   const getSkillName = (id: string) => allSkills.find((s) => s.id === id)?.name || id;
+
+  // Find unlinked placeholders whose skills include a critical or high priority
+  // requirement on the linked job title. These are warning-worthy because they
+  // mean a key competency isn't backed by a trackable course or training.
+  const unlinkedHighPriorityItems = useMemo(() => {
+    if (!jt) return [];
+    const criticalOrHighSkills = new Set(
+      jt.requiredSkills
+        .filter((r) => r.priority === "critical" || r.priority === "high")
+        .map((r) => r.skillId),
+    );
+    if (criticalOrHighSkills.size === 0) return [];
+
+    const results: Array<{
+      itemTitle: string;
+      phaseName: string;
+      phaseTimeline: string;
+      skillNames: string[];
+      isCritical: boolean;
+    }> = [];
+
+    for (const ph of path.phases) {
+      for (const item of ph.courses) {
+        if (item.kind === "todo") continue;
+        const isLinked = Boolean(item.linkedCourseId || item.linkedTrainingId);
+        if (isLinked) continue;
+        const triggeringSkills = item.skillsGranted.filter((s) =>
+          criticalOrHighSkills.has(s),
+        );
+        if (triggeringSkills.length === 0) continue;
+        const isCritical = triggeringSkills.some(
+          (sid) =>
+            jt.requiredSkills.find((r) => r.skillId === sid)?.priority === "critical",
+        );
+        results.push({
+          itemTitle: item.title,
+          phaseName: ph.name,
+          phaseTimeline: ph.timeline,
+          skillNames: triggeringSkills.map((s) => getSkillName(s)),
+          isCritical,
+        });
+      }
+    }
+    // Critical first, then by phase order (already in source order)
+    return results.sort((a, b) => Number(b.isCritical) - Number(a.isCritical));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, jt]);
 
   const handlePublish = () => {
     publishOnboardingPath(path.id, currentUser.id);
@@ -78,7 +125,7 @@ export default function PublishConfirmModal({
         </div>
 
         {path.skillsGap.length > 0 && (
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-5">
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-3">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium">
@@ -87,6 +134,48 @@ export default function PublishConfirmModal({
               <p className="text-xs mt-0.5">
                 {path.skillsGap.map((id) => getSkillName(id)).join(", ")} — these will need
                 training assigned separately.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {unlinkedHighPriorityItems.length > 0 && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-5">
+            <Link2Off className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium">
+                {unlinkedHighPriorityItems.length} unlinked placeholder
+                {unlinkedHighPriorityItems.length === 1 ? "" : "s"} on high-priority skills
+              </p>
+              <p className="text-xs mt-0.5 mb-1.5">
+                These items don&apos;t link to a real course or training yet — learners will
+                see the title but won&apos;t be able to complete anything trackable.
+              </p>
+              <ul className="space-y-1">
+                {unlinkedHighPriorityItems.map((entry, i) => (
+                  <li
+                    key={i}
+                    className="text-xs flex items-start gap-1.5 bg-white/60 rounded px-2 py-1.5 border border-amber-200/70"
+                  >
+                    <span
+                      className={`mt-0.5 inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        entry.isCritical ? "bg-red-500" : "bg-amber-500"
+                      }`}
+                      title={entry.isCritical ? "Critical priority" : "High priority"}
+                    />
+                    <span className="min-w-0">
+                      <span className="font-medium text-gray-900">{entry.itemTitle}</span>
+                      <span className="text-gray-500">
+                        {" "}
+                        — {entry.phaseName} ({entry.phaseTimeline}) ·{" "}
+                        {entry.skillNames.join(", ")}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs mt-2 text-amber-700/80">
+                You can still publish — link these later from the path edit view.
               </p>
             </div>
           </div>

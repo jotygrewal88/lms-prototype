@@ -162,8 +162,8 @@ export const seedContentCurrencies: ContentCurrency[] = [
     updatedAt: now,
   },
   {
-    id: "cur_obp_maint_hvac_draft",
-    artifactId: "obp_maint_hvac_draft",
+    id: "cur_obp_maint_hvac",
+    artifactId: "obp_maint_hvac",
     artifactType: "onboarding_path",
     currentScore: 58,
     status: "stale",
